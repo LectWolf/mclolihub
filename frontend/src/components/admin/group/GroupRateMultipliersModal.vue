@@ -166,7 +166,7 @@
                       <input
                         type="number"
                         step="0.001"
-                        min="0.001"
+                        min="0"
                         autocomplete="off"
                         :value="entry.rate_multiplier ?? ''"
                         :placeholder="String(props.group?.rate_multiplier ?? 1)"

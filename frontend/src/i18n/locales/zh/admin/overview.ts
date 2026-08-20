@@ -838,7 +838,7 @@ export default {
         descriptionLabel: '描述',
         descriptionPlaceholder: '请输入描述（可选）',
         rateMultiplierLabel: '费率倍数',
-        rateMultiplierHint: '1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
+        rateMultiplierHint: '0 = 免费，1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
         rpmLimit: '每分钟请求数 (RPM)',
         rpmLimitPlaceholder: '0 表示不限制',
         rpmLimitHint: '每用户在本分组每分钟最大请求数，0 = 不限制；一旦设置即接管该用户的限流（覆盖用户级 rpm_limit）',
@@ -881,7 +881,7 @@ export default {
         exampleContent:
           '公开分组费率 0.8，您可以创建一个费率 0.7 的专属分组，手动分配给 VIP 用户，让他们享受更优惠的价格。'
       },
-      rateMultiplierHint: '1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
+      rateMultiplierHint: '0 = 免费，1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
       platforms: {
         all: '全部平台',
         anthropic: 'Anthropic',

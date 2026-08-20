@@ -1,6 +1,6 @@
 services:
   aihub:
-    image: ${AIHUB_IMAGE:-ghcr.io/lectwolf/mclolihub:0.1.179.2}
+    image: ${AIHUB_IMAGE:-ghcr.io/lectwolf/mclolihub:0.1.179.3}
     container_name: aihub
     restart: unless-stopped
     security_opt:
