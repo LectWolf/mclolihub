@@ -34,7 +34,10 @@ docker compose up -d
 docker compose logs -f aihub
 ```
 
-在 1Panel 网站中添加反向代理，目标填写 `http://127.0.0.1:8080`。
+在 1Panel 网站中添加反向代理：
+
+- 1Panel OpenResty 位于 `1panel-network`（默认情况）时，目标填写 `http://aihub:8080`。
+- 反向代理进程直接运行在宿主机时，目标填写 `http://127.0.0.1:8080`。
 
 ## 更新
 
