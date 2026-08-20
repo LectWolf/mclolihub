@@ -507,6 +507,12 @@ func getGroupPlatform(c *gin.Context) string {
 	if !ok || apiKey.Group == nil {
 		return ""
 	}
+	// Dynamic keys choose their group inside the text handler after parsing the
+	// requested model. Dispatching from a stale retained group_id would bypass
+	// cross-group routing and could apply the wrong composite model rewrite.
+	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
+		return ""
+	}
 	if apiKey.Group.Platform == service.PlatformComposite {
 		if platform, ok := service.ResolvedTargetPlatformFromContext(c.Request.Context()); ok {
 			return platform
@@ -521,7 +527,8 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 	}
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
-		if !ok || apiKey == nil || apiKey.Group == nil || apiKey.Group.Platform != service.PlatformComposite {
+		if !ok || apiKey == nil || apiKey.Group == nil || apiKey.Group.Platform != service.PlatformComposite ||
+			(apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed) {
 			c.Next()
 			return
 		}
@@ -631,7 +638,8 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 	}
 	return func(c *gin.Context) {
 		apiKey, ok := middleware.GetAPIKeyFromContext(c)
-		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
+		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite &&
+			(apiKey.RouteMode == "" || apiKey.RouteMode == service.RouteModeFixed) {
 			model := compositeGeminiModelFromParams(c)
 			if model != "" {
 				decision, err := resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, service.CompositeRouteEndpointGemini)

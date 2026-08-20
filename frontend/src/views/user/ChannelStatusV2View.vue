@@ -193,6 +193,8 @@
         </div>
       </section>
 
+      <GroupHealthPanel />
+
       <!-- Overview KPI: success · TTFT · tokens/s(optional) · cache · (+ RPM when throughput visible) -->
       <section
         v-if="snapshot"
@@ -462,6 +464,7 @@ import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import GroupHealthPanel from '@/components/user/GroupHealthPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Select from '@/components/common/Select.vue'

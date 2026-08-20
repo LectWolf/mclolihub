@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -22,6 +24,22 @@ import (
 type sqlExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func (r *groupRepository) GetRouteHealth(ctx context.Context, groupIDs []int64) (map[int64]service.GroupRouteHealth, error) {
+	out := make(map[int64]service.GroupRouteHealth, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	states, err := r.client.GroupHealthState.Query().Where(grouphealthstate.GroupIDIn(groupIDs...)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, state := range states {
+		recent := state.LastSuccessAt != nil && !state.LastSuccessAt.Before(time.Now().Add(-service.ImmediateProbeCooldown))
+		out[state.GroupID] = service.GroupRouteHealth{Healthy: state.Status == service.GroupHealthHealthy && recent, ProbeTTFTMS: state.ProbeTtftMs, RealTTFTP50MS: state.RealTtftP50Ms, RealTTFTSamples: state.RealTtftSamples}
+	}
+	return out, nil
 }
 
 type groupRepository struct {
@@ -69,6 +87,9 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetSortOrder(groupIn.SortOrder).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
+		SetProbeEnabled(groupIn.ProbeEnabled).
+		SetProbeModel(groupIn.ProbeModel).
+		SetProbeIntervalSeconds(groupIn.ProbeIntervalSeconds).
 		SetSubscriptionType(groupIn.SubscriptionType).
 		SetNillableDailyLimitUsd(groupIn.DailyLimitUSD).
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).
@@ -252,6 +273,9 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetRateMultiplier(groupIn.RateMultiplier).
 		SetIsExclusive(groupIn.IsExclusive).
 		SetStatus(groupIn.Status).
+		SetProbeEnabled(groupIn.ProbeEnabled).
+		SetProbeModel(groupIn.ProbeModel).
+		SetProbeIntervalSeconds(groupIn.ProbeIntervalSeconds).
 		SetSubscriptionType(groupIn.SubscriptionType).
 		SetNillableDailyLimitUsd(groupIn.DailyLimitUSD).
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).

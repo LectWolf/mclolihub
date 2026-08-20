@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 20 // v20: group long-context and model pricing fields (force refresh of pre-fix snapshots)
+const apiKeyAuthSnapshotVersion = 21 // v21: API key dynamic routing and group probe configuration
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -336,20 +336,23 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		return nil
 	}
 	snapshot := &APIKeyAuthSnapshot{
-		Version:     apiKeyAuthSnapshotVersion,
-		APIKeyID:    apiKey.ID,
-		UserID:      apiKey.UserID,
-		GroupID:     apiKey.GroupID,
-		Name:        apiKey.Name,
-		Status:      apiKey.Status,
-		IPWhitelist: apiKey.IPWhitelist,
-		IPBlacklist: apiKey.IPBlacklist,
-		Quota:       apiKey.Quota,
-		QuotaUsed:   apiKey.QuotaUsed,
-		ExpiresAt:   apiKey.ExpiresAt,
-		RateLimit5h: apiKey.RateLimit5h,
-		RateLimit1d: apiKey.RateLimit1d,
-		RateLimit7d: apiKey.RateLimit7d,
+		Version:           apiKeyAuthSnapshotVersion,
+		APIKeyID:          apiKey.ID,
+		UserID:            apiKey.UserID,
+		GroupID:           apiKey.GroupID,
+		Name:              apiKey.Name,
+		Status:            apiKey.Status,
+		IPWhitelist:       apiKey.IPWhitelist,
+		IPBlacklist:       apiKey.IPBlacklist,
+		Quota:             apiKey.Quota,
+		QuotaUsed:         apiKey.QuotaUsed,
+		ExpiresAt:         apiKey.ExpiresAt,
+		RateLimit5h:       apiKey.RateLimit5h,
+		RateLimit1d:       apiKey.RateLimit1d,
+		RateLimit7d:       apiKey.RateLimit7d,
+		RouteMode:         apiKey.RouteMode,
+		MaxRateMultiplier: apiKey.MaxRateMultiplier,
+		GroupPreferences:  apiKey.GroupPreferences,
 		User: APIKeyAuthUserSnapshot{
 			ID:                         apiKey.User.ID,
 			Status:                     apiKey.User.Status,
@@ -430,6 +433,9 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
 			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
 			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
+			ProbeEnabled:                    apiKey.Group.ProbeEnabled,
+			ProbeModel:                      apiKey.Group.ProbeModel,
+			ProbeIntervalSeconds:            apiKey.Group.ProbeIntervalSeconds,
 		}
 	}
 	return snapshot
@@ -440,20 +446,23 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		return nil
 	}
 	apiKey := &APIKey{
-		ID:          snapshot.APIKeyID,
-		UserID:      snapshot.UserID,
-		GroupID:     snapshot.GroupID,
-		Key:         key,
-		Name:        snapshot.Name,
-		Status:      snapshot.Status,
-		IPWhitelist: snapshot.IPWhitelist,
-		IPBlacklist: snapshot.IPBlacklist,
-		Quota:       snapshot.Quota,
-		QuotaUsed:   snapshot.QuotaUsed,
-		ExpiresAt:   snapshot.ExpiresAt,
-		RateLimit5h: snapshot.RateLimit5h,
-		RateLimit1d: snapshot.RateLimit1d,
-		RateLimit7d: snapshot.RateLimit7d,
+		ID:                snapshot.APIKeyID,
+		UserID:            snapshot.UserID,
+		GroupID:           snapshot.GroupID,
+		Key:               key,
+		Name:              snapshot.Name,
+		Status:            snapshot.Status,
+		IPWhitelist:       snapshot.IPWhitelist,
+		IPBlacklist:       snapshot.IPBlacklist,
+		Quota:             snapshot.Quota,
+		QuotaUsed:         snapshot.QuotaUsed,
+		ExpiresAt:         snapshot.ExpiresAt,
+		RateLimit5h:       snapshot.RateLimit5h,
+		RateLimit1d:       snapshot.RateLimit1d,
+		RateLimit7d:       snapshot.RateLimit7d,
+		RouteMode:         snapshot.RouteMode,
+		MaxRateMultiplier: snapshot.MaxRateMultiplier,
+		GroupPreferences:  snapshot.GroupPreferences,
 		User: &User{
 			ID:                         snapshot.User.ID,
 			Status:                     snapshot.User.Status,
@@ -527,6 +536,9 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
 			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
 			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
+			ProbeEnabled:                    snapshot.Group.ProbeEnabled,
+			ProbeModel:                      snapshot.Group.ProbeModel,
+			ProbeIntervalSeconds:            snapshot.Group.ProbeIntervalSeconds,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)

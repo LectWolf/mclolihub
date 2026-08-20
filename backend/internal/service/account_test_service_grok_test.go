@@ -221,11 +221,15 @@ func TestAccountTestService_Grok429PersistsRateLimitReset(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/14/test", nil)
 
+	before := time.Now()
 	err := svc.TestAccountConnection(c, account.ID, "grok", "", AccountTestModeDefault)
+	after := time.Now()
 
 	require.Error(t, err)
 	require.Equal(t, 1, repo.rateLimitedCalls)
-	require.WithinDuration(t, time.Now().Add(45*time.Second), repo.resetAt, time.Second)
+	// Quota snapshots persist UpdatedAt with RFC3339 second precision.
+	require.False(t, repo.resetAt.Before(before.Truncate(time.Second).Add(45*time.Second)))
+	require.False(t, repo.resetAt.After(after.Truncate(time.Second).Add(45*time.Second)))
 }
 
 func TestAccountTestService_Grok429WithoutQuotaHeadersUsesFallback(t *testing.T) {

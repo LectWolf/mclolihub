@@ -143,6 +143,12 @@ type Group struct {
 	ProfitMinMargin float64 `json:"profit_min_margin,omitempty"`
 	// 安全缓冲，小数；与 margin 相加后从下游倍率中扣除，默认 0
 	ProfitSafetyBuffer float64 `json:"profit_safety_buffer,omitempty"`
+	// 是否启用分组主动探测
+	ProbeEnabled bool `json:"probe_enabled,omitempty"`
+	// 主动探测使用的模型
+	ProbeModel string `json:"probe_model,omitempty"`
+	// 正常探测间隔，范围 30 秒到 1 小时
+	ProbeIntervalSeconds int `json:"probe_interval_seconds,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the GroupQuery when eager-loading is set.
 	Edges        GroupEdges `json:"edges"`
@@ -159,6 +165,12 @@ type GroupEdges struct {
 	Subscriptions []*UserSubscription `json:"subscriptions,omitempty"`
 	// UsageLogs holds the value of the usage_logs edge.
 	UsageLogs []*UsageLog `json:"usage_logs,omitempty"`
+	// HealthState holds the value of the health_state edge.
+	HealthState []*GroupHealthState `json:"health_state,omitempty"`
+	// HealthEvents holds the value of the health_events edge.
+	HealthEvents []*GroupHealthEvent `json:"health_events,omitempty"`
+	// KeyPreferences holds the value of the key_preferences edge.
+	KeyPreferences []*APIKeyGroupPreference `json:"key_preferences,omitempty"`
 	// Accounts holds the value of the accounts edge.
 	Accounts []*Account `json:"accounts,omitempty"`
 	// AllowedUsers holds the value of the allowed_users edge.
@@ -169,7 +181,7 @@ type GroupEdges struct {
 	UserAllowedGroups []*UserAllowedGroup `json:"user_allowed_groups,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [11]bool
 }
 
 // APIKeysOrErr returns the APIKeys value or an error if the edge
@@ -208,10 +220,37 @@ func (e GroupEdges) UsageLogsOrErr() ([]*UsageLog, error) {
 	return nil, &NotLoadedError{edge: "usage_logs"}
 }
 
+// HealthStateOrErr returns the HealthState value or an error if the edge
+// was not loaded in eager-loading.
+func (e GroupEdges) HealthStateOrErr() ([]*GroupHealthState, error) {
+	if e.loadedTypes[4] {
+		return e.HealthState, nil
+	}
+	return nil, &NotLoadedError{edge: "health_state"}
+}
+
+// HealthEventsOrErr returns the HealthEvents value or an error if the edge
+// was not loaded in eager-loading.
+func (e GroupEdges) HealthEventsOrErr() ([]*GroupHealthEvent, error) {
+	if e.loadedTypes[5] {
+		return e.HealthEvents, nil
+	}
+	return nil, &NotLoadedError{edge: "health_events"}
+}
+
+// KeyPreferencesOrErr returns the KeyPreferences value or an error if the edge
+// was not loaded in eager-loading.
+func (e GroupEdges) KeyPreferencesOrErr() ([]*APIKeyGroupPreference, error) {
+	if e.loadedTypes[6] {
+		return e.KeyPreferences, nil
+	}
+	return nil, &NotLoadedError{edge: "key_preferences"}
+}
+
 // AccountsOrErr returns the Accounts value or an error if the edge
 // was not loaded in eager-loading.
 func (e GroupEdges) AccountsOrErr() ([]*Account, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[7] {
 		return e.Accounts, nil
 	}
 	return nil, &NotLoadedError{edge: "accounts"}
@@ -220,7 +259,7 @@ func (e GroupEdges) AccountsOrErr() ([]*Account, error) {
 // AllowedUsersOrErr returns the AllowedUsers value or an error if the edge
 // was not loaded in eager-loading.
 func (e GroupEdges) AllowedUsersOrErr() ([]*User, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[8] {
 		return e.AllowedUsers, nil
 	}
 	return nil, &NotLoadedError{edge: "allowed_users"}
@@ -229,7 +268,7 @@ func (e GroupEdges) AllowedUsersOrErr() ([]*User, error) {
 // AccountGroupsOrErr returns the AccountGroups value or an error if the edge
 // was not loaded in eager-loading.
 func (e GroupEdges) AccountGroupsOrErr() ([]*AccountGroup, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[9] {
 		return e.AccountGroups, nil
 	}
 	return nil, &NotLoadedError{edge: "account_groups"}
@@ -238,7 +277,7 @@ func (e GroupEdges) AccountGroupsOrErr() ([]*AccountGroup, error) {
 // UserAllowedGroupsOrErr returns the UserAllowedGroups value or an error if the edge
 // was not loaded in eager-loading.
 func (e GroupEdges) UserAllowedGroupsOrErr() ([]*UserAllowedGroup, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[10] {
 		return e.UserAllowedGroups, nil
 	}
 	return nil, &NotLoadedError{edge: "user_allowed_groups"}
@@ -251,13 +290,13 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelsListConfig, group.FieldReasoningEffortMappings:
 			values[i] = new([]byte)
-		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
+		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled, group.FieldProbeEnabled:
 			values[i] = new(sql.NullBool)
 		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
 			values[i] = new(sql.NullFloat64)
-		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit:
+		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldProbeIntervalSeconds:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldProbeModel:
 			values[i] = new(sql.NullString)
 		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -687,6 +726,24 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ProfitSafetyBuffer = value.Float64
 			}
+		case group.FieldProbeEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field probe_enabled", values[i])
+			} else if value.Valid {
+				_m.ProbeEnabled = value.Bool
+			}
+		case group.FieldProbeModel:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field probe_model", values[i])
+			} else if value.Valid {
+				_m.ProbeModel = value.String
+			}
+		case group.FieldProbeIntervalSeconds:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field probe_interval_seconds", values[i])
+			} else if value.Valid {
+				_m.ProbeIntervalSeconds = int(value.Int64)
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -718,6 +775,21 @@ func (_m *Group) QuerySubscriptions() *UserSubscriptionQuery {
 // QueryUsageLogs queries the "usage_logs" edge of the Group entity.
 func (_m *Group) QueryUsageLogs() *UsageLogQuery {
 	return NewGroupClient(_m.config).QueryUsageLogs(_m)
+}
+
+// QueryHealthState queries the "health_state" edge of the Group entity.
+func (_m *Group) QueryHealthState() *GroupHealthStateQuery {
+	return NewGroupClient(_m.config).QueryHealthState(_m)
+}
+
+// QueryHealthEvents queries the "health_events" edge of the Group entity.
+func (_m *Group) QueryHealthEvents() *GroupHealthEventQuery {
+	return NewGroupClient(_m.config).QueryHealthEvents(_m)
+}
+
+// QueryKeyPreferences queries the "key_preferences" edge of the Group entity.
+func (_m *Group) QueryKeyPreferences() *APIKeyGroupPreferenceQuery {
+	return NewGroupClient(_m.config).QueryKeyPreferences(_m)
 }
 
 // QueryAccounts queries the "accounts" edge of the Group entity.
@@ -986,6 +1058,15 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("profit_safety_buffer=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProfitSafetyBuffer))
+	builder.WriteString(", ")
+	builder.WriteString("probe_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProbeEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("probe_model=")
+	builder.WriteString(_m.ProbeModel)
+	builder.WriteString(", ")
+	builder.WriteString("probe_interval_seconds=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProbeIntervalSeconds))
 	builder.WriteByte(')')
 	return builder.String()
 }

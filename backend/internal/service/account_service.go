@@ -10,9 +10,10 @@ import (
 )
 
 var (
-	ErrAccountNotFound      = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
-	ErrAccountNilInput      = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
-	ErrAccountNotInFallback = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
+	ErrAccountNotFound               = infraerrors.NotFound("ACCOUNT_NOT_FOUND", "account not found")
+	ErrAccountNilInput               = infraerrors.BadRequest("ACCOUNT_NIL_INPUT", "account input cannot be nil")
+	ErrAccountNotInFallback          = infraerrors.BadRequest("ACCOUNT_NOT_IN_FALLBACK", "account is not in proxy fallback state")
+	ErrAccountBalanceRestoreRequired = infraerrors.Conflict("ACCOUNT_BALANCE_RESTORE_REQUIRED", "balance-insufficient accounts must be restored through the dedicated administrator action")
 )
 
 const AccountListGroupUngrouped int64 = -1

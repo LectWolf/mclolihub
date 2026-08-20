@@ -301,6 +301,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	platform := NormalizeGroupPlatform(input.Platform)
+	probeModel, probeIntervalSeconds, err := NormalizeGroupProbeConfig(input.ProbeModel, input.ProbeIntervalSeconds)
+	if err != nil {
+		return nil, err
+	}
 	modelPricing, err := normalizeGroupModelPricing(platform, input.ModelPricing)
 	if err != nil {
 		return nil, err
@@ -480,6 +484,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		ProfitControlEnabled:            profitControlEnabled,
 		ProfitMinMargin:                 profitMinMargin,
 		ProfitSafetyBuffer:              profitSafetyBuffer,
+		ProbeEnabled:                    input.ProbeEnabled,
+		ProbeModel:                      probeModel,
+		ProbeIntervalSeconds:            probeIntervalSeconds,
 		ImagePrice1K:                    imagePrice1K,
 		ImagePrice2K:                    imagePrice2K,
 		ImagePrice4K:                    imagePrice4K,
@@ -508,6 +515,12 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		RPMLimit:                        input.RPMLimit,
 		MaxReasoningEffort:              maxReasoningEffort,
 		ReasoningEffortMappings:         reasoningEffortMappings,
+	}
+	if group.ProbeModel == "" {
+		group.ProbeModel = "gpt-5.6-sol"
+	}
+	if group.ProbeIntervalSeconds < 30 || group.ProbeIntervalSeconds > 3600 {
+		group.ProbeIntervalSeconds = 600
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if group.Platform != PlatformOpenAI && group.Platform != PlatformComposite {
@@ -758,6 +771,21 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.ProfitSafetyBuffer != nil {
 		group.ProfitSafetyBuffer = *input.ProfitSafetyBuffer
+	}
+	if input.ProbeEnabled != nil {
+		group.ProbeEnabled = *input.ProbeEnabled
+	}
+	if input.ProbeModel != nil {
+		group.ProbeModel = strings.TrimSpace(*input.ProbeModel)
+		if group.ProbeModel == "" {
+			group.ProbeModel = "gpt-5.6-sol"
+		}
+	}
+	if input.ProbeIntervalSeconds != nil {
+		if *input.ProbeIntervalSeconds < 30 || *input.ProbeIntervalSeconds > 3600 {
+			return nil, errors.New("probe_interval_seconds must be between 30 and 3600")
+		}
+		group.ProbeIntervalSeconds = *input.ProbeIntervalSeconds
 	}
 	// 利润控制与高峰同一收口：按合并后的最终平台归一化（转到不支持平台时静默重置），
 	// 再对合并后的最终配置统一校验，防止部分字段更新拼出非法组合入库。

@@ -14,7 +14,10 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
@@ -850,6 +853,48 @@ func (_c *GroupCreate) SetNillableProfitSafetyBuffer(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetProbeEnabled sets the "probe_enabled" field.
+func (_c *GroupCreate) SetProbeEnabled(v bool) *GroupCreate {
+	_c.mutation.SetProbeEnabled(v)
+	return _c
+}
+
+// SetNillableProbeEnabled sets the "probe_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableProbeEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetProbeEnabled(*v)
+	}
+	return _c
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (_c *GroupCreate) SetProbeModel(v string) *GroupCreate {
+	_c.mutation.SetProbeModel(v)
+	return _c
+}
+
+// SetNillableProbeModel sets the "probe_model" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableProbeModel(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetProbeModel(*v)
+	}
+	return _c
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (_c *GroupCreate) SetProbeIntervalSeconds(v int) *GroupCreate {
+	_c.mutation.SetProbeIntervalSeconds(v)
+	return _c
+}
+
+// SetNillableProbeIntervalSeconds sets the "probe_interval_seconds" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableProbeIntervalSeconds(v *int) *GroupCreate {
+	if v != nil {
+		_c.SetProbeIntervalSeconds(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -908,6 +953,51 @@ func (_c *GroupCreate) AddUsageLogs(v ...*UsageLog) *GroupCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddUsageLogIDs(ids...)
+}
+
+// AddHealthStateIDs adds the "health_state" edge to the GroupHealthState entity by IDs.
+func (_c *GroupCreate) AddHealthStateIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddHealthStateIDs(ids...)
+	return _c
+}
+
+// AddHealthState adds the "health_state" edges to the GroupHealthState entity.
+func (_c *GroupCreate) AddHealthState(v ...*GroupHealthState) *GroupCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddHealthStateIDs(ids...)
+}
+
+// AddHealthEventIDs adds the "health_events" edge to the GroupHealthEvent entity by IDs.
+func (_c *GroupCreate) AddHealthEventIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddHealthEventIDs(ids...)
+	return _c
+}
+
+// AddHealthEvents adds the "health_events" edges to the GroupHealthEvent entity.
+func (_c *GroupCreate) AddHealthEvents(v ...*GroupHealthEvent) *GroupCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddHealthEventIDs(ids...)
+}
+
+// AddKeyPreferenceIDs adds the "key_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (_c *GroupCreate) AddKeyPreferenceIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddKeyPreferenceIDs(ids...)
+	return _c
+}
+
+// AddKeyPreferences adds the "key_preferences" edges to the APIKeyGroupPreference entity.
+func (_c *GroupCreate) AddKeyPreferences(v ...*APIKeyGroupPreference) *GroupCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddKeyPreferenceIDs(ids...)
 }
 
 // AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
@@ -1139,6 +1229,18 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultProfitSafetyBuffer
 		_c.mutation.SetProfitSafetyBuffer(v)
 	}
+	if _, ok := _c.mutation.ProbeEnabled(); !ok {
+		v := group.DefaultProbeEnabled
+		_c.mutation.SetProbeEnabled(v)
+	}
+	if _, ok := _c.mutation.ProbeModel(); !ok {
+		v := group.DefaultProbeModel
+		_c.mutation.SetProbeModel(v)
+	}
+	if _, ok := _c.mutation.ProbeIntervalSeconds(); !ok {
+		v := group.DefaultProbeIntervalSeconds
+		_c.mutation.SetProbeIntervalSeconds(v)
+	}
 	return nil
 }
 
@@ -1328,6 +1430,20 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ProfitSafetyBuffer(); !ok {
 		return &ValidationError{Name: "profit_safety_buffer", err: errors.New(`ent: missing required field "Group.profit_safety_buffer"`)}
+	}
+	if _, ok := _c.mutation.ProbeEnabled(); !ok {
+		return &ValidationError{Name: "probe_enabled", err: errors.New(`ent: missing required field "Group.probe_enabled"`)}
+	}
+	if _, ok := _c.mutation.ProbeModel(); !ok {
+		return &ValidationError{Name: "probe_model", err: errors.New(`ent: missing required field "Group.probe_model"`)}
+	}
+	if v, ok := _c.mutation.ProbeModel(); ok {
+		if err := group.ProbeModelValidator(v); err != nil {
+			return &ValidationError{Name: "probe_model", err: fmt.Errorf(`ent: validator failed for field "Group.probe_model": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ProbeIntervalSeconds(); !ok {
+		return &ValidationError{Name: "probe_interval_seconds", err: errors.New(`ent: missing required field "Group.probe_interval_seconds"`)}
 	}
 	return nil
 }
@@ -1604,6 +1720,18 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 		_spec.SetField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
 		_node.ProfitSafetyBuffer = value
 	}
+	if value, ok := _c.mutation.ProbeEnabled(); ok {
+		_spec.SetField(group.FieldProbeEnabled, field.TypeBool, value)
+		_node.ProbeEnabled = value
+	}
+	if value, ok := _c.mutation.ProbeModel(); ok {
+		_spec.SetField(group.FieldProbeModel, field.TypeString, value)
+		_node.ProbeModel = value
+	}
+	if value, ok := _c.mutation.ProbeIntervalSeconds(); ok {
+		_spec.SetField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+		_node.ProbeIntervalSeconds = value
+	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1661,6 +1789,54 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.HealthStateIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.HealthEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.KeyPreferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
@@ -2765,6 +2941,48 @@ func (u *GroupUpsert) UpdateProfitSafetyBuffer() *GroupUpsert {
 // AddProfitSafetyBuffer adds v to the "profit_safety_buffer" field.
 func (u *GroupUpsert) AddProfitSafetyBuffer(v float64) *GroupUpsert {
 	u.Add(group.FieldProfitSafetyBuffer, v)
+	return u
+}
+
+// SetProbeEnabled sets the "probe_enabled" field.
+func (u *GroupUpsert) SetProbeEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldProbeEnabled, v)
+	return u
+}
+
+// UpdateProbeEnabled sets the "probe_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateProbeEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldProbeEnabled)
+	return u
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (u *GroupUpsert) SetProbeModel(v string) *GroupUpsert {
+	u.Set(group.FieldProbeModel, v)
+	return u
+}
+
+// UpdateProbeModel sets the "probe_model" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateProbeModel() *GroupUpsert {
+	u.SetExcluded(group.FieldProbeModel)
+	return u
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (u *GroupUpsert) SetProbeIntervalSeconds(v int) *GroupUpsert {
+	u.Set(group.FieldProbeIntervalSeconds, v)
+	return u
+}
+
+// UpdateProbeIntervalSeconds sets the "probe_interval_seconds" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateProbeIntervalSeconds() *GroupUpsert {
+	u.SetExcluded(group.FieldProbeIntervalSeconds)
+	return u
+}
+
+// AddProbeIntervalSeconds adds v to the "probe_interval_seconds" field.
+func (u *GroupUpsert) AddProbeIntervalSeconds(v int) *GroupUpsert {
+	u.Add(group.FieldProbeIntervalSeconds, v)
 	return u
 }
 
@@ -3989,6 +4207,55 @@ func (u *GroupUpsertOne) AddProfitSafetyBuffer(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateProfitSafetyBuffer() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetProbeEnabled sets the "probe_enabled" field.
+func (u *GroupUpsertOne) SetProbeEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProbeEnabled(v)
+	})
+}
+
+// UpdateProbeEnabled sets the "probe_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateProbeEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProbeEnabled()
+	})
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (u *GroupUpsertOne) SetProbeModel(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProbeModel(v)
+	})
+}
+
+// UpdateProbeModel sets the "probe_model" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateProbeModel() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProbeModel()
+	})
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (u *GroupUpsertOne) SetProbeIntervalSeconds(v int) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProbeIntervalSeconds(v)
+	})
+}
+
+// AddProbeIntervalSeconds adds v to the "probe_interval_seconds" field.
+func (u *GroupUpsertOne) AddProbeIntervalSeconds(v int) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddProbeIntervalSeconds(v)
+	})
+}
+
+// UpdateProbeIntervalSeconds sets the "probe_interval_seconds" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateProbeIntervalSeconds() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProbeIntervalSeconds()
 	})
 }
 
@@ -5379,6 +5646,55 @@ func (u *GroupUpsertBulk) AddProfitSafetyBuffer(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateProfitSafetyBuffer() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetProbeEnabled sets the "probe_enabled" field.
+func (u *GroupUpsertBulk) SetProbeEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProbeEnabled(v)
+	})
+}
+
+// UpdateProbeEnabled sets the "probe_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateProbeEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProbeEnabled()
+	})
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (u *GroupUpsertBulk) SetProbeModel(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProbeModel(v)
+	})
+}
+
+// UpdateProbeModel sets the "probe_model" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateProbeModel() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProbeModel()
+	})
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (u *GroupUpsertBulk) SetProbeIntervalSeconds(v int) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetProbeIntervalSeconds(v)
+	})
+}
+
+// AddProbeIntervalSeconds adds v to the "probe_interval_seconds" field.
+func (u *GroupUpsertBulk) AddProbeIntervalSeconds(v int) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddProbeIntervalSeconds(v)
+	})
+}
+
+// UpdateProbeIntervalSeconds sets the "probe_interval_seconds" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateProbeIntervalSeconds() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateProbeIntervalSeconds()
 	})
 }
 

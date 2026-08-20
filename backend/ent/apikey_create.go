@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
@@ -95,6 +96,34 @@ func (_c *APIKeyCreate) SetGroupID(v int64) *APIKeyCreate {
 func (_c *APIKeyCreate) SetNillableGroupID(v *int64) *APIKeyCreate {
 	if v != nil {
 		_c.SetGroupID(*v)
+	}
+	return _c
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (_c *APIKeyCreate) SetRouteMode(v string) *APIKeyCreate {
+	_c.mutation.SetRouteMode(v)
+	return _c
+}
+
+// SetNillableRouteMode sets the "route_mode" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableRouteMode(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetRouteMode(*v)
+	}
+	return _c
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (_c *APIKeyCreate) SetMaxRateMultiplier(v float64) *APIKeyCreate {
+	_c.mutation.SetMaxRateMultiplier(v)
+	return _c
+}
+
+// SetNillableMaxRateMultiplier sets the "max_rate_multiplier" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableMaxRateMultiplier(v *float64) *APIKeyCreate {
+	if v != nil {
+		_c.SetMaxRateMultiplier(*v)
 	}
 	return _c
 }
@@ -332,6 +361,21 @@ func (_c *APIKeyCreate) AddUsageLogs(v ...*UsageLog) *APIKeyCreate {
 	return _c.AddUsageLogIDs(ids...)
 }
 
+// AddGroupPreferenceIDs adds the "group_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (_c *APIKeyCreate) AddGroupPreferenceIDs(ids ...int64) *APIKeyCreate {
+	_c.mutation.AddGroupPreferenceIDs(ids...)
+	return _c
+}
+
+// AddGroupPreferences adds the "group_preferences" edges to the APIKeyGroupPreference entity.
+func (_c *APIKeyCreate) AddGroupPreferences(v ...*APIKeyGroupPreference) *APIKeyCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddGroupPreferenceIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_c *APIKeyCreate) Mutation() *APIKeyMutation {
 	return _c.mutation
@@ -382,6 +426,10 @@ func (_c *APIKeyCreate) defaults() error {
 		}
 		v := apikey.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
+	}
+	if _, ok := _c.mutation.RouteMode(); !ok {
+		v := apikey.DefaultRouteMode
+		_c.mutation.SetRouteMode(v)
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
@@ -447,6 +495,14 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Name(); ok {
 		if err := apikey.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RouteMode(); !ok {
+		return &ValidationError{Name: "route_mode", err: errors.New(`ent: missing required field "APIKey.route_mode"`)}
+	}
+	if v, ok := _c.mutation.RouteMode(); ok {
+		if err := apikey.RouteModeValidator(v); err != nil {
+			return &ValidationError{Name: "route_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_mode": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -530,6 +586,14 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.RouteMode(); ok {
+		_spec.SetField(apikey.FieldRouteMode, field.TypeString, value)
+		_node.RouteMode = value
+	}
+	if value, ok := _c.mutation.MaxRateMultiplier(); ok {
+		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
+		_node.MaxRateMultiplier = &value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -638,6 +702,22 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.GroupPreferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
@@ -778,6 +858,42 @@ func (u *APIKeyUpsert) UpdateGroupID() *APIKeyUpsert {
 // ClearGroupID clears the value of the "group_id" field.
 func (u *APIKeyUpsert) ClearGroupID() *APIKeyUpsert {
 	u.SetNull(apikey.FieldGroupID)
+	return u
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (u *APIKeyUpsert) SetRouteMode(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldRouteMode, v)
+	return u
+}
+
+// UpdateRouteMode sets the "route_mode" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateRouteMode() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldRouteMode)
+	return u
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (u *APIKeyUpsert) SetMaxRateMultiplier(v float64) *APIKeyUpsert {
+	u.Set(apikey.FieldMaxRateMultiplier, v)
+	return u
+}
+
+// UpdateMaxRateMultiplier sets the "max_rate_multiplier" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateMaxRateMultiplier() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldMaxRateMultiplier)
+	return u
+}
+
+// AddMaxRateMultiplier adds v to the "max_rate_multiplier" field.
+func (u *APIKeyUpsert) AddMaxRateMultiplier(v float64) *APIKeyUpsert {
+	u.Add(apikey.FieldMaxRateMultiplier, v)
+	return u
+}
+
+// ClearMaxRateMultiplier clears the value of the "max_rate_multiplier" field.
+func (u *APIKeyUpsert) ClearMaxRateMultiplier() *APIKeyUpsert {
+	u.SetNull(apikey.FieldMaxRateMultiplier)
 	return u
 }
 
@@ -1203,6 +1319,48 @@ func (u *APIKeyUpsertOne) UpdateGroupID() *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) ClearGroupID() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (u *APIKeyUpsertOne) SetRouteMode(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetRouteMode(v)
+	})
+}
+
+// UpdateRouteMode sets the "route_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateRouteMode() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateRouteMode()
+	})
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (u *APIKeyUpsertOne) SetMaxRateMultiplier(v float64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetMaxRateMultiplier(v)
+	})
+}
+
+// AddMaxRateMultiplier adds v to the "max_rate_multiplier" field.
+func (u *APIKeyUpsertOne) AddMaxRateMultiplier(v float64) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddMaxRateMultiplier(v)
+	})
+}
+
+// UpdateMaxRateMultiplier sets the "max_rate_multiplier" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateMaxRateMultiplier() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateMaxRateMultiplier()
+	})
+}
+
+// ClearMaxRateMultiplier clears the value of the "max_rate_multiplier" field.
+func (u *APIKeyUpsertOne) ClearMaxRateMultiplier() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearMaxRateMultiplier()
 	})
 }
 
@@ -1841,6 +1999,48 @@ func (u *APIKeyUpsertBulk) UpdateGroupID() *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) ClearGroupID() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.ClearGroupID()
+	})
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (u *APIKeyUpsertBulk) SetRouteMode(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetRouteMode(v)
+	})
+}
+
+// UpdateRouteMode sets the "route_mode" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateRouteMode() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateRouteMode()
+	})
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (u *APIKeyUpsertBulk) SetMaxRateMultiplier(v float64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetMaxRateMultiplier(v)
+	})
+}
+
+// AddMaxRateMultiplier adds v to the "max_rate_multiplier" field.
+func (u *APIKeyUpsertBulk) AddMaxRateMultiplier(v float64) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.AddMaxRateMultiplier(v)
+	})
+}
+
+// UpdateMaxRateMultiplier sets the "max_rate_multiplier" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateMaxRateMultiplier() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateMaxRateMultiplier()
+	})
+}
+
+// ClearMaxRateMultiplier clears the value of the "max_rate_multiplier" field.
+func (u *APIKeyUpsertBulk) ClearMaxRateMultiplier() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearMaxRateMultiplier()
 	})
 }
 

@@ -11,6 +11,7 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
+  listAdminGroupHealth,
   listAccounts,
   showError,
   showSuccess,
@@ -23,6 +24,7 @@ const {
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
+  listAdminGroupHealth: vi.fn(),
   listAccounts: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -41,6 +43,7 @@ const messages: Record<string, string> = {
   'admin.groups.columns.accounts': 'Accounts',
   'admin.groups.columns.capacity': 'Capacity',
   'admin.groups.columns.usage': 'Usage',
+  'admin.groups.columns.health': 'Health',
   'admin.groups.columns.status': 'Status',
   'admin.groups.columns.actions': 'Actions',
   'admin.groups.usageToday': 'Today',
@@ -66,6 +69,10 @@ vi.mock('@/api/admin', () => ({
       list: listAccounts,
     },
   },
+}))
+
+vi.mock('@/api/groupHealth', () => ({
+  listAdminGroupHealth,
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -236,6 +243,7 @@ describe('admin GroupsView column settings', () => {
     getModelsListCandidates.mockReset()
     getUsageSummary.mockReset()
     getCapacitySummary.mockReset()
+    listAdminGroupHealth.mockReset()
     listAccounts.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
@@ -253,6 +261,7 @@ describe('admin GroupsView column settings', () => {
     getModelsListCandidates.mockResolvedValue([])
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
+    listAdminGroupHealth.mockResolvedValue({ items: [], window_hours: 6, bucket_minutes: 5 })
     getLiveCapability.mockResolvedValue({ supported: false })
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     isCurrentStep.mockReturnValue(false)
@@ -274,6 +283,7 @@ describe('admin GroupsView column settings', () => {
       'account_count',
       'capacity',
       'usage',
+      'health',
       'status',
       'actions',
     ])
@@ -298,6 +308,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'health',
       'status',
       'actions',
     ])
@@ -317,6 +328,7 @@ describe('admin GroupsView column settings', () => {
       'is_exclusive',
       'account_count',
       'capacity',
+      'health',
       'status',
       'actions',
     ])
@@ -340,6 +352,7 @@ describe('admin GroupsView column settings', () => {
       'is_exclusive',
       'account_count',
       'capacity',
+      'health',
       'status',
       'actions',
     ])
@@ -364,6 +377,7 @@ describe('admin GroupsView column settings', () => {
       'account_count',
       'capacity',
       'usage',
+      'health',
       'status',
       'actions',
     ])

@@ -278,6 +278,9 @@ type CreateGroupInput struct {
 	ProfitControlEnabled bool
 	ProfitMinMargin      *float64
 	ProfitSafetyBuffer   *float64
+	ProbeEnabled         bool
+	ProbeModel           string
+	ProbeIntervalSeconds int
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -353,6 +356,9 @@ type UpdateGroupInput struct {
 	ProfitControlEnabled *bool
 	ProfitMinMargin      *float64
 	ProfitSafetyBuffer   *float64
+	ProbeEnabled         *bool
+	ProbeModel           *string
+	ProbeIntervalSeconds *int
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }

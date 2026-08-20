@@ -88,6 +88,7 @@ type OpenAIEndpointCapability string
 const openAILongContextBillingEnabledKey = "openai_long_context_billing_enabled"
 
 const (
+	StatusBalanceInsufficient                                        = domain.StatusBalanceInsufficient
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
 	OpenAIEndpointCapabilityEmbeddings      OpenAIEndpointCapability = "embeddings"
 	OpenAIEndpointCapabilityAlphaSearch     OpenAIEndpointCapability = "alpha_search"

@@ -330,6 +330,21 @@ func ProfitSafetyBuffer(v float64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldProfitSafetyBuffer, v))
 }
 
+// ProbeEnabled applies equality check predicate on the "probe_enabled" field. It's identical to ProbeEnabledEQ.
+func ProbeEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldProbeEnabled, v))
+}
+
+// ProbeModel applies equality check predicate on the "probe_model" field. It's identical to ProbeModelEQ.
+func ProbeModel(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldProbeModel, v))
+}
+
+// ProbeIntervalSeconds applies equality check predicate on the "probe_interval_seconds" field. It's identical to ProbeIntervalSecondsEQ.
+func ProbeIntervalSeconds(v int) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldProbeIntervalSeconds, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -2550,6 +2565,121 @@ func ProfitSafetyBufferLTE(v float64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldProfitSafetyBuffer, v))
 }
 
+// ProbeEnabledEQ applies the EQ predicate on the "probe_enabled" field.
+func ProbeEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldProbeEnabled, v))
+}
+
+// ProbeEnabledNEQ applies the NEQ predicate on the "probe_enabled" field.
+func ProbeEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldProbeEnabled, v))
+}
+
+// ProbeModelEQ applies the EQ predicate on the "probe_model" field.
+func ProbeModelEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldProbeModel, v))
+}
+
+// ProbeModelNEQ applies the NEQ predicate on the "probe_model" field.
+func ProbeModelNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldProbeModel, v))
+}
+
+// ProbeModelIn applies the In predicate on the "probe_model" field.
+func ProbeModelIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldProbeModel, vs...))
+}
+
+// ProbeModelNotIn applies the NotIn predicate on the "probe_model" field.
+func ProbeModelNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldProbeModel, vs...))
+}
+
+// ProbeModelGT applies the GT predicate on the "probe_model" field.
+func ProbeModelGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldProbeModel, v))
+}
+
+// ProbeModelGTE applies the GTE predicate on the "probe_model" field.
+func ProbeModelGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldProbeModel, v))
+}
+
+// ProbeModelLT applies the LT predicate on the "probe_model" field.
+func ProbeModelLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldProbeModel, v))
+}
+
+// ProbeModelLTE applies the LTE predicate on the "probe_model" field.
+func ProbeModelLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldProbeModel, v))
+}
+
+// ProbeModelContains applies the Contains predicate on the "probe_model" field.
+func ProbeModelContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldProbeModel, v))
+}
+
+// ProbeModelHasPrefix applies the HasPrefix predicate on the "probe_model" field.
+func ProbeModelHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldProbeModel, v))
+}
+
+// ProbeModelHasSuffix applies the HasSuffix predicate on the "probe_model" field.
+func ProbeModelHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldProbeModel, v))
+}
+
+// ProbeModelEqualFold applies the EqualFold predicate on the "probe_model" field.
+func ProbeModelEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldProbeModel, v))
+}
+
+// ProbeModelContainsFold applies the ContainsFold predicate on the "probe_model" field.
+func ProbeModelContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldProbeModel, v))
+}
+
+// ProbeIntervalSecondsEQ applies the EQ predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsEQ(v int) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldProbeIntervalSeconds, v))
+}
+
+// ProbeIntervalSecondsNEQ applies the NEQ predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsNEQ(v int) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldProbeIntervalSeconds, v))
+}
+
+// ProbeIntervalSecondsIn applies the In predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsIn(vs ...int) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldProbeIntervalSeconds, vs...))
+}
+
+// ProbeIntervalSecondsNotIn applies the NotIn predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsNotIn(vs ...int) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldProbeIntervalSeconds, vs...))
+}
+
+// ProbeIntervalSecondsGT applies the GT predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsGT(v int) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldProbeIntervalSeconds, v))
+}
+
+// ProbeIntervalSecondsGTE applies the GTE predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsGTE(v int) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldProbeIntervalSeconds, v))
+}
+
+// ProbeIntervalSecondsLT applies the LT predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsLT(v int) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldProbeIntervalSeconds, v))
+}
+
+// ProbeIntervalSecondsLTE applies the LTE predicate on the "probe_interval_seconds" field.
+func ProbeIntervalSecondsLTE(v int) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldProbeIntervalSeconds, v))
+}
+
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.
 func HasAPIKeys() predicate.Group {
 	return predicate.Group(func(s *sql.Selector) {
@@ -2634,6 +2764,75 @@ func HasUsageLogs() predicate.Group {
 func HasUsageLogsWith(preds ...predicate.UsageLog) predicate.Group {
 	return predicate.Group(func(s *sql.Selector) {
 		step := newUsageLogsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasHealthState applies the HasEdge predicate on the "health_state" edge.
+func HasHealthState() predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, HealthStateTable, HealthStateColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasHealthStateWith applies the HasEdge predicate on the "health_state" edge with a given conditions (other predicates).
+func HasHealthStateWith(preds ...predicate.GroupHealthState) predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := newHealthStateStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasHealthEvents applies the HasEdge predicate on the "health_events" edge.
+func HasHealthEvents() predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, HealthEventsTable, HealthEventsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasHealthEventsWith applies the HasEdge predicate on the "health_events" edge with a given conditions (other predicates).
+func HasHealthEventsWith(preds ...predicate.GroupHealthEvent) predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := newHealthEventsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasKeyPreferences applies the HasEdge predicate on the "key_preferences" edge.
+func HasKeyPreferences() predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, KeyPreferencesTable, KeyPreferencesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasKeyPreferencesWith applies the HasEdge predicate on the "key_preferences" edge with a given conditions (other predicates).
+func HasKeyPreferencesWith(preds ...predicate.APIKeyGroupPreference) predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := newKeyPreferencesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

@@ -17,6 +17,8 @@ var (
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "key", Type: field.TypeString, Unique: true, Size: 128},
 		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "route_mode", Type: field.TypeString, Size: 20, Default: "fixed"},
+		{Name: "max_rate_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},
 		{Name: "ip_whitelist", Type: field.TypeJSON, Nullable: true},
@@ -44,13 +46,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "api_keys_groups_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[22]},
+				Columns:    []*schema.Column{APIKeysColumns[24]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "api_keys_users_api_keys",
-				Columns:    []*schema.Column{APIKeysColumns[23]},
+				Columns:    []*schema.Column{APIKeysColumns[25]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -59,17 +61,17 @@ var (
 			{
 				Name:    "apikey_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[23]},
+				Columns: []*schema.Column{APIKeysColumns[25]},
 			},
 			{
 				Name:    "apikey_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[22]},
+				Columns: []*schema.Column{APIKeysColumns[24]},
 			},
 			{
 				Name:    "apikey_status",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[6]},
+				Columns: []*schema.Column{APIKeysColumns[8]},
 			},
 			{
 				Name:    "apikey_deleted_at",
@@ -79,17 +81,59 @@ var (
 			{
 				Name:    "apikey_last_used_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[7]},
+				Columns: []*schema.Column{APIKeysColumns[9]},
 			},
 			{
 				Name:    "apikey_quota_quota_used",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[10], APIKeysColumns[11]},
+				Columns: []*schema.Column{APIKeysColumns[12], APIKeysColumns[13]},
 			},
 			{
 				Name:    "apikey_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{APIKeysColumns[12]},
+				Columns: []*schema.Column{APIKeysColumns[14]},
+			},
+		},
+	}
+	// APIKeyGroupPreferencesColumns holds the columns for the "api_key_group_preferences" table.
+	APIKeyGroupPreferencesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "disabled", Type: field.TypeBool, Default: false},
+		{Name: "position", Type: field.TypeInt, Default: 0},
+		{Name: "api_key_id", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64},
+	}
+	// APIKeyGroupPreferencesTable holds the schema information for the "api_key_group_preferences" table.
+	APIKeyGroupPreferencesTable = &schema.Table{
+		Name:       "api_key_group_preferences",
+		Columns:    APIKeyGroupPreferencesColumns,
+		PrimaryKey: []*schema.Column{APIKeyGroupPreferencesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "api_key_group_preferences_api_keys_group_preferences",
+				Columns:    []*schema.Column{APIKeyGroupPreferencesColumns[5]},
+				RefColumns: []*schema.Column{APIKeysColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "api_key_group_preferences_groups_key_preferences",
+				Columns:    []*schema.Column{APIKeyGroupPreferencesColumns[6]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "apikeygrouppreference_api_key_id_group_id",
+				Unique:  true,
+				Columns: []*schema.Column{APIKeyGroupPreferencesColumns[5], APIKeyGroupPreferencesColumns[6]},
+			},
+			{
+				Name:    "apikeygrouppreference_api_key_id_position",
+				Unique:  false,
+				Columns: []*schema.Column{APIKeyGroupPreferencesColumns[5], APIKeyGroupPreferencesColumns[4]},
 			},
 		},
 	}
@@ -965,6 +1009,9 @@ var (
 		{Name: "profit_control_enabled", Type: field.TypeBool, Default: false},
 		{Name: "profit_min_margin", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "profit_safety_buffer", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "probe_enabled", Type: field.TypeBool, Default: false},
+		{Name: "probe_model", Type: field.TypeString, Size: 100, Default: "gpt-5.6-sol"},
+		{Name: "probe_interval_seconds", Type: field.TypeInt, Default: 600},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{
@@ -1009,6 +1056,104 @@ var (
 				Annotation: &entsql.IndexAnnotation{
 					Where: "duplicate_operation_id IS NOT NULL AND deleted_at IS NULL",
 				},
+			},
+		},
+	}
+	// GroupHealthEventsColumns holds the columns for the "group_health_events" table.
+	GroupHealthEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "kind", Type: field.TypeString, Size: 20, Default: "probe"},
+		{Name: "success", Type: field.TypeBool, Default: false},
+		{Name: "is_probe", Type: field.TypeBool, Default: true},
+		{Name: "semantic_started", Type: field.TypeBool, Default: false},
+		{Name: "error_category", Type: field.TypeString, Nullable: true, Size: 50},
+		{Name: "ttft_ms", Type: field.TypeInt, Default: 0},
+		{Name: "total_ms", Type: field.TypeInt, Default: 0},
+		{Name: "observed_at", Type: field.TypeTime},
+		{Name: "error_message", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "group_id", Type: field.TypeInt64},
+	}
+	// GroupHealthEventsTable holds the schema information for the "group_health_events" table.
+	GroupHealthEventsTable = &schema.Table{
+		Name:       "group_health_events",
+		Columns:    GroupHealthEventsColumns,
+		PrimaryKey: []*schema.Column{GroupHealthEventsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "group_health_events_groups_health_events",
+				Columns:    []*schema.Column{GroupHealthEventsColumns[13]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grouphealthevent_group_id_observed_at",
+				Unique:  false,
+				Columns: []*schema.Column{GroupHealthEventsColumns[13], GroupHealthEventsColumns[11]},
+			},
+			{
+				Name:    "grouphealthevent_is_probe_observed_at",
+				Unique:  false,
+				Columns: []*schema.Column{GroupHealthEventsColumns[6], GroupHealthEventsColumns[11]},
+			},
+		},
+	}
+	// GroupHealthStatesColumns holds the columns for the "group_health_states" table.
+	GroupHealthStatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "unknown"},
+		{Name: "reason", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "last_probe_at", Type: field.TypeTime, Nullable: true},
+		{Name: "last_success_at", Type: field.TypeTime, Nullable: true},
+		{Name: "next_probe_at", Type: field.TypeTime, Nullable: true},
+		{Name: "failure_count", Type: field.TypeInt, Default: 0},
+		{Name: "probe_ttft_ms", Type: field.TypeInt, Default: 0},
+		{Name: "probe_availability_6h", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(7,4)"}},
+		{Name: "probe_ttft_avg_ms", Type: field.TypeInt, Default: 0},
+		{Name: "probe_ttft_p95_ms", Type: field.TypeInt, Default: 0},
+		{Name: "probe_samples", Type: field.TypeInt, Default: 0},
+		{Name: "real_ttft_p50_ms", Type: field.TypeInt, Default: 0},
+		{Name: "real_ttft_avg_ms", Type: field.TypeInt, Default: 0},
+		{Name: "real_ttft_p95_ms", Type: field.TypeInt, Default: 0},
+		{Name: "real_ttft_samples", Type: field.TypeInt, Default: 0},
+		{Name: "real_availability_6h", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(7,4)"}},
+		{Name: "real_total_avg_ms", Type: field.TypeInt, Default: 0},
+		{Name: "group_id", Type: field.TypeInt64},
+	}
+	// GroupHealthStatesTable holds the schema information for the "group_health_states" table.
+	GroupHealthStatesTable = &schema.Table{
+		Name:       "group_health_states",
+		Columns:    GroupHealthStatesColumns,
+		PrimaryKey: []*schema.Column{GroupHealthStatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "group_health_states_groups_health_state",
+				Columns:    []*schema.Column{GroupHealthStatesColumns[20]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "grouphealthstate_group_id",
+				Unique:  true,
+				Columns: []*schema.Column{GroupHealthStatesColumns[20]},
+			},
+			{
+				Name:    "grouphealthstate_status",
+				Unique:  false,
+				Columns: []*schema.Column{GroupHealthStatesColumns[3]},
+			},
+			{
+				Name:    "grouphealthstate_next_probe_at",
+				Unique:  false,
+				Columns: []*schema.Column{GroupHealthStatesColumns[7]},
 			},
 		},
 	}
@@ -2084,6 +2229,7 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeysTable,
+		APIKeyGroupPreferencesTable,
 		AccountsTable,
 		AccountGroupsTable,
 		AnnouncementsTable,
@@ -2100,6 +2246,8 @@ var (
 		CompositeModelRoutesTable,
 		ErrorPassthroughRulesTable,
 		GroupsTable,
+		GroupHealthEventsTable,
+		GroupHealthStatesTable,
 		IdempotencyRecordsTable,
 		IdentityAdoptionDecisionsTable,
 		PaymentAuditLogsTable,
@@ -2130,6 +2278,11 @@ func init() {
 	APIKeysTable.ForeignKeys[1].RefTable = UsersTable
 	APIKeysTable.Annotation = &entsql.Annotation{
 		Table: "api_keys",
+	}
+	APIKeyGroupPreferencesTable.ForeignKeys[0].RefTable = APIKeysTable
+	APIKeyGroupPreferencesTable.ForeignKeys[1].RefTable = GroupsTable
+	APIKeyGroupPreferencesTable.Annotation = &entsql.Annotation{
+		Table: "api_key_group_preferences",
 	}
 	AccountsTable.ForeignKeys[0].RefTable = ProxiesTable
 	AccountsTable.ForeignKeys[1].RefTable = AccountsTable
@@ -2190,6 +2343,14 @@ func init() {
 	}
 	GroupsTable.Annotation = &entsql.Annotation{
 		Table: "groups",
+	}
+	GroupHealthEventsTable.ForeignKeys[0].RefTable = GroupsTable
+	GroupHealthEventsTable.Annotation = &entsql.Annotation{
+		Table: "group_health_events",
+	}
+	GroupHealthStatesTable.ForeignKeys[0].RefTable = GroupsTable
+	GroupHealthStatesTable.Annotation = &entsql.Annotation{
+		Table: "group_health_states",
 	}
 	IdempotencyRecordsTable.Annotation = &entsql.Annotation{
 		Table: "idempotency_records",

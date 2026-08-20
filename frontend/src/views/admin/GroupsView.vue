@@ -373,6 +373,34 @@
             </span>
           </template>
 
+          <template #cell-health="{ row }">
+            <div v-if="healthMap.get(row.id)" class="space-y-0.5 text-xs">
+              <span
+                :class="[
+                  'badge',
+                  healthMap.get(row.id)?.status === 'healthy'
+                    ? 'badge-success'
+                    : healthMap.get(row.id)?.status === 'balance_insufficient'
+                      ? 'badge-warning'
+                      : healthMap.get(row.id)?.status === 'not_enabled'
+                        ? 'badge-gray'
+                        : 'badge-danger',
+                ]"
+              >
+                {{ t("groupHealth.statuses." + healthMap.get(row.id)!.status) }}
+              </span>
+              <div class="text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.healthMetrics.realP50") }}:
+                {{ healthMap.get(row.id)!.real_ttft_p50_ms || "—" }} ms
+              </div>
+              <div class="text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.healthMetrics.availability") }}:
+                {{ healthMap.get(row.id)!.real_availability_6h.toFixed(1) }}%
+              </div>
+            </div>
+            <span v-else class="text-xs text-gray-400">—</span>
+          </template>
+
           <template #cell-actions="{ row }">
             <div class="flex items-center gap-1">
               <button
@@ -624,6 +652,20 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_10rem] sm:items-end">
+          <label class="flex h-10 items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <input v-model="createForm.probe_enabled" type="checkbox" class="checkbox" />
+            主动探测
+          </label>
+          <div>
+            <label class="input-label">探测模型</label>
+            <input v-model.trim="createForm.probe_model" class="input" :disabled="!createForm.probe_enabled" />
+          </div>
+          <div>
+            <label class="input-label">间隔（秒）</label>
+            <input v-model.number="createForm.probe_interval_seconds" type="number" min="30" max="3600" step="30" class="input" :disabled="!createForm.probe_enabled" />
+          </div>
         </div>
         <ReasoningEffortPolicyFields
           v-if="supportsReasoningEffortPolicyPlatform(createForm.platform)"
@@ -2348,6 +2390,20 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_10rem] sm:items-end">
+          <label class="flex h-10 items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <input v-model="editForm.probe_enabled" type="checkbox" class="checkbox" />
+            主动探测
+          </label>
+          <div>
+            <label class="input-label">探测模型</label>
+            <input v-model.trim="editForm.probe_model" class="input" :disabled="!editForm.probe_enabled" />
+          </div>
+          <div>
+            <label class="input-label">间隔（秒）</label>
+            <input v-model.number="editForm.probe_interval_seconds" type="number" min="30" max="3600" step="30" class="input" :disabled="!editForm.probe_enabled" />
+          </div>
         </div>
         <ReasoningEffortPolicyFields
           v-if="supportsReasoningEffortPolicyPlatform(editForm.platform)"
@@ -4412,6 +4468,7 @@ import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
+import { listAdminGroupHealth, type GroupHealthItem } from "@/api/groupHealth";
 import type {
   AdminGroup,
   CompositeModelRoute,
@@ -4615,6 +4672,7 @@ const allColumns = computed<Column[]>(() => [
     sortable: false,
   },
   { key: "usage", label: t("admin.groups.columns.usage"), sortable: false },
+  { key: "health", label: t("admin.groups.columns.health"), sortable: false },
   { key: "status", label: t("admin.groups.columns.status"), sortable: true },
   { key: "actions", label: t("admin.groups.columns.actions"), sortable: false },
 ]);
@@ -4930,6 +4988,7 @@ const capacityMap = ref<
     }
   >
 >(new Map());
+const healthMap = ref<Map<number, GroupHealthItem>>(new Map());
 const searchQuery = ref("");
 const filters = reactive({
   platform: "",
@@ -5029,6 +5088,9 @@ const createForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+	probe_enabled: false,
+	probe_model: "gpt-5.6-sol",
+	probe_interval_seconds: 600,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5389,6 +5451,9 @@ const editForm = reactive({
   description: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
+	probe_enabled: false,
+	probe_model: "gpt-5.6-sol",
+	probe_interval_seconds: 600,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5671,6 +5736,20 @@ const cancelUnsupportedLive = () => {
   pendingLiveForm.value = null;
 };
 
+const loadGroupHealth = async (signal: AbortSignal) => {
+  try {
+    const health = await listAdminGroupHealth(signal);
+    if (signal.aborted) return;
+    healthMap.value = new Map(
+      health.items.map((item) => [item.group_id, item]),
+    );
+  } catch (error) {
+    if (signal.aborted) return;
+    healthMap.value = new Map();
+    console.warn("Failed to load group health", error);
+  }
+};
+
 const loadGroups = async () => {
   if (abortController) {
     abortController.abort();
@@ -5699,6 +5778,7 @@ const loadGroups = async () => {
     groups.value = response.items;
     pagination.total = response.total;
     pagination.pages = response.pages;
+    void loadGroupHealth(signal);
     if (hasVisibleUsageSummaryConsumer.value) {
       loadUsageSummary();
     } else {
@@ -5849,6 +5929,9 @@ const closeCreateModal = () => {
   createForm.description = "";
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
+	createForm.probe_enabled = false;
+	createForm.probe_model = "gpt-5.6-sol";
+	createForm.probe_interval_seconds = 600;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -6090,6 +6173,9 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.description = group.description || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
+	editForm.probe_enabled = group.probe_enabled ?? false;
+	editForm.probe_model = group.probe_model || "gpt-5.6-sol";
+	editForm.probe_interval_seconds = group.probe_interval_seconds || 600;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";

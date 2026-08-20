@@ -549,6 +549,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	if account.Status == StatusBalanceInsufficient && input.Status != "" && input.Status != StatusBalanceInsufficient {
+		return nil, ErrAccountBalanceRestoreRequired
+	}
 	var normalizedExtra map[string]any
 	if input.Extra != nil {
 		normalizedExtra, err = normalizeOpenAILongContextBillingUpdateExtra(account, input)

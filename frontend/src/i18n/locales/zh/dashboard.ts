@@ -102,6 +102,13 @@ export default {
     namePlaceholder: '我的 API 密钥',
     groupLabel: '分组',
     selectGroup: '选择分组',
+    routeModeLabel: '路由方式',
+    routeModes: { fixed: '固定分组', cheapest: '低价优先', fastest: '响应优先', custom: '自定义顺序' },
+    maxRateMultiplier: '最大倍率',
+    maxRateMultiplierPlaceholder: '不限制',
+    disabledGroups: '禁用分组',
+    customGroupOrder: '自定义分组顺序',
+    dragToReorder: '拖拽排序',
     statusLabel: '状态',
     selectStatus: '选择状态',
     saving: '保存中...',
@@ -959,6 +966,31 @@ export default {
     endDate: '结束日期',
     apply: '应用',
     selectDateRange: '选择日期范围'
+  },
+
+  groupHealth: {
+    title: '分组渠道状态',
+    window: '最近 6 小时真实请求与主动探测',
+    group: '分组',
+    multiplier: '倍率',
+    status: '状态',
+    realTtft: '真实首字延迟',
+    probeTtft: '探测首字延迟',
+    availability: '6 小时可用率',
+    trend: '5 分钟趋势',
+    empty: '暂无可查看的分组',
+    loadError: '加载分组渠道状态失败',
+    notEnabled: '未开启探测',
+    noData: '无数据',
+    latencyDetail: '均值 {avg} · P95 {p95} · {samples} 个样本',
+    probeAvailability: '探测 {value}',
+    bucketDetail: '成功 {success} · 失败 {failure}',
+    statuses: {
+      healthy: '可用',
+      unavailable: '不可用',
+      balance_insufficient: '余额不足',
+      not_enabled: '未开启探测'
+    }
   },
 
   // Admin

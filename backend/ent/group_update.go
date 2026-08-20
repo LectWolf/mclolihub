@@ -15,7 +15,10 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -1162,6 +1165,55 @@ func (_u *GroupUpdate) AddProfitSafetyBuffer(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetProbeEnabled sets the "probe_enabled" field.
+func (_u *GroupUpdate) SetProbeEnabled(v bool) *GroupUpdate {
+	_u.mutation.SetProbeEnabled(v)
+	return _u
+}
+
+// SetNillableProbeEnabled sets the "probe_enabled" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableProbeEnabled(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetProbeEnabled(*v)
+	}
+	return _u
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (_u *GroupUpdate) SetProbeModel(v string) *GroupUpdate {
+	_u.mutation.SetProbeModel(v)
+	return _u
+}
+
+// SetNillableProbeModel sets the "probe_model" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableProbeModel(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetProbeModel(*v)
+	}
+	return _u
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (_u *GroupUpdate) SetProbeIntervalSeconds(v int) *GroupUpdate {
+	_u.mutation.ResetProbeIntervalSeconds()
+	_u.mutation.SetProbeIntervalSeconds(v)
+	return _u
+}
+
+// SetNillableProbeIntervalSeconds sets the "probe_interval_seconds" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableProbeIntervalSeconds(v *int) *GroupUpdate {
+	if v != nil {
+		_u.SetProbeIntervalSeconds(*v)
+	}
+	return _u
+}
+
+// AddProbeIntervalSeconds adds value to the "probe_interval_seconds" field.
+func (_u *GroupUpdate) AddProbeIntervalSeconds(v int) *GroupUpdate {
+	_u.mutation.AddProbeIntervalSeconds(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1220,6 +1272,51 @@ func (_u *GroupUpdate) AddUsageLogs(v ...*UsageLog) *GroupUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddUsageLogIDs(ids...)
+}
+
+// AddHealthStateIDs adds the "health_state" edge to the GroupHealthState entity by IDs.
+func (_u *GroupUpdate) AddHealthStateIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.AddHealthStateIDs(ids...)
+	return _u
+}
+
+// AddHealthState adds the "health_state" edges to the GroupHealthState entity.
+func (_u *GroupUpdate) AddHealthState(v ...*GroupHealthState) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddHealthStateIDs(ids...)
+}
+
+// AddHealthEventIDs adds the "health_events" edge to the GroupHealthEvent entity by IDs.
+func (_u *GroupUpdate) AddHealthEventIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.AddHealthEventIDs(ids...)
+	return _u
+}
+
+// AddHealthEvents adds the "health_events" edges to the GroupHealthEvent entity.
+func (_u *GroupUpdate) AddHealthEvents(v ...*GroupHealthEvent) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddHealthEventIDs(ids...)
+}
+
+// AddKeyPreferenceIDs adds the "key_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (_u *GroupUpdate) AddKeyPreferenceIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.AddKeyPreferenceIDs(ids...)
+	return _u
+}
+
+// AddKeyPreferences adds the "key_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *GroupUpdate) AddKeyPreferences(v ...*APIKeyGroupPreference) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddKeyPreferenceIDs(ids...)
 }
 
 // AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
@@ -1339,6 +1436,69 @@ func (_u *GroupUpdate) RemoveUsageLogs(v ...*UsageLog) *GroupUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageLogIDs(ids...)
+}
+
+// ClearHealthState clears all "health_state" edges to the GroupHealthState entity.
+func (_u *GroupUpdate) ClearHealthState() *GroupUpdate {
+	_u.mutation.ClearHealthState()
+	return _u
+}
+
+// RemoveHealthStateIDs removes the "health_state" edge to GroupHealthState entities by IDs.
+func (_u *GroupUpdate) RemoveHealthStateIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.RemoveHealthStateIDs(ids...)
+	return _u
+}
+
+// RemoveHealthState removes "health_state" edges to GroupHealthState entities.
+func (_u *GroupUpdate) RemoveHealthState(v ...*GroupHealthState) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveHealthStateIDs(ids...)
+}
+
+// ClearHealthEvents clears all "health_events" edges to the GroupHealthEvent entity.
+func (_u *GroupUpdate) ClearHealthEvents() *GroupUpdate {
+	_u.mutation.ClearHealthEvents()
+	return _u
+}
+
+// RemoveHealthEventIDs removes the "health_events" edge to GroupHealthEvent entities by IDs.
+func (_u *GroupUpdate) RemoveHealthEventIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.RemoveHealthEventIDs(ids...)
+	return _u
+}
+
+// RemoveHealthEvents removes "health_events" edges to GroupHealthEvent entities.
+func (_u *GroupUpdate) RemoveHealthEvents(v ...*GroupHealthEvent) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveHealthEventIDs(ids...)
+}
+
+// ClearKeyPreferences clears all "key_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *GroupUpdate) ClearKeyPreferences() *GroupUpdate {
+	_u.mutation.ClearKeyPreferences()
+	return _u
+}
+
+// RemoveKeyPreferenceIDs removes the "key_preferences" edge to APIKeyGroupPreference entities by IDs.
+func (_u *GroupUpdate) RemoveKeyPreferenceIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.RemoveKeyPreferenceIDs(ids...)
+	return _u
+}
+
+// RemoveKeyPreferences removes "key_preferences" edges to APIKeyGroupPreference entities.
+func (_u *GroupUpdate) RemoveKeyPreferences(v ...*APIKeyGroupPreference) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveKeyPreferenceIDs(ids...)
 }
 
 // ClearAccounts clears all "accounts" edges to the Account entity.
@@ -1485,6 +1645,11 @@ func (_u *GroupUpdate) check() error {
 	if v, ok := _u.mutation.MaxReasoningEffort(); ok {
 		if err := group.MaxReasoningEffortValidator(v); err != nil {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ProbeModel(); ok {
+		if err := group.ProbeModelValidator(v); err != nil {
+			return &ValidationError{Name: "probe_model", err: fmt.Errorf(`ent: validator failed for field "Group.probe_model": %w`, err)}
 		}
 	}
 	return nil
@@ -1844,6 +2009,18 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.ProbeEnabled(); ok {
+		_spec.SetField(group.FieldProbeEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProbeModel(); ok {
+		_spec.SetField(group.FieldProbeModel, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProbeIntervalSeconds(); ok {
+		_spec.SetField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProbeIntervalSeconds(); ok {
+		_spec.AddField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -2017,6 +2194,141 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.HealthStateCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedHealthStateIDs(); len(nodes) > 0 && !_u.mutation.HealthStateCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.HealthStateIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.HealthEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedHealthEventsIDs(); len(nodes) > 0 && !_u.mutation.HealthEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.HealthEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.KeyPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedKeyPreferencesIDs(); len(nodes) > 0 && !_u.mutation.KeyPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.KeyPreferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
@@ -3283,6 +3595,55 @@ func (_u *GroupUpdateOne) AddProfitSafetyBuffer(v float64) *GroupUpdateOne {
 	return _u
 }
 
+// SetProbeEnabled sets the "probe_enabled" field.
+func (_u *GroupUpdateOne) SetProbeEnabled(v bool) *GroupUpdateOne {
+	_u.mutation.SetProbeEnabled(v)
+	return _u
+}
+
+// SetNillableProbeEnabled sets the "probe_enabled" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableProbeEnabled(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetProbeEnabled(*v)
+	}
+	return _u
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (_u *GroupUpdateOne) SetProbeModel(v string) *GroupUpdateOne {
+	_u.mutation.SetProbeModel(v)
+	return _u
+}
+
+// SetNillableProbeModel sets the "probe_model" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableProbeModel(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetProbeModel(*v)
+	}
+	return _u
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (_u *GroupUpdateOne) SetProbeIntervalSeconds(v int) *GroupUpdateOne {
+	_u.mutation.ResetProbeIntervalSeconds()
+	_u.mutation.SetProbeIntervalSeconds(v)
+	return _u
+}
+
+// SetNillableProbeIntervalSeconds sets the "probe_interval_seconds" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableProbeIntervalSeconds(v *int) *GroupUpdateOne {
+	if v != nil {
+		_u.SetProbeIntervalSeconds(*v)
+	}
+	return _u
+}
+
+// AddProbeIntervalSeconds adds value to the "probe_interval_seconds" field.
+func (_u *GroupUpdateOne) AddProbeIntervalSeconds(v int) *GroupUpdateOne {
+	_u.mutation.AddProbeIntervalSeconds(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -3341,6 +3702,51 @@ func (_u *GroupUpdateOne) AddUsageLogs(v ...*UsageLog) *GroupUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddUsageLogIDs(ids...)
+}
+
+// AddHealthStateIDs adds the "health_state" edge to the GroupHealthState entity by IDs.
+func (_u *GroupUpdateOne) AddHealthStateIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.AddHealthStateIDs(ids...)
+	return _u
+}
+
+// AddHealthState adds the "health_state" edges to the GroupHealthState entity.
+func (_u *GroupUpdateOne) AddHealthState(v ...*GroupHealthState) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddHealthStateIDs(ids...)
+}
+
+// AddHealthEventIDs adds the "health_events" edge to the GroupHealthEvent entity by IDs.
+func (_u *GroupUpdateOne) AddHealthEventIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.AddHealthEventIDs(ids...)
+	return _u
+}
+
+// AddHealthEvents adds the "health_events" edges to the GroupHealthEvent entity.
+func (_u *GroupUpdateOne) AddHealthEvents(v ...*GroupHealthEvent) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddHealthEventIDs(ids...)
+}
+
+// AddKeyPreferenceIDs adds the "key_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (_u *GroupUpdateOne) AddKeyPreferenceIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.AddKeyPreferenceIDs(ids...)
+	return _u
+}
+
+// AddKeyPreferences adds the "key_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *GroupUpdateOne) AddKeyPreferences(v ...*APIKeyGroupPreference) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddKeyPreferenceIDs(ids...)
 }
 
 // AddAccountIDs adds the "accounts" edge to the Account entity by IDs.
@@ -3460,6 +3866,69 @@ func (_u *GroupUpdateOne) RemoveUsageLogs(v ...*UsageLog) *GroupUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageLogIDs(ids...)
+}
+
+// ClearHealthState clears all "health_state" edges to the GroupHealthState entity.
+func (_u *GroupUpdateOne) ClearHealthState() *GroupUpdateOne {
+	_u.mutation.ClearHealthState()
+	return _u
+}
+
+// RemoveHealthStateIDs removes the "health_state" edge to GroupHealthState entities by IDs.
+func (_u *GroupUpdateOne) RemoveHealthStateIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.RemoveHealthStateIDs(ids...)
+	return _u
+}
+
+// RemoveHealthState removes "health_state" edges to GroupHealthState entities.
+func (_u *GroupUpdateOne) RemoveHealthState(v ...*GroupHealthState) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveHealthStateIDs(ids...)
+}
+
+// ClearHealthEvents clears all "health_events" edges to the GroupHealthEvent entity.
+func (_u *GroupUpdateOne) ClearHealthEvents() *GroupUpdateOne {
+	_u.mutation.ClearHealthEvents()
+	return _u
+}
+
+// RemoveHealthEventIDs removes the "health_events" edge to GroupHealthEvent entities by IDs.
+func (_u *GroupUpdateOne) RemoveHealthEventIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.RemoveHealthEventIDs(ids...)
+	return _u
+}
+
+// RemoveHealthEvents removes "health_events" edges to GroupHealthEvent entities.
+func (_u *GroupUpdateOne) RemoveHealthEvents(v ...*GroupHealthEvent) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveHealthEventIDs(ids...)
+}
+
+// ClearKeyPreferences clears all "key_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *GroupUpdateOne) ClearKeyPreferences() *GroupUpdateOne {
+	_u.mutation.ClearKeyPreferences()
+	return _u
+}
+
+// RemoveKeyPreferenceIDs removes the "key_preferences" edge to APIKeyGroupPreference entities by IDs.
+func (_u *GroupUpdateOne) RemoveKeyPreferenceIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.RemoveKeyPreferenceIDs(ids...)
+	return _u
+}
+
+// RemoveKeyPreferences removes "key_preferences" edges to APIKeyGroupPreference entities.
+func (_u *GroupUpdateOne) RemoveKeyPreferences(v ...*APIKeyGroupPreference) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveKeyPreferenceIDs(ids...)
 }
 
 // ClearAccounts clears all "accounts" edges to the Account entity.
@@ -3619,6 +4088,11 @@ func (_u *GroupUpdateOne) check() error {
 	if v, ok := _u.mutation.MaxReasoningEffort(); ok {
 		if err := group.MaxReasoningEffortValidator(v); err != nil {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.ProbeModel(); ok {
+		if err := group.ProbeModelValidator(v); err != nil {
+			return &ValidationError{Name: "probe_model", err: fmt.Errorf(`ent: validator failed for field "Group.probe_model": %w`, err)}
 		}
 	}
 	return nil
@@ -3995,6 +4469,18 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.ProbeEnabled(); ok {
+		_spec.SetField(group.FieldProbeEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.ProbeModel(); ok {
+		_spec.SetField(group.FieldProbeModel, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProbeIntervalSeconds(); ok {
+		_spec.SetField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedProbeIntervalSeconds(); ok {
+		_spec.AddField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -4168,6 +4654,141 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.HealthStateCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedHealthStateIDs(); len(nodes) > 0 && !_u.mutation.HealthStateCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.HealthStateIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthStateTable,
+			Columns: []string{group.HealthStateColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthstate.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.HealthEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedHealthEventsIDs(); len(nodes) > 0 && !_u.mutation.HealthEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.HealthEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.HealthEventsTable,
+			Columns: []string{group.HealthEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouphealthevent.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.KeyPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedKeyPreferencesIDs(); len(nodes) > 0 && !_u.mutation.KeyPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.KeyPreferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   group.KeyPreferencesTable,
+			Columns: []string{group.KeyPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

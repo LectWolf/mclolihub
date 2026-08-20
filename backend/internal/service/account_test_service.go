@@ -3068,6 +3068,13 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 }
 
 func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
+	if event.Type == "content" && event.Text != "" {
+		if value, ok := c.Get(accountTestTimingCaptureContextKey); ok {
+			if capture, _ := value.(*accountTestTimingCapture); capture != nil {
+				capture.once.Do(func() { capture.firstContentAt = time.Now() })
+			}
+		}
+	}
 	if event.Type == "test_complete" {
 		if suppress, ok := c.Get(accountTestSuppressCompletionContextKey); ok {
 			if suppressCompletion, _ := suppress.(bool); suppressCompletion {
@@ -3081,6 +3088,50 @@ func (s *AccountTestService) sendEvent(c *gin.Context, event TestEvent) {
 		return
 	}
 	c.Writer.Flush()
+}
+
+const accountTestTimingCaptureContextKey = "account_test_timing_capture"
+
+type accountTestTimingCapture struct {
+	once           sync.Once
+	firstContentAt time.Time
+}
+
+// AccountProbeResult is an internal, non-billable connection-test observation.
+// It is deliberately separate from usage logs so probes never become user
+// traffic or fastest-route samples.
+type AccountProbeResult struct {
+	Success      bool
+	TTFT         time.Duration
+	Total        time.Duration
+	ErrorMessage string
+}
+
+// RunProbeBackground executes the same platform adapters as the admin account
+// connection test while capturing first semantic output and total latency.
+func (s *AccountTestService) RunProbeBackground(ctx context.Context, accountID int64, modelID string) (*AccountProbeResult, error) {
+	startedAt := time.Now()
+	w := httptest.NewRecorder()
+	ginCtx, _ := gin.CreateTestContext(w)
+	ginCtx.Request = (&http.Request{}).WithContext(ctx)
+	capture := &accountTestTimingCapture{}
+	ginCtx.Set(accountTestTimingCaptureContextKey, capture)
+
+	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeDefault)
+	finishedAt := time.Now()
+	_, errMsg := parseTestSSEOutput(w.Body.String())
+	if errMsg == "" && testErr != nil {
+		errMsg = testErr.Error()
+	}
+	result := &AccountProbeResult{
+		Success:      testErr == nil && errMsg == "",
+		Total:        finishedAt.Sub(startedAt),
+		ErrorMessage: errMsg,
+	}
+	if !capture.firstContentAt.IsZero() {
+		result.TTFT = capture.firstContentAt.Sub(startedAt)
+	}
+	return result, nil
 }
 
 // sendErrorAndEnd sends an error event and ends the stream

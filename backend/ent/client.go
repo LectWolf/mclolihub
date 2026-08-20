@@ -20,6 +20,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/ent/batchimageevent"
@@ -32,6 +33,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -65,6 +68,8 @@ type Client struct {
 	Schema *migrate.Schema
 	// APIKey is the client for interacting with the APIKey builders.
 	APIKey *APIKeyClient
+	// APIKeyGroupPreference is the client for interacting with the APIKeyGroupPreference builders.
+	APIKeyGroupPreference *APIKeyGroupPreferenceClient
 	// Account is the client for interacting with the Account builders.
 	Account *AccountClient
 	// AccountGroup is the client for interacting with the AccountGroup builders.
@@ -97,6 +102,10 @@ type Client struct {
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
+	// GroupHealthEvent is the client for interacting with the GroupHealthEvent builders.
+	GroupHealthEvent *GroupHealthEventClient
+	// GroupHealthState is the client for interacting with the GroupHealthState builders.
+	GroupHealthState *GroupHealthStateClient
 	// IdempotencyRecord is the client for interacting with the IdempotencyRecord builders.
 	IdempotencyRecord *IdempotencyRecordClient
 	// IdentityAdoptionDecision is the client for interacting with the IdentityAdoptionDecision builders.
@@ -153,6 +162,7 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.APIKey = NewAPIKeyClient(c.config)
+	c.APIKeyGroupPreference = NewAPIKeyGroupPreferenceClient(c.config)
 	c.Account = NewAccountClient(c.config)
 	c.AccountGroup = NewAccountGroupClient(c.config)
 	c.Announcement = NewAnnouncementClient(c.config)
@@ -169,6 +179,8 @@ func (c *Client) init() {
 	c.CompositeModelRoute = NewCompositeModelRouteClient(c.config)
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
 	c.Group = NewGroupClient(c.config)
+	c.GroupHealthEvent = NewGroupHealthEventClient(c.config)
+	c.GroupHealthState = NewGroupHealthStateClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
 	c.IdentityAdoptionDecision = NewIdentityAdoptionDecisionClient(c.config)
 	c.PaymentAuditLog = NewPaymentAuditLogClient(c.config)
@@ -284,6 +296,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ctx:                           ctx,
 		config:                        cfg,
 		APIKey:                        NewAPIKeyClient(cfg),
+		APIKeyGroupPreference:         NewAPIKeyGroupPreferenceClient(cfg),
 		Account:                       NewAccountClient(cfg),
 		AccountGroup:                  NewAccountGroupClient(cfg),
 		Announcement:                  NewAnnouncementClient(cfg),
@@ -300,6 +313,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		CompositeModelRoute:           NewCompositeModelRouteClient(cfg),
 		ErrorPassthroughRule:          NewErrorPassthroughRuleClient(cfg),
 		Group:                         NewGroupClient(cfg),
+		GroupHealthEvent:              NewGroupHealthEventClient(cfg),
+		GroupHealthState:              NewGroupHealthStateClient(cfg),
 		IdempotencyRecord:             NewIdempotencyRecordClient(cfg),
 		IdentityAdoptionDecision:      NewIdentityAdoptionDecisionClient(cfg),
 		PaymentAuditLog:               NewPaymentAuditLogClient(cfg),
@@ -342,6 +357,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ctx:                           ctx,
 		config:                        cfg,
 		APIKey:                        NewAPIKeyClient(cfg),
+		APIKeyGroupPreference:         NewAPIKeyGroupPreferenceClient(cfg),
 		Account:                       NewAccountClient(cfg),
 		AccountGroup:                  NewAccountGroupClient(cfg),
 		Announcement:                  NewAnnouncementClient(cfg),
@@ -358,6 +374,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		CompositeModelRoute:           NewCompositeModelRouteClient(cfg),
 		ErrorPassthroughRule:          NewErrorPassthroughRuleClient(cfg),
 		Group:                         NewGroupClient(cfg),
+		GroupHealthEvent:              NewGroupHealthEventClient(cfg),
+		GroupHealthState:              NewGroupHealthStateClient(cfg),
 		IdempotencyRecord:             NewIdempotencyRecordClient(cfg),
 		IdentityAdoptionDecision:      NewIdentityAdoptionDecisionClient(cfg),
 		PaymentAuditLog:               NewPaymentAuditLogClient(cfg),
@@ -409,11 +427,12 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
-		c.BatchImageJob, c.ChannelMonitor, c.ChannelMonitorDailyRollup,
-		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
-		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.APIKey, c.APIKeyGroupPreference, c.Account, c.AccountGroup, c.Announcement,
+		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent,
+		c.BatchImageItem, c.BatchImageJob, c.ChannelMonitor,
+		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
+		c.ChannelMonitorRequestTemplate, c.CompositeModelRoute, c.ErrorPassthroughRule,
+		c.Group, c.GroupHealthEvent, c.GroupHealthState, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
 		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
@@ -429,11 +448,12 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent, c.BatchImageItem,
-		c.BatchImageJob, c.ChannelMonitor, c.ChannelMonitorDailyRollup,
-		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
-		c.CompositeModelRoute, c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
+		c.APIKey, c.APIKeyGroupPreference, c.Account, c.AccountGroup, c.Announcement,
+		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.BatchImageEvent,
+		c.BatchImageItem, c.BatchImageJob, c.ChannelMonitor,
+		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
+		c.ChannelMonitorRequestTemplate, c.CompositeModelRoute, c.ErrorPassthroughRule,
+		c.Group, c.GroupHealthEvent, c.GroupHealthState, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
 		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
 		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
@@ -450,6 +470,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *APIKeyMutation:
 		return c.APIKey.mutate(ctx, m)
+	case *APIKeyGroupPreferenceMutation:
+		return c.APIKeyGroupPreference.mutate(ctx, m)
 	case *AccountMutation:
 		return c.Account.mutate(ctx, m)
 	case *AccountGroupMutation:
@@ -482,6 +504,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ErrorPassthroughRule.mutate(ctx, m)
 	case *GroupMutation:
 		return c.Group.mutate(ctx, m)
+	case *GroupHealthEventMutation:
+		return c.GroupHealthEvent.mutate(ctx, m)
+	case *GroupHealthStateMutation:
+		return c.GroupHealthState.mutate(ctx, m)
 	case *IdempotencyRecordMutation:
 		return c.IdempotencyRecord.mutate(ctx, m)
 	case *IdentityAdoptionDecisionMutation:
@@ -687,6 +713,22 @@ func (c *APIKeyClient) QueryUsageLogs(_m *APIKey) *UsageLogQuery {
 	return query
 }
 
+// QueryGroupPreferences queries the group_preferences edge of a APIKey.
+func (c *APIKeyClient) QueryGroupPreferences(_m *APIKey) *APIKeyGroupPreferenceQuery {
+	query := (&APIKeyGroupPreferenceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikey.Table, apikey.FieldID, id),
+			sqlgraph.To(apikeygrouppreference.Table, apikeygrouppreference.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, apikey.GroupPreferencesTable, apikey.GroupPreferencesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *APIKeyClient) Hooks() []Hook {
 	hooks := c.hooks.APIKey
@@ -711,6 +753,171 @@ func (c *APIKeyClient) mutate(ctx context.Context, m *APIKeyMutation) (Value, er
 		return (&APIKeyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown APIKey mutation op: %q", m.Op())
+	}
+}
+
+// APIKeyGroupPreferenceClient is a client for the APIKeyGroupPreference schema.
+type APIKeyGroupPreferenceClient struct {
+	config
+}
+
+// NewAPIKeyGroupPreferenceClient returns a client for the APIKeyGroupPreference from the given config.
+func NewAPIKeyGroupPreferenceClient(c config) *APIKeyGroupPreferenceClient {
+	return &APIKeyGroupPreferenceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `apikeygrouppreference.Hooks(f(g(h())))`.
+func (c *APIKeyGroupPreferenceClient) Use(hooks ...Hook) {
+	c.hooks.APIKeyGroupPreference = append(c.hooks.APIKeyGroupPreference, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `apikeygrouppreference.Intercept(f(g(h())))`.
+func (c *APIKeyGroupPreferenceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.APIKeyGroupPreference = append(c.inters.APIKeyGroupPreference, interceptors...)
+}
+
+// Create returns a builder for creating a APIKeyGroupPreference entity.
+func (c *APIKeyGroupPreferenceClient) Create() *APIKeyGroupPreferenceCreate {
+	mutation := newAPIKeyGroupPreferenceMutation(c.config, OpCreate)
+	return &APIKeyGroupPreferenceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of APIKeyGroupPreference entities.
+func (c *APIKeyGroupPreferenceClient) CreateBulk(builders ...*APIKeyGroupPreferenceCreate) *APIKeyGroupPreferenceCreateBulk {
+	return &APIKeyGroupPreferenceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *APIKeyGroupPreferenceClient) MapCreateBulk(slice any, setFunc func(*APIKeyGroupPreferenceCreate, int)) *APIKeyGroupPreferenceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &APIKeyGroupPreferenceCreateBulk{err: fmt.Errorf("calling to APIKeyGroupPreferenceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*APIKeyGroupPreferenceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &APIKeyGroupPreferenceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for APIKeyGroupPreference.
+func (c *APIKeyGroupPreferenceClient) Update() *APIKeyGroupPreferenceUpdate {
+	mutation := newAPIKeyGroupPreferenceMutation(c.config, OpUpdate)
+	return &APIKeyGroupPreferenceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *APIKeyGroupPreferenceClient) UpdateOne(_m *APIKeyGroupPreference) *APIKeyGroupPreferenceUpdateOne {
+	mutation := newAPIKeyGroupPreferenceMutation(c.config, OpUpdateOne, withAPIKeyGroupPreference(_m))
+	return &APIKeyGroupPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *APIKeyGroupPreferenceClient) UpdateOneID(id int64) *APIKeyGroupPreferenceUpdateOne {
+	mutation := newAPIKeyGroupPreferenceMutation(c.config, OpUpdateOne, withAPIKeyGroupPreferenceID(id))
+	return &APIKeyGroupPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for APIKeyGroupPreference.
+func (c *APIKeyGroupPreferenceClient) Delete() *APIKeyGroupPreferenceDelete {
+	mutation := newAPIKeyGroupPreferenceMutation(c.config, OpDelete)
+	return &APIKeyGroupPreferenceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *APIKeyGroupPreferenceClient) DeleteOne(_m *APIKeyGroupPreference) *APIKeyGroupPreferenceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *APIKeyGroupPreferenceClient) DeleteOneID(id int64) *APIKeyGroupPreferenceDeleteOne {
+	builder := c.Delete().Where(apikeygrouppreference.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &APIKeyGroupPreferenceDeleteOne{builder}
+}
+
+// Query returns a query builder for APIKeyGroupPreference.
+func (c *APIKeyGroupPreferenceClient) Query() *APIKeyGroupPreferenceQuery {
+	return &APIKeyGroupPreferenceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAPIKeyGroupPreference},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a APIKeyGroupPreference entity by its id.
+func (c *APIKeyGroupPreferenceClient) Get(ctx context.Context, id int64) (*APIKeyGroupPreference, error) {
+	return c.Query().Where(apikeygrouppreference.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *APIKeyGroupPreferenceClient) GetX(ctx context.Context, id int64) *APIKeyGroupPreference {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryAPIKey queries the api_key edge of a APIKeyGroupPreference.
+func (c *APIKeyGroupPreferenceClient) QueryAPIKey(_m *APIKeyGroupPreference) *APIKeyQuery {
+	query := (&APIKeyClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikeygrouppreference.Table, apikeygrouppreference.FieldID, id),
+			sqlgraph.To(apikey.Table, apikey.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apikeygrouppreference.APIKeyTable, apikeygrouppreference.APIKeyColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryGroup queries the group edge of a APIKeyGroupPreference.
+func (c *APIKeyGroupPreferenceClient) QueryGroup(_m *APIKeyGroupPreference) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(apikeygrouppreference.Table, apikeygrouppreference.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, apikeygrouppreference.GroupTable, apikeygrouppreference.GroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *APIKeyGroupPreferenceClient) Hooks() []Hook {
+	return c.hooks.APIKeyGroupPreference
+}
+
+// Interceptors returns the client interceptors.
+func (c *APIKeyGroupPreferenceClient) Interceptors() []Interceptor {
+	return c.inters.APIKeyGroupPreference
+}
+
+func (c *APIKeyGroupPreferenceClient) mutate(ctx context.Context, m *APIKeyGroupPreferenceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&APIKeyGroupPreferenceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&APIKeyGroupPreferenceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&APIKeyGroupPreferenceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&APIKeyGroupPreferenceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown APIKeyGroupPreference mutation op: %q", m.Op())
 	}
 }
 
@@ -3188,6 +3395,54 @@ func (c *GroupClient) QueryUsageLogs(_m *Group) *UsageLogQuery {
 	return query
 }
 
+// QueryHealthState queries the health_state edge of a Group.
+func (c *GroupClient) QueryHealthState(_m *Group) *GroupHealthStateQuery {
+	query := (&GroupHealthStateClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(grouphealthstate.Table, grouphealthstate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.HealthStateTable, group.HealthStateColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryHealthEvents queries the health_events edge of a Group.
+func (c *GroupClient) QueryHealthEvents(_m *Group) *GroupHealthEventQuery {
+	query := (&GroupHealthEventClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(grouphealthevent.Table, grouphealthevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.HealthEventsTable, group.HealthEventsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryKeyPreferences queries the key_preferences edge of a Group.
+func (c *GroupClient) QueryKeyPreferences(_m *Group) *APIKeyGroupPreferenceQuery {
+	query := (&APIKeyGroupPreferenceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(apikeygrouppreference.Table, apikeygrouppreference.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.KeyPreferencesTable, group.KeyPreferencesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryAccounts queries the accounts edge of a Group.
 func (c *GroupClient) QueryAccounts(_m *Group) *AccountQuery {
 	query := (&AccountClient{config: c.config}).Query()
@@ -3276,6 +3531,304 @@ func (c *GroupClient) mutate(ctx context.Context, m *GroupMutation) (Value, erro
 		return (&GroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Group mutation op: %q", m.Op())
+	}
+}
+
+// GroupHealthEventClient is a client for the GroupHealthEvent schema.
+type GroupHealthEventClient struct {
+	config
+}
+
+// NewGroupHealthEventClient returns a client for the GroupHealthEvent from the given config.
+func NewGroupHealthEventClient(c config) *GroupHealthEventClient {
+	return &GroupHealthEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `grouphealthevent.Hooks(f(g(h())))`.
+func (c *GroupHealthEventClient) Use(hooks ...Hook) {
+	c.hooks.GroupHealthEvent = append(c.hooks.GroupHealthEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `grouphealthevent.Intercept(f(g(h())))`.
+func (c *GroupHealthEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GroupHealthEvent = append(c.inters.GroupHealthEvent, interceptors...)
+}
+
+// Create returns a builder for creating a GroupHealthEvent entity.
+func (c *GroupHealthEventClient) Create() *GroupHealthEventCreate {
+	mutation := newGroupHealthEventMutation(c.config, OpCreate)
+	return &GroupHealthEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GroupHealthEvent entities.
+func (c *GroupHealthEventClient) CreateBulk(builders ...*GroupHealthEventCreate) *GroupHealthEventCreateBulk {
+	return &GroupHealthEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GroupHealthEventClient) MapCreateBulk(slice any, setFunc func(*GroupHealthEventCreate, int)) *GroupHealthEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GroupHealthEventCreateBulk{err: fmt.Errorf("calling to GroupHealthEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GroupHealthEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GroupHealthEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GroupHealthEvent.
+func (c *GroupHealthEventClient) Update() *GroupHealthEventUpdate {
+	mutation := newGroupHealthEventMutation(c.config, OpUpdate)
+	return &GroupHealthEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GroupHealthEventClient) UpdateOne(_m *GroupHealthEvent) *GroupHealthEventUpdateOne {
+	mutation := newGroupHealthEventMutation(c.config, OpUpdateOne, withGroupHealthEvent(_m))
+	return &GroupHealthEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GroupHealthEventClient) UpdateOneID(id int64) *GroupHealthEventUpdateOne {
+	mutation := newGroupHealthEventMutation(c.config, OpUpdateOne, withGroupHealthEventID(id))
+	return &GroupHealthEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GroupHealthEvent.
+func (c *GroupHealthEventClient) Delete() *GroupHealthEventDelete {
+	mutation := newGroupHealthEventMutation(c.config, OpDelete)
+	return &GroupHealthEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GroupHealthEventClient) DeleteOne(_m *GroupHealthEvent) *GroupHealthEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GroupHealthEventClient) DeleteOneID(id int64) *GroupHealthEventDeleteOne {
+	builder := c.Delete().Where(grouphealthevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GroupHealthEventDeleteOne{builder}
+}
+
+// Query returns a query builder for GroupHealthEvent.
+func (c *GroupHealthEventClient) Query() *GroupHealthEventQuery {
+	return &GroupHealthEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGroupHealthEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GroupHealthEvent entity by its id.
+func (c *GroupHealthEventClient) Get(ctx context.Context, id int64) (*GroupHealthEvent, error) {
+	return c.Query().Where(grouphealthevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GroupHealthEventClient) GetX(ctx context.Context, id int64) *GroupHealthEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryGroup queries the group edge of a GroupHealthEvent.
+func (c *GroupHealthEventClient) QueryGroup(_m *GroupHealthEvent) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(grouphealthevent.Table, grouphealthevent.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, grouphealthevent.GroupTable, grouphealthevent.GroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *GroupHealthEventClient) Hooks() []Hook {
+	return c.hooks.GroupHealthEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *GroupHealthEventClient) Interceptors() []Interceptor {
+	return c.inters.GroupHealthEvent
+}
+
+func (c *GroupHealthEventClient) mutate(ctx context.Context, m *GroupHealthEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GroupHealthEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GroupHealthEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GroupHealthEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GroupHealthEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GroupHealthEvent mutation op: %q", m.Op())
+	}
+}
+
+// GroupHealthStateClient is a client for the GroupHealthState schema.
+type GroupHealthStateClient struct {
+	config
+}
+
+// NewGroupHealthStateClient returns a client for the GroupHealthState from the given config.
+func NewGroupHealthStateClient(c config) *GroupHealthStateClient {
+	return &GroupHealthStateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `grouphealthstate.Hooks(f(g(h())))`.
+func (c *GroupHealthStateClient) Use(hooks ...Hook) {
+	c.hooks.GroupHealthState = append(c.hooks.GroupHealthState, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `grouphealthstate.Intercept(f(g(h())))`.
+func (c *GroupHealthStateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.GroupHealthState = append(c.inters.GroupHealthState, interceptors...)
+}
+
+// Create returns a builder for creating a GroupHealthState entity.
+func (c *GroupHealthStateClient) Create() *GroupHealthStateCreate {
+	mutation := newGroupHealthStateMutation(c.config, OpCreate)
+	return &GroupHealthStateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of GroupHealthState entities.
+func (c *GroupHealthStateClient) CreateBulk(builders ...*GroupHealthStateCreate) *GroupHealthStateCreateBulk {
+	return &GroupHealthStateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *GroupHealthStateClient) MapCreateBulk(slice any, setFunc func(*GroupHealthStateCreate, int)) *GroupHealthStateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &GroupHealthStateCreateBulk{err: fmt.Errorf("calling to GroupHealthStateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*GroupHealthStateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &GroupHealthStateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for GroupHealthState.
+func (c *GroupHealthStateClient) Update() *GroupHealthStateUpdate {
+	mutation := newGroupHealthStateMutation(c.config, OpUpdate)
+	return &GroupHealthStateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *GroupHealthStateClient) UpdateOne(_m *GroupHealthState) *GroupHealthStateUpdateOne {
+	mutation := newGroupHealthStateMutation(c.config, OpUpdateOne, withGroupHealthState(_m))
+	return &GroupHealthStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *GroupHealthStateClient) UpdateOneID(id int64) *GroupHealthStateUpdateOne {
+	mutation := newGroupHealthStateMutation(c.config, OpUpdateOne, withGroupHealthStateID(id))
+	return &GroupHealthStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for GroupHealthState.
+func (c *GroupHealthStateClient) Delete() *GroupHealthStateDelete {
+	mutation := newGroupHealthStateMutation(c.config, OpDelete)
+	return &GroupHealthStateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *GroupHealthStateClient) DeleteOne(_m *GroupHealthState) *GroupHealthStateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *GroupHealthStateClient) DeleteOneID(id int64) *GroupHealthStateDeleteOne {
+	builder := c.Delete().Where(grouphealthstate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &GroupHealthStateDeleteOne{builder}
+}
+
+// Query returns a query builder for GroupHealthState.
+func (c *GroupHealthStateClient) Query() *GroupHealthStateQuery {
+	return &GroupHealthStateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeGroupHealthState},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a GroupHealthState entity by its id.
+func (c *GroupHealthStateClient) Get(ctx context.Context, id int64) (*GroupHealthState, error) {
+	return c.Query().Where(grouphealthstate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *GroupHealthStateClient) GetX(ctx context.Context, id int64) *GroupHealthState {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryGroup queries the group edge of a GroupHealthState.
+func (c *GroupHealthStateClient) QueryGroup(_m *GroupHealthState) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(grouphealthstate.Table, grouphealthstate.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, grouphealthstate.GroupTable, grouphealthstate.GroupColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *GroupHealthStateClient) Hooks() []Hook {
+	return c.hooks.GroupHealthState
+}
+
+// Interceptors returns the client interceptors.
+func (c *GroupHealthStateClient) Interceptors() []Interceptor {
+	return c.inters.GroupHealthState
+}
+
+func (c *GroupHealthStateClient) mutate(ctx context.Context, m *GroupHealthStateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&GroupHealthStateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&GroupHealthStateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&GroupHealthStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&GroupHealthStateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown GroupHealthState mutation op: %q", m.Op())
 	}
 }
 
@@ -6825,28 +7378,28 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
-		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
-		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
-		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserPlatformQuota,
-		UserSubscription []ent.Hook
+		APIKey, APIKeyGroupPreference, Account, AccountGroup, Announcement,
+		AnnouncementRead, AuthIdentity, AuthIdentityChannel, BatchImageEvent,
+		BatchImageItem, BatchImageJob, ChannelMonitor, ChannelMonitorDailyRollup,
+		ChannelMonitorHistory, ChannelMonitorRequestTemplate, CompositeModelRoute,
+		ErrorPassthroughRule, Group, GroupHealthEvent, GroupHealthState,
+		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
-		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
-		AuthIdentityChannel, BatchImageEvent, BatchImageItem, BatchImageJob,
-		ChannelMonitor, ChannelMonitorDailyRollup, ChannelMonitorHistory,
-		ChannelMonitorRequestTemplate, CompositeModelRoute, ErrorPassthroughRule,
-		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserPlatformQuota,
-		UserSubscription []ent.Interceptor
+		APIKey, APIKeyGroupPreference, Account, AccountGroup, Announcement,
+		AnnouncementRead, AuthIdentity, AuthIdentityChannel, BatchImageEvent,
+		BatchImageItem, BatchImageJob, ChannelMonitor, ChannelMonitorDailyRollup,
+		ChannelMonitorHistory, ChannelMonitorRequestTemplate, CompositeModelRoute,
+		ErrorPassthroughRule, Group, GroupHealthEvent, GroupHealthState,
+		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

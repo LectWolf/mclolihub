@@ -44,6 +44,15 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.String("route_mode").
+			MaxLen(20).
+			Default("fixed").
+			Comment("fixed/cheapest/fastest/custom"),
+		field.Float("max_rate_multiplier").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Comment("允许调用的最大生效倍率，NULL 表示不限制"),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
@@ -130,6 +139,7 @@ func (APIKey) Edges() []ent.Edge {
 			Field("group_id").
 			Unique(),
 		edge.To("usage_logs", UsageLog.Type),
+		edge.To("group_preferences", APIKeyGroupPreference.Type),
 	}
 }
 

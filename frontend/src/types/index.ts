@@ -556,6 +556,9 @@ export interface Group {
   reasoning_effort_mappings?: ReasoningEffortMapping[]
   is_exclusive: boolean
   status: 'active' | 'inactive'
+	probe_enabled: boolean
+	probe_model: string
+	probe_interval_seconds: number
   subscription_type: SubscriptionType
   daily_limit_usd: number | null
   weekly_limit_usd: number | null
@@ -706,6 +709,9 @@ export interface ApiKey {
   key: string
   name: string
   group_id: number | null
+	 route_mode: 'fixed' | 'cheapest' | 'fastest' | 'custom'
+  max_rate_multiplier: number | null
+	group_preferences?: Array<{ group_id: number; disabled: boolean; position: number }>
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
   ip_whitelist: string[]
   ip_blacklist: string[]
@@ -735,6 +741,10 @@ export interface ApiKey {
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
+	 route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'
+  max_rate_multiplier?: number | null
+	disabled_group_ids?: number[]
+	custom_group_ids?: number[]
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
   ip_blacklist?: string[]
@@ -748,6 +758,10 @@ export interface CreateApiKeyRequest {
 export interface UpdateApiKeyRequest {
   name?: string
   group_id?: number | null
+	 route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'
+  max_rate_multiplier?: number | null
+	disabled_group_ids?: number[]
+	custom_group_ids?: number[]
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]
   ip_blacklist?: string[]
@@ -1149,7 +1163,7 @@ export interface Account {
   scheduler_scores?: AccountSchedulerGroupScore[] | null
   priority: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
-  status: 'active' | 'inactive' | 'error'
+  status: 'active' | 'inactive' | 'error' | 'balance_insufficient'
   error_message: string | null
   last_used_at: string | null
   expires_at: number | null

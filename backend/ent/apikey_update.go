@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -117,6 +118,47 @@ func (_u *APIKeyUpdate) SetNillableGroupID(v *int64) *APIKeyUpdate {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdate) ClearGroupID() *APIKeyUpdate {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (_u *APIKeyUpdate) SetRouteMode(v string) *APIKeyUpdate {
+	_u.mutation.SetRouteMode(v)
+	return _u
+}
+
+// SetNillableRouteMode sets the "route_mode" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableRouteMode(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetRouteMode(*v)
+	}
+	return _u
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (_u *APIKeyUpdate) SetMaxRateMultiplier(v float64) *APIKeyUpdate {
+	_u.mutation.ResetMaxRateMultiplier()
+	_u.mutation.SetMaxRateMultiplier(v)
+	return _u
+}
+
+// SetNillableMaxRateMultiplier sets the "max_rate_multiplier" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableMaxRateMultiplier(v *float64) *APIKeyUpdate {
+	if v != nil {
+		_u.SetMaxRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddMaxRateMultiplier adds value to the "max_rate_multiplier" field.
+func (_u *APIKeyUpdate) AddMaxRateMultiplier(v float64) *APIKeyUpdate {
+	_u.mutation.AddMaxRateMultiplier(v)
+	return _u
+}
+
+// ClearMaxRateMultiplier clears the value of the "max_rate_multiplier" field.
+func (_u *APIKeyUpdate) ClearMaxRateMultiplier() *APIKeyUpdate {
+	_u.mutation.ClearMaxRateMultiplier()
 	return _u
 }
 
@@ -463,6 +505,21 @@ func (_u *APIKeyUpdate) AddUsageLogs(v ...*UsageLog) *APIKeyUpdate {
 	return _u.AddUsageLogIDs(ids...)
 }
 
+// AddGroupPreferenceIDs adds the "group_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (_u *APIKeyUpdate) AddGroupPreferenceIDs(ids ...int64) *APIKeyUpdate {
+	_u.mutation.AddGroupPreferenceIDs(ids...)
+	return _u
+}
+
+// AddGroupPreferences adds the "group_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *APIKeyUpdate) AddGroupPreferences(v ...*APIKeyGroupPreference) *APIKeyUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupPreferenceIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_u *APIKeyUpdate) Mutation() *APIKeyMutation {
 	return _u.mutation
@@ -499,6 +556,27 @@ func (_u *APIKeyUpdate) RemoveUsageLogs(v ...*UsageLog) *APIKeyUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageLogIDs(ids...)
+}
+
+// ClearGroupPreferences clears all "group_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *APIKeyUpdate) ClearGroupPreferences() *APIKeyUpdate {
+	_u.mutation.ClearGroupPreferences()
+	return _u
+}
+
+// RemoveGroupPreferenceIDs removes the "group_preferences" edge to APIKeyGroupPreference entities by IDs.
+func (_u *APIKeyUpdate) RemoveGroupPreferenceIDs(ids ...int64) *APIKeyUpdate {
+	_u.mutation.RemoveGroupPreferenceIDs(ids...)
+	return _u
+}
+
+// RemoveGroupPreferences removes "group_preferences" edges to APIKeyGroupPreference entities.
+func (_u *APIKeyUpdate) RemoveGroupPreferences(v ...*APIKeyGroupPreference) *APIKeyUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupPreferenceIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -555,6 +633,11 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RouteMode(); ok {
+		if err := apikey.RouteModeValidator(v); err != nil {
+			return &ValidationError{Name: "route_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -592,6 +675,18 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RouteMode(); ok {
+		_spec.SetField(apikey.FieldRouteMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.MaxRateMultiplier(); ok {
+		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedMaxRateMultiplier(); ok {
+		_spec.AddField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.MaxRateMultiplierCleared() {
+		_spec.ClearField(apikey.FieldMaxRateMultiplier, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -799,6 +894,51 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.GroupPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupPreferencesIDs(); len(nodes) > 0 && !_u.mutation.GroupPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupPreferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{apikey.Label}
@@ -904,6 +1044,47 @@ func (_u *APIKeyUpdateOne) SetNillableGroupID(v *int64) *APIKeyUpdateOne {
 // ClearGroupID clears the value of the "group_id" field.
 func (_u *APIKeyUpdateOne) ClearGroupID() *APIKeyUpdateOne {
 	_u.mutation.ClearGroupID()
+	return _u
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (_u *APIKeyUpdateOne) SetRouteMode(v string) *APIKeyUpdateOne {
+	_u.mutation.SetRouteMode(v)
+	return _u
+}
+
+// SetNillableRouteMode sets the "route_mode" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableRouteMode(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetRouteMode(*v)
+	}
+	return _u
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (_u *APIKeyUpdateOne) SetMaxRateMultiplier(v float64) *APIKeyUpdateOne {
+	_u.mutation.ResetMaxRateMultiplier()
+	_u.mutation.SetMaxRateMultiplier(v)
+	return _u
+}
+
+// SetNillableMaxRateMultiplier sets the "max_rate_multiplier" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableMaxRateMultiplier(v *float64) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetMaxRateMultiplier(*v)
+	}
+	return _u
+}
+
+// AddMaxRateMultiplier adds value to the "max_rate_multiplier" field.
+func (_u *APIKeyUpdateOne) AddMaxRateMultiplier(v float64) *APIKeyUpdateOne {
+	_u.mutation.AddMaxRateMultiplier(v)
+	return _u
+}
+
+// ClearMaxRateMultiplier clears the value of the "max_rate_multiplier" field.
+func (_u *APIKeyUpdateOne) ClearMaxRateMultiplier() *APIKeyUpdateOne {
+	_u.mutation.ClearMaxRateMultiplier()
 	return _u
 }
 
@@ -1250,6 +1431,21 @@ func (_u *APIKeyUpdateOne) AddUsageLogs(v ...*UsageLog) *APIKeyUpdateOne {
 	return _u.AddUsageLogIDs(ids...)
 }
 
+// AddGroupPreferenceIDs adds the "group_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (_u *APIKeyUpdateOne) AddGroupPreferenceIDs(ids ...int64) *APIKeyUpdateOne {
+	_u.mutation.AddGroupPreferenceIDs(ids...)
+	return _u
+}
+
+// AddGroupPreferences adds the "group_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *APIKeyUpdateOne) AddGroupPreferences(v ...*APIKeyGroupPreference) *APIKeyUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupPreferenceIDs(ids...)
+}
+
 // Mutation returns the APIKeyMutation object of the builder.
 func (_u *APIKeyUpdateOne) Mutation() *APIKeyMutation {
 	return _u.mutation
@@ -1286,6 +1482,27 @@ func (_u *APIKeyUpdateOne) RemoveUsageLogs(v ...*UsageLog) *APIKeyUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageLogIDs(ids...)
+}
+
+// ClearGroupPreferences clears all "group_preferences" edges to the APIKeyGroupPreference entity.
+func (_u *APIKeyUpdateOne) ClearGroupPreferences() *APIKeyUpdateOne {
+	_u.mutation.ClearGroupPreferences()
+	return _u
+}
+
+// RemoveGroupPreferenceIDs removes the "group_preferences" edge to APIKeyGroupPreference entities by IDs.
+func (_u *APIKeyUpdateOne) RemoveGroupPreferenceIDs(ids ...int64) *APIKeyUpdateOne {
+	_u.mutation.RemoveGroupPreferenceIDs(ids...)
+	return _u
+}
+
+// RemoveGroupPreferences removes "group_preferences" edges to APIKeyGroupPreference entities.
+func (_u *APIKeyUpdateOne) RemoveGroupPreferences(v ...*APIKeyGroupPreference) *APIKeyUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupPreferenceIDs(ids...)
 }
 
 // Where appends a list predicates to the APIKeyUpdate builder.
@@ -1355,6 +1572,11 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "APIKey.name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RouteMode(); ok {
+		if err := apikey.RouteModeValidator(v); err != nil {
+			return &ValidationError{Name: "route_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -1409,6 +1631,18 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RouteMode(); ok {
+		_spec.SetField(apikey.FieldRouteMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.MaxRateMultiplier(); ok {
+		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedMaxRateMultiplier(); ok {
+		_spec.AddField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.MaxRateMultiplierCleared() {
+		_spec.ClearField(apikey.FieldMaxRateMultiplier, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
@@ -1609,6 +1843,51 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupPreferencesIDs(); len(nodes) > 0 && !_u.mutation.GroupPreferencesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupPreferencesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   apikey.GroupPreferencesTable,
+			Columns: []string{apikey.GroupPreferencesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikeygrouppreference.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

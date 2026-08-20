@@ -10,6 +10,8 @@
       @refresh="manualReload"
     />
 
+    <GroupHealthPanel class="mx-4 mb-6 sm:mx-6" />
+
     <MonitorCardGrid
       :items="items"
       :window="currentWindow"
@@ -46,6 +48,7 @@ import MonitorHero, {
 } from '@/components/user/monitor/MonitorHero.vue'
 import MonitorCardGrid from '@/components/user/monitor/MonitorCardGrid.vue'
 import MonitorDetailDialog from '@/components/user/MonitorDetailDialog.vue'
+import GroupHealthPanel from '@/components/user/GroupHealthPanel.vue'
 import { DEFAULT_INTERVAL_SECONDS, STATUS_OPERATIONAL } from '@/constants/channelMonitor'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 

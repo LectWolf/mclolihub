@@ -3488,7 +3488,7 @@ const form = reactive({
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
-  status: 'active' as 'active' | 'inactive' | 'error',
+  status: 'active' as 'active' | 'inactive' | 'error' | 'balance_insufficient',
   group_ids: [] as number[],
   expires_at: null as number | null
 })
@@ -3513,8 +3513,11 @@ const statusOptions = computed(() => {
     { value: 'inactive', label: t('common.inactive') }
   ]
   if (form.status === 'error') {
-    options.push({ value: 'error', label: t('admin.accounts.status.error') })
-  }
+		options.push({ value: 'error', label: t('admin.accounts.status.error') })
+	}
+	if (form.status === 'balance_insufficient') {
+		options.push({ value: 'balance_insufficient', label: t('admin.accounts.status.balance_insufficient') })
+	}
   return options
 })
 
@@ -3596,7 +3599,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   form.load_factor = newAccount.load_factor ?? null
   form.priority = newAccount.priority
   form.rate_multiplier = newAccount.rate_multiplier ?? 1
-  form.status = (newAccount.status === 'active' || newAccount.status === 'inactive' || newAccount.status === 'error')
+  form.status = (newAccount.status === 'active' || newAccount.status === 'inactive' || newAccount.status === 'error' || newAccount.status === 'balance_insufficient')
     ? newAccount.status
     : 'active'
   form.group_ids = newAccount.group_ids || []
@@ -4489,6 +4492,10 @@ const handleClose = () => {
 const submitUpdateAccount = async (accountID: number, updatePayload: Record<string, unknown>) => {
   submitting.value = true
   try {
+    if (props.account?.status === 'balance_insufficient' && updatePayload.status === 'active') {
+      await adminAPI.accounts.restoreBalance(accountID)
+      delete updatePayload.status
+    }
     const updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))
     appStore.showSuccess(t('admin.accounts.accountUpdated'))
     emit('updated', updatedAccount)
@@ -4514,7 +4521,7 @@ const handleSubmit = async () => {
   if (!props.account) return
   const accountID = props.account.id
 
-  if (form.status !== 'active' && form.status !== 'inactive' && form.status !== 'error') {
+  if (form.status !== 'active' && form.status !== 'inactive' && form.status !== 'error' && form.status !== 'balance_insufficient') {
     appStore.showError(t('admin.accounts.pleaseSelectStatus'))
     return
   }

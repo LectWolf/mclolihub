@@ -67,8 +67,9 @@ func providePrivacyClientFactory() service.PrivacyClientFactory {
 
 func provideServiceBuildInfo(buildInfo handler.BuildInfo) service.BuildInfo {
 	return service.BuildInfo{
-		Version:   buildInfo.Version,
-		BuildType: buildInfo.BuildType,
+		Version:         buildInfo.Version,
+		UpstreamVersion: buildInfo.UpstreamVersion,
+		BuildType:       buildInfo.BuildType,
 	}
 }
 
@@ -108,6 +109,7 @@ func provideCleanup(
 	grokOAuth *service.GrokOAuthService,
 	openAIGateway *service.OpenAIGatewayService,
 	scheduledTestRunner *service.ScheduledTestRunnerService,
+	groupHealth *service.GroupHealthService,
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
@@ -315,6 +317,12 @@ func provideCleanup(
 				}
 				return nil
 			}},
+			{"GroupHealthService", func() error {
+				if groupHealth != nil {
+					groupHealth.Stop()
+				}
+				return nil
+			}},
 			{"BackupService", func() error {
 				if backupSvc != nil {
 					backupSvc.Stop()
@@ -328,12 +336,12 @@ func provideCleanup(
 				return nil
 			}},
 			{"ChannelMonitorV2Aggregator", func() error {
-			if channelMonitorV2Aggregator != nil {
-				channelMonitorV2Aggregator.Stop()
-			}
-			return nil
-		}},
-		{"ChannelMonitorRunner", func() error {
+				if channelMonitorV2Aggregator != nil {
+					channelMonitorV2Aggregator.Stop()
+				}
+				return nil
+			}},
+			{"ChannelMonitorRunner", func() error {
 				if channelMonitorRunner != nil {
 					channelMonitorRunner.Stop()
 				}

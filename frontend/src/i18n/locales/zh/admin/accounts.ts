@@ -374,6 +374,7 @@ export default {
         overloaded: '过载中',
         tempUnschedulable: '临时不可调度',
         quotaExceeded: '配额超限',
+        balance_insufficient: '余额不足',
         unschedulable: '不可调度',
         rateLimitedUntil: '限流中，当前不参与调度，预计 {time} 自动恢复',
         rateLimitedAutoResume: '{time} 自动恢复',

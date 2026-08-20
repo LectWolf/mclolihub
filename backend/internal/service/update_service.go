@@ -28,9 +28,11 @@ var (
 )
 
 const (
-	updateCacheKey = "update_check_cache"
-	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	updateCacheKey     = "update_check_cache"
+	updateCacheTTL     = 1200 // 20 minutes
+	upstreamGitHubRepo = "Wei-Shaw/sub2api"
+	customGitHubRepo   = "LectWolf/mclolihub"
+	customTagPrefix    = "custom-v"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -41,8 +43,8 @@ const (
 
 	// Rollback: expose at most the 3 most recent versions older than current
 	maxRollbackVersions = 3
-	// Fetch a few extra releases so filtering (current/newer/prerelease) still leaves enough candidates
-	rollbackFetchPageSize = 15
+	// Fetch enough entries to find custom tags even if this fork also carries upstream releases.
+	customReleaseFetchPageSize = 100
 )
 
 // UpdateCache defines cache operations for update service
@@ -61,31 +63,44 @@ type GitHubReleaseClient interface {
 
 // UpdateService handles software updates
 type UpdateService struct {
-	cache          UpdateCache
-	githubClient   GitHubReleaseClient
-	currentVersion string
-	buildType      string // "source" for manual builds, "release" for CI builds
+	cache                  UpdateCache
+	githubClient           GitHubReleaseClient
+	currentVersion         string
+	currentUpstreamVersion string
+	buildType              string // "source" for manual builds, "release" for CI builds
 }
 
 // NewUpdateService creates a new UpdateService
-func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, version, buildType string) *UpdateService {
+func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, version, upstreamVersion, buildType string) *UpdateService {
 	return &UpdateService{
-		cache:          cache,
-		githubClient:   githubClient,
-		currentVersion: version,
-		buildType:      buildType,
+		cache:                  cache,
+		githubClient:           githubClient,
+		currentVersion:         version,
+		currentUpstreamVersion: upstreamVersion,
+		buildType:              buildType,
 	}
 }
 
-// UpdateInfo contains update information
-type UpdateInfo struct {
+// UpdateChannelInfo describes one independent update stream.
+type UpdateChannelInfo struct {
 	CurrentVersion string       `json:"current_version"`
 	LatestVersion  string       `json:"latest_version"`
 	HasUpdate      bool         `json:"has_update"`
 	ReleaseInfo    *ReleaseInfo `json:"release_info,omitempty"`
-	Cached         bool         `json:"cached"`
 	Warning        string       `json:"warning,omitempty"`
-	BuildType      string       `json:"build_type"` // "source" or "release"
+}
+
+// UpdateInfo contains update information
+type UpdateInfo struct {
+	CurrentVersion string            `json:"current_version"`
+	LatestVersion  string            `json:"latest_version"`
+	HasUpdate      bool              `json:"has_update"`
+	ReleaseInfo    *ReleaseInfo      `json:"release_info,omitempty"`
+	Cached         bool              `json:"cached"`
+	Warning        string            `json:"warning,omitempty"`
+	BuildType      string            `json:"build_type"` // "source" or "release"
+	Upstream       UpdateChannelInfo `json:"upstream"`
+	Custom         UpdateChannelInfo `json:"custom"`
 }
 
 // ReleaseInfo contains GitHub release details
@@ -138,22 +153,38 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 		}
 	}
 
-	// Fetch from GitHub
-	info, err := s.fetchLatestRelease(ctx)
-	if err != nil {
-		// Return cached on error
-		if cached, cacheErr := s.getFromCache(ctx); cacheErr == nil && cached != nil {
-			cached.Warning = "Using cached data: " + err.Error()
-			return cached, nil
-		}
-		return &UpdateInfo{
-			CurrentVersion: s.currentVersion,
-			LatestVersion:  s.currentVersion,
-			HasUpdate:      false,
-			Warning:        err.Error(),
-			BuildType:      s.buildType,
-		}, nil
+	info := s.emptyUpdateInfo()
+	cached, _ := s.getFromCache(ctx)
+
+	custom, customErr := s.fetchLatestCustomRelease(ctx)
+	if customErr == nil {
+		info.Custom = *custom
+	} else if cached != nil {
+		info.Custom = cached.Custom
+		info.Custom.Warning = customErr.Error()
+	} else {
+		info.Custom.Warning = customErr.Error()
 	}
+
+	upstream, upstreamErr := s.fetchLatestUpstreamRelease(ctx)
+	if upstreamErr == nil {
+		info.Upstream = *upstream
+	} else if cached != nil {
+		info.Upstream = cached.Upstream
+		info.Upstream.Warning = upstreamErr.Error()
+	} else {
+		info.Upstream.Warning = upstreamErr.Error()
+	}
+
+	info.syncCustomCompatibilityFields()
+	warnings := make([]string, 0, 2)
+	if customErr != nil {
+		warnings = append(warnings, "custom: "+customErr.Error())
+	}
+	if upstreamErr != nil {
+		warnings = append(warnings, "upstream: "+upstreamErr.Error())
+	}
+	info.Warning = strings.Join(warnings, "; ")
 
 	// Cache result
 	s.saveToCache(ctx, info)
@@ -172,7 +203,10 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 		return ErrNoUpdateAvailable
 	}
 
-	return s.applyReleaseAssets(ctx, info.ReleaseInfo.Assets)
+	if info.Custom.ReleaseInfo == nil {
+		return fmt.Errorf("custom release information is unavailable")
+	}
+	return s.applyReleaseAssets(ctx, info.Custom.ReleaseInfo.Assets)
 }
 
 // applyReleaseAssets downloads the platform archive from the given release assets,
@@ -314,8 +348,9 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 
 	versions := make([]RollbackVersion, 0, len(releases))
 	for _, r := range releases {
+		version, _ := parseCustomTag(r.TagName)
 		versions = append(versions, RollbackVersion{
-			Version:     strings.TrimPrefix(r.TagName, "v"),
+			Version:     version,
 			PublishedAt: r.PublishedAt,
 			HTMLURL:     r.HTMLURL,
 		})
@@ -327,7 +362,7 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 // The target must be one of the versions returned by ListRollbackVersions;
 // anything else (including the current version) is rejected.
 func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) error {
-	target := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	target := normalizeCustomVersion(strings.TrimSpace(version))
 	if target == "" {
 		return ErrRollbackVersionNotAllowed
 	}
@@ -339,7 +374,8 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 
 	var match *GitHubRelease
 	for _, r := range releases {
-		if strings.TrimPrefix(r.TagName, "v") == target {
+		candidateVersion, _ := parseCustomTag(r.TagName)
+		if candidateVersion == target {
 			match = r
 			break
 		}
@@ -363,7 +399,7 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 // fetchRollbackCandidates fetches recent releases and keeps the newest
 // maxRollbackVersions entries strictly older than the current version.
 func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubRelease, error) {
-	releases, err := s.githubClient.FetchRecentReleases(ctx, githubRepo, rollbackFetchPageSize)
+	releases, err := s.githubClient.FetchRecentReleases(ctx, customGitHubRepo, customReleaseFetchPageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -374,12 +410,12 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 		if r == nil || r.Draft || r.Prerelease {
 			continue
 		}
-		v := strings.TrimPrefix(r.TagName, "v")
-		if v == "" || seen[v] {
+		v, ok := parseCustomTag(r.TagName)
+		if !ok || seen[v] {
 			continue
 		}
 		// Only versions strictly older than current (also excludes current itself)
-		if compareVersions(v, s.currentVersion) >= 0 {
+		if compareCustomVersions(v, s.currentVersion) >= 0 {
 			continue
 		}
 		seen[v] = true
@@ -387,9 +423,11 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
-		return compareVersions(
-			strings.TrimPrefix(candidates[i].TagName, "v"),
-			strings.TrimPrefix(candidates[j].TagName, "v"),
+		left, _ := parseCustomTag(candidates[i].TagName)
+		right, _ := parseCustomTag(candidates[j].TagName)
+		return compareCustomVersions(
+			left,
+			right,
 		) > 0
 	})
 
@@ -399,13 +437,50 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 	return candidates, nil
 }
 
-func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, error) {
-	release, err := s.githubClient.FetchLatestRelease(ctx, githubRepo)
+func (s *UpdateService) fetchLatestUpstreamRelease(ctx context.Context) (*UpdateChannelInfo, error) {
+	release, err := s.githubClient.FetchLatestRelease(ctx, upstreamGitHubRepo)
 	if err != nil {
 		return nil, err
 	}
 
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
+	return s.buildChannelInfo(release, s.currentUpstreamVersion, latestVersion, compareUpstreamVersions), nil
+}
+
+func (s *UpdateService) fetchLatestCustomRelease(ctx context.Context) (*UpdateChannelInfo, error) {
+	releases, err := s.githubClient.FetchRecentReleases(ctx, customGitHubRepo, customReleaseFetchPageSize)
+	if err != nil {
+		return nil, err
+	}
+
+	var latest *GitHubRelease
+	latestVersion := ""
+	for _, release := range releases {
+		if release == nil || release.Draft || release.Prerelease {
+			continue
+		}
+		version, ok := parseCustomTag(release.TagName)
+		if !ok {
+			continue
+		}
+		if latest == nil || compareCustomVersions(latestVersion, version) < 0 {
+			latest = release
+			latestVersion = version
+		}
+	}
+	if latest == nil {
+		return nil, fmt.Errorf("no custom release found in %s", customGitHubRepo)
+	}
+
+	return s.buildChannelInfo(latest, s.currentVersion, latestVersion, compareCustomVersions), nil
+}
+
+func (s *UpdateService) buildChannelInfo(
+	release *GitHubRelease,
+	currentVersion string,
+	latestVersion string,
+	compare func(string, string) int,
+) *UpdateChannelInfo {
 
 	assets := make([]Asset, len(release.Assets))
 	for i, a := range release.Assets {
@@ -416,10 +491,10 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 		}
 	}
 
-	return &UpdateInfo{
-		CurrentVersion: s.currentVersion,
+	return &UpdateChannelInfo{
+		CurrentVersion: currentVersion,
 		LatestVersion:  latestVersion,
-		HasUpdate:      compareVersions(s.currentVersion, latestVersion) < 0,
+		HasUpdate:      compare(currentVersion, latestVersion) < 0,
 		ReleaseInfo: &ReleaseInfo{
 			Name:        release.Name,
 			Body:        release.Body,
@@ -427,9 +502,7 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 			HTMLURL:     release.HTMLURL,
 			Assets:      assets,
 		},
-		Cached:    false,
-		BuildType: s.buildType,
-	}, nil
+	}
 }
 
 func (s *UpdateService) downloadFile(ctx context.Context, downloadURL, dest string) error {
@@ -600,9 +673,11 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 	}
 
 	var cached struct {
-		Latest      string       `json:"latest"`
-		ReleaseInfo *ReleaseInfo `json:"release_info"`
-		Timestamp   int64        `json:"timestamp"`
+		Latest      string            `json:"latest"`
+		ReleaseInfo *ReleaseInfo      `json:"release_info"`
+		Upstream    UpdateChannelInfo `json:"upstream"`
+		Custom      UpdateChannelInfo `json:"custom"`
+		Timestamp   int64             `json:"timestamp"`
 	}
 	if err := json.Unmarshal([]byte(data), &cached); err != nil {
 		return nil, err
@@ -612,37 +687,99 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 		return nil, fmt.Errorf("cache expired")
 	}
 
-	return &UpdateInfo{
-		CurrentVersion: s.currentVersion,
-		LatestVersion:  cached.Latest,
-		HasUpdate:      compareVersions(s.currentVersion, cached.Latest) < 0,
-		ReleaseInfo:    cached.ReleaseInfo,
-		Cached:         true,
-		BuildType:      s.buildType,
-	}, nil
+	info := s.emptyUpdateInfo()
+	info.Cached = true
+	if cached.Custom.LatestVersion != "" {
+		info.Custom = cached.Custom
+		info.Custom.CurrentVersion = s.currentVersion
+		info.Custom.HasUpdate = compareCustomVersions(s.currentVersion, info.Custom.LatestVersion) < 0
+	} else if cached.Latest != "" {
+		// Read cache entries written by versions before dual-channel updates.
+		info.Custom.LatestVersion = cached.Latest
+		info.Custom.ReleaseInfo = cached.ReleaseInfo
+		info.Custom.HasUpdate = compareCustomVersions(s.currentVersion, cached.Latest) < 0
+	}
+	if cached.Upstream.LatestVersion != "" {
+		info.Upstream = cached.Upstream
+		info.Upstream.CurrentVersion = s.currentUpstreamVersion
+		info.Upstream.HasUpdate = compareUpstreamVersions(s.currentUpstreamVersion, info.Upstream.LatestVersion) < 0
+	}
+	info.syncCustomCompatibilityFields()
+	return info, nil
 }
 
 func (s *UpdateService) saveToCache(ctx context.Context, info *UpdateInfo) {
 	cacheData := struct {
-		Latest      string       `json:"latest"`
-		ReleaseInfo *ReleaseInfo `json:"release_info"`
-		Timestamp   int64        `json:"timestamp"`
+		Upstream  UpdateChannelInfo `json:"upstream"`
+		Custom    UpdateChannelInfo `json:"custom"`
+		Timestamp int64             `json:"timestamp"`
 	}{
-		Latest:      info.LatestVersion,
-		ReleaseInfo: info.ReleaseInfo,
-		Timestamp:   time.Now().Unix(),
+		Upstream:  info.Upstream,
+		Custom:    info.Custom,
+		Timestamp: time.Now().Unix(),
 	}
 
 	data, _ := json.Marshal(cacheData)
 	_ = s.cache.SetUpdateInfo(ctx, string(data), time.Duration(updateCacheTTL)*time.Second)
 }
 
-// compareVersions compares two semantic versions
-func compareVersions(current, latest string) int {
-	currentParts := parseVersion(current)
-	latestParts := parseVersion(latest)
+func (s *UpdateService) emptyUpdateInfo() *UpdateInfo {
+	info := &UpdateInfo{
+		Cached:    false,
+		BuildType: s.buildType,
+		Upstream: UpdateChannelInfo{
+			CurrentVersion: s.currentUpstreamVersion,
+			LatestVersion:  s.currentUpstreamVersion,
+		},
+		Custom: UpdateChannelInfo{
+			CurrentVersion: s.currentVersion,
+			LatestVersion:  s.currentVersion,
+		},
+	}
+	info.syncCustomCompatibilityFields()
+	return info
+}
 
-	for i := 0; i < 3; i++ {
+func (info *UpdateInfo) syncCustomCompatibilityFields() {
+	info.CurrentVersion = info.Custom.CurrentVersion
+	info.LatestVersion = info.Custom.LatestVersion
+	info.HasUpdate = info.Custom.HasUpdate
+	info.ReleaseInfo = info.Custom.ReleaseInfo
+}
+
+func parseCustomTag(tag string) (string, bool) {
+	if !strings.HasPrefix(tag, customTagPrefix) {
+		return "", false
+	}
+	version := strings.TrimPrefix(tag, customTagPrefix)
+	if strings.Count(version, ".") != 3 {
+		return "", false
+	}
+	_, ok := parseNumericVersion(version, 4)
+	return version, ok
+}
+
+func normalizeCustomVersion(version string) string {
+	version = strings.TrimPrefix(version, customTagPrefix)
+	return strings.TrimPrefix(version, "v")
+}
+
+func compareUpstreamVersions(current, latest string) int {
+	return compareNumericVersions(current, latest, 3)
+}
+
+func compareCustomVersions(current, latest string) int {
+	return compareNumericVersions(normalizeCustomVersion(current), normalizeCustomVersion(latest), 4)
+}
+
+func compareNumericVersions(current, latest string, segmentCount int) int {
+	currentParts, currentOK := parseNumericVersion(current, segmentCount)
+	latestParts, latestOK := parseNumericVersion(latest, segmentCount)
+	if !currentOK || !latestOK {
+		return 0
+	}
+
+	for i := 0; i < segmentCount; i++ {
 		if currentParts[i] < latestParts[i] {
 			return -1
 		}
@@ -653,14 +790,19 @@ func compareVersions(current, latest string) int {
 	return 0
 }
 
-func parseVersion(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
+func parseNumericVersion(v string, segmentCount int) ([]int, bool) {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
 	parts := strings.Split(v, ".")
-	result := [3]int{0, 0, 0}
-	for i := 0; i < len(parts) && i < 3; i++ {
-		if parsed, err := strconv.Atoi(parts[i]); err == nil {
-			result[i] = parsed
-		}
+	if len(parts) < 3 || len(parts) > segmentCount {
+		return nil, false
 	}
-	return result
+	result := make([]int, segmentCount)
+	for i, part := range parts {
+		parsed, err := strconv.Atoi(part)
+		if err != nil || parsed < 0 {
+			return nil, false
+		}
+		result[i] = parsed
+	}
+	return result, true
 }

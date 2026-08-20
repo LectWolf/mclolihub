@@ -9,6 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUpdateAccountRequiresDedicatedBalanceRestore(t *testing.T) {
+	accountID := int64(901)
+	repo := &upstreamBillingProbeAdminRepo{upstreamBillingProbeAccountRepo: &upstreamBillingProbeAccountRepo{accounts: map[int64]*Account{
+		accountID: {ID: accountID, Status: StatusBalanceInsufficient},
+	}}}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	_, err := svc.UpdateAccount(context.Background(), accountID, &UpdateAccountInput{Status: StatusActive})
+	require.ErrorIs(t, err, ErrAccountBalanceRestoreRequired)
+}
+
 type upstreamBillingProbeAdminRepo struct {
 	*upstreamBillingProbeAccountRepo
 }

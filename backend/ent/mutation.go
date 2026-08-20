@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/ent/batchimageevent"
@@ -29,6 +30,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -65,6 +68,7 @@ const (
 
 	// Node types.
 	TypeAPIKey                        = "APIKey"
+	TypeAPIKeyGroupPreference         = "APIKeyGroupPreference"
 	TypeAccount                       = "Account"
 	TypeAccountGroup                  = "AccountGroup"
 	TypeAnnouncement                  = "Announcement"
@@ -81,6 +85,8 @@ const (
 	TypeCompositeModelRoute           = "CompositeModelRoute"
 	TypeErrorPassthroughRule          = "ErrorPassthroughRule"
 	TypeGroup                         = "Group"
+	TypeGroupHealthEvent              = "GroupHealthEvent"
+	TypeGroupHealthState              = "GroupHealthState"
 	TypeIdempotencyRecord             = "IdempotencyRecord"
 	TypeIdentityAdoptionDecision      = "IdentityAdoptionDecision"
 	TypePaymentAuditLog               = "PaymentAuditLog"
@@ -108,51 +114,57 @@ const (
 // APIKeyMutation represents an operation that mutates the APIKey nodes in the graph.
 type APIKeyMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int64
-	created_at         *time.Time
-	updated_at         *time.Time
-	deleted_at         *time.Time
-	key                *string
-	name               *string
-	status             *string
-	last_used_at       *time.Time
-	ip_whitelist       *[]string
-	appendip_whitelist []string
-	ip_blacklist       *[]string
-	appendip_blacklist []string
-	quota              *float64
-	addquota           *float64
-	quota_used         *float64
-	addquota_used      *float64
-	expires_at         *time.Time
-	rate_limit_5h      *float64
-	addrate_limit_5h   *float64
-	rate_limit_1d      *float64
-	addrate_limit_1d   *float64
-	rate_limit_7d      *float64
-	addrate_limit_7d   *float64
-	usage_5h           *float64
-	addusage_5h        *float64
-	usage_1d           *float64
-	addusage_1d        *float64
-	usage_7d           *float64
-	addusage_7d        *float64
-	window_5h_start    *time.Time
-	window_1d_start    *time.Time
-	window_7d_start    *time.Time
-	clearedFields      map[string]struct{}
-	user               *int64
-	cleareduser        bool
-	group              *int64
-	clearedgroup       bool
-	usage_logs         map[int64]struct{}
-	removedusage_logs  map[int64]struct{}
-	clearedusage_logs  bool
-	done               bool
-	oldValue           func(context.Context) (*APIKey, error)
-	predicates         []predicate.APIKey
+	op                       Op
+	typ                      string
+	id                       *int64
+	created_at               *time.Time
+	updated_at               *time.Time
+	deleted_at               *time.Time
+	key                      *string
+	name                     *string
+	route_mode               *string
+	max_rate_multiplier      *float64
+	addmax_rate_multiplier   *float64
+	status                   *string
+	last_used_at             *time.Time
+	ip_whitelist             *[]string
+	appendip_whitelist       []string
+	ip_blacklist             *[]string
+	appendip_blacklist       []string
+	quota                    *float64
+	addquota                 *float64
+	quota_used               *float64
+	addquota_used            *float64
+	expires_at               *time.Time
+	rate_limit_5h            *float64
+	addrate_limit_5h         *float64
+	rate_limit_1d            *float64
+	addrate_limit_1d         *float64
+	rate_limit_7d            *float64
+	addrate_limit_7d         *float64
+	usage_5h                 *float64
+	addusage_5h              *float64
+	usage_1d                 *float64
+	addusage_1d              *float64
+	usage_7d                 *float64
+	addusage_7d              *float64
+	window_5h_start          *time.Time
+	window_1d_start          *time.Time
+	window_7d_start          *time.Time
+	clearedFields            map[string]struct{}
+	user                     *int64
+	cleareduser              bool
+	group                    *int64
+	clearedgroup             bool
+	usage_logs               map[int64]struct{}
+	removedusage_logs        map[int64]struct{}
+	clearedusage_logs        bool
+	group_preferences        map[int64]struct{}
+	removedgroup_preferences map[int64]struct{}
+	clearedgroup_preferences bool
+	done                     bool
+	oldValue                 func(context.Context) (*APIKey, error)
+	predicates               []predicate.APIKey
 }
 
 var _ ent.Mutation = (*APIKeyMutation)(nil)
@@ -529,6 +541,112 @@ func (m *APIKeyMutation) GroupIDCleared() bool {
 func (m *APIKeyMutation) ResetGroupID() {
 	m.group = nil
 	delete(m.clearedFields, apikey.FieldGroupID)
+}
+
+// SetRouteMode sets the "route_mode" field.
+func (m *APIKeyMutation) SetRouteMode(s string) {
+	m.route_mode = &s
+}
+
+// RouteMode returns the value of the "route_mode" field in the mutation.
+func (m *APIKeyMutation) RouteMode() (r string, exists bool) {
+	v := m.route_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRouteMode returns the old "route_mode" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldRouteMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRouteMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRouteMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRouteMode: %w", err)
+	}
+	return oldValue.RouteMode, nil
+}
+
+// ResetRouteMode resets all changes to the "route_mode" field.
+func (m *APIKeyMutation) ResetRouteMode() {
+	m.route_mode = nil
+}
+
+// SetMaxRateMultiplier sets the "max_rate_multiplier" field.
+func (m *APIKeyMutation) SetMaxRateMultiplier(f float64) {
+	m.max_rate_multiplier = &f
+	m.addmax_rate_multiplier = nil
+}
+
+// MaxRateMultiplier returns the value of the "max_rate_multiplier" field in the mutation.
+func (m *APIKeyMutation) MaxRateMultiplier() (r float64, exists bool) {
+	v := m.max_rate_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxRateMultiplier returns the old "max_rate_multiplier" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldMaxRateMultiplier(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxRateMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxRateMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxRateMultiplier: %w", err)
+	}
+	return oldValue.MaxRateMultiplier, nil
+}
+
+// AddMaxRateMultiplier adds f to the "max_rate_multiplier" field.
+func (m *APIKeyMutation) AddMaxRateMultiplier(f float64) {
+	if m.addmax_rate_multiplier != nil {
+		*m.addmax_rate_multiplier += f
+	} else {
+		m.addmax_rate_multiplier = &f
+	}
+}
+
+// AddedMaxRateMultiplier returns the value that was added to the "max_rate_multiplier" field in this mutation.
+func (m *APIKeyMutation) AddedMaxRateMultiplier() (r float64, exists bool) {
+	v := m.addmax_rate_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearMaxRateMultiplier clears the value of the "max_rate_multiplier" field.
+func (m *APIKeyMutation) ClearMaxRateMultiplier() {
+	m.max_rate_multiplier = nil
+	m.addmax_rate_multiplier = nil
+	m.clearedFields[apikey.FieldMaxRateMultiplier] = struct{}{}
+}
+
+// MaxRateMultiplierCleared returns if the "max_rate_multiplier" field was cleared in this mutation.
+func (m *APIKeyMutation) MaxRateMultiplierCleared() bool {
+	_, ok := m.clearedFields[apikey.FieldMaxRateMultiplier]
+	return ok
+}
+
+// ResetMaxRateMultiplier resets all changes to the "max_rate_multiplier" field.
+func (m *APIKeyMutation) ResetMaxRateMultiplier() {
+	m.max_rate_multiplier = nil
+	m.addmax_rate_multiplier = nil
+	delete(m.clearedFields, apikey.FieldMaxRateMultiplier)
 }
 
 // SetStatus sets the "status" field.
@@ -1498,6 +1616,60 @@ func (m *APIKeyMutation) ResetUsageLogs() {
 	m.removedusage_logs = nil
 }
 
+// AddGroupPreferenceIDs adds the "group_preferences" edge to the APIKeyGroupPreference entity by ids.
+func (m *APIKeyMutation) AddGroupPreferenceIDs(ids ...int64) {
+	if m.group_preferences == nil {
+		m.group_preferences = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.group_preferences[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroupPreferences clears the "group_preferences" edge to the APIKeyGroupPreference entity.
+func (m *APIKeyMutation) ClearGroupPreferences() {
+	m.clearedgroup_preferences = true
+}
+
+// GroupPreferencesCleared reports if the "group_preferences" edge to the APIKeyGroupPreference entity was cleared.
+func (m *APIKeyMutation) GroupPreferencesCleared() bool {
+	return m.clearedgroup_preferences
+}
+
+// RemoveGroupPreferenceIDs removes the "group_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (m *APIKeyMutation) RemoveGroupPreferenceIDs(ids ...int64) {
+	if m.removedgroup_preferences == nil {
+		m.removedgroup_preferences = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.group_preferences, ids[i])
+		m.removedgroup_preferences[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroupPreferences returns the removed IDs of the "group_preferences" edge to the APIKeyGroupPreference entity.
+func (m *APIKeyMutation) RemovedGroupPreferencesIDs() (ids []int64) {
+	for id := range m.removedgroup_preferences {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupPreferencesIDs returns the "group_preferences" edge IDs in the mutation.
+func (m *APIKeyMutation) GroupPreferencesIDs() (ids []int64) {
+	for id := range m.group_preferences {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroupPreferences resets all changes to the "group_preferences" edge.
+func (m *APIKeyMutation) ResetGroupPreferences() {
+	m.group_preferences = nil
+	m.clearedgroup_preferences = false
+	m.removedgroup_preferences = nil
+}
+
 // Where appends a list predicates to the APIKeyMutation builder.
 func (m *APIKeyMutation) Where(ps ...predicate.APIKey) {
 	m.predicates = append(m.predicates, ps...)
@@ -1532,7 +1704,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1553,6 +1725,12 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.group != nil {
 		fields = append(fields, apikey.FieldGroupID)
+	}
+	if m.route_mode != nil {
+		fields = append(fields, apikey.FieldRouteMode)
+	}
+	if m.max_rate_multiplier != nil {
+		fields = append(fields, apikey.FieldMaxRateMultiplier)
 	}
 	if m.status != nil {
 		fields = append(fields, apikey.FieldStatus)
@@ -1624,6 +1802,10 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.Name()
 	case apikey.FieldGroupID:
 		return m.GroupID()
+	case apikey.FieldRouteMode:
+		return m.RouteMode()
+	case apikey.FieldMaxRateMultiplier:
+		return m.MaxRateMultiplier()
 	case apikey.FieldStatus:
 		return m.Status()
 	case apikey.FieldLastUsedAt:
@@ -1679,6 +1861,10 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldName(ctx)
 	case apikey.FieldGroupID:
 		return m.OldGroupID(ctx)
+	case apikey.FieldRouteMode:
+		return m.OldRouteMode(ctx)
+	case apikey.FieldMaxRateMultiplier:
+		return m.OldMaxRateMultiplier(ctx)
 	case apikey.FieldStatus:
 		return m.OldStatus(ctx)
 	case apikey.FieldLastUsedAt:
@@ -1768,6 +1954,20 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetGroupID(v)
+		return nil
+	case apikey.FieldRouteMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRouteMode(v)
+		return nil
+	case apikey.FieldMaxRateMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxRateMultiplier(v)
 		return nil
 	case apikey.FieldStatus:
 		v, ok := value.(string)
@@ -1889,6 +2089,9 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *APIKeyMutation) AddedFields() []string {
 	var fields []string
+	if m.addmax_rate_multiplier != nil {
+		fields = append(fields, apikey.FieldMaxRateMultiplier)
+	}
 	if m.addquota != nil {
 		fields = append(fields, apikey.FieldQuota)
 	}
@@ -1921,6 +2124,8 @@ func (m *APIKeyMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case apikey.FieldMaxRateMultiplier:
+		return m.AddedMaxRateMultiplier()
 	case apikey.FieldQuota:
 		return m.AddedQuota()
 	case apikey.FieldQuotaUsed:
@@ -1946,6 +2151,13 @@ func (m *APIKeyMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *APIKeyMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case apikey.FieldMaxRateMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxRateMultiplier(v)
+		return nil
 	case apikey.FieldQuota:
 		v, ok := value.(float64)
 		if !ok {
@@ -2016,6 +2228,9 @@ func (m *APIKeyMutation) ClearedFields() []string {
 	if m.FieldCleared(apikey.FieldGroupID) {
 		fields = append(fields, apikey.FieldGroupID)
 	}
+	if m.FieldCleared(apikey.FieldMaxRateMultiplier) {
+		fields = append(fields, apikey.FieldMaxRateMultiplier)
+	}
 	if m.FieldCleared(apikey.FieldLastUsedAt) {
 		fields = append(fields, apikey.FieldLastUsedAt)
 	}
@@ -2056,6 +2271,9 @@ func (m *APIKeyMutation) ClearField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ClearGroupID()
+		return nil
+	case apikey.FieldMaxRateMultiplier:
+		m.ClearMaxRateMultiplier()
 		return nil
 	case apikey.FieldLastUsedAt:
 		m.ClearLastUsedAt()
@@ -2106,6 +2324,12 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldGroupID:
 		m.ResetGroupID()
+		return nil
+	case apikey.FieldRouteMode:
+		m.ResetRouteMode()
+		return nil
+	case apikey.FieldMaxRateMultiplier:
+		m.ResetMaxRateMultiplier()
 		return nil
 	case apikey.FieldStatus:
 		m.ResetStatus()
@@ -2161,7 +2385,7 @@ func (m *APIKeyMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *APIKeyMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.user != nil {
 		edges = append(edges, apikey.EdgeUser)
 	}
@@ -2170,6 +2394,9 @@ func (m *APIKeyMutation) AddedEdges() []string {
 	}
 	if m.usage_logs != nil {
 		edges = append(edges, apikey.EdgeUsageLogs)
+	}
+	if m.group_preferences != nil {
+		edges = append(edges, apikey.EdgeGroupPreferences)
 	}
 	return edges
 }
@@ -2192,15 +2419,24 @@ func (m *APIKeyMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case apikey.EdgeGroupPreferences:
+		ids := make([]ent.Value, 0, len(m.group_preferences))
+		for id := range m.group_preferences {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *APIKeyMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedusage_logs != nil {
 		edges = append(edges, apikey.EdgeUsageLogs)
+	}
+	if m.removedgroup_preferences != nil {
+		edges = append(edges, apikey.EdgeGroupPreferences)
 	}
 	return edges
 }
@@ -2215,13 +2451,19 @@ func (m *APIKeyMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case apikey.EdgeGroupPreferences:
+		ids := make([]ent.Value, 0, len(m.removedgroup_preferences))
+		for id := range m.removedgroup_preferences {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *APIKeyMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.cleareduser {
 		edges = append(edges, apikey.EdgeUser)
 	}
@@ -2230,6 +2472,9 @@ func (m *APIKeyMutation) ClearedEdges() []string {
 	}
 	if m.clearedusage_logs {
 		edges = append(edges, apikey.EdgeUsageLogs)
+	}
+	if m.clearedgroup_preferences {
+		edges = append(edges, apikey.EdgeGroupPreferences)
 	}
 	return edges
 }
@@ -2244,6 +2489,8 @@ func (m *APIKeyMutation) EdgeCleared(name string) bool {
 		return m.clearedgroup
 	case apikey.EdgeUsageLogs:
 		return m.clearedusage_logs
+	case apikey.EdgeGroupPreferences:
+		return m.clearedgroup_preferences
 	}
 	return false
 }
@@ -2275,8 +2522,743 @@ func (m *APIKeyMutation) ResetEdge(name string) error {
 	case apikey.EdgeUsageLogs:
 		m.ResetUsageLogs()
 		return nil
+	case apikey.EdgeGroupPreferences:
+		m.ResetGroupPreferences()
+		return nil
 	}
 	return fmt.Errorf("unknown APIKey edge %s", name)
+}
+
+// APIKeyGroupPreferenceMutation represents an operation that mutates the APIKeyGroupPreference nodes in the graph.
+type APIKeyGroupPreferenceMutation struct {
+	config
+	op             Op
+	typ            string
+	id             *int64
+	created_at     *time.Time
+	updated_at     *time.Time
+	disabled       *bool
+	position       *int
+	addposition    *int
+	clearedFields  map[string]struct{}
+	api_key        *int64
+	clearedapi_key bool
+	group          *int64
+	clearedgroup   bool
+	done           bool
+	oldValue       func(context.Context) (*APIKeyGroupPreference, error)
+	predicates     []predicate.APIKeyGroupPreference
+}
+
+var _ ent.Mutation = (*APIKeyGroupPreferenceMutation)(nil)
+
+// apikeygrouppreferenceOption allows management of the mutation configuration using functional options.
+type apikeygrouppreferenceOption func(*APIKeyGroupPreferenceMutation)
+
+// newAPIKeyGroupPreferenceMutation creates new mutation for the APIKeyGroupPreference entity.
+func newAPIKeyGroupPreferenceMutation(c config, op Op, opts ...apikeygrouppreferenceOption) *APIKeyGroupPreferenceMutation {
+	m := &APIKeyGroupPreferenceMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAPIKeyGroupPreference,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAPIKeyGroupPreferenceID sets the ID field of the mutation.
+func withAPIKeyGroupPreferenceID(id int64) apikeygrouppreferenceOption {
+	return func(m *APIKeyGroupPreferenceMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *APIKeyGroupPreference
+		)
+		m.oldValue = func(ctx context.Context) (*APIKeyGroupPreference, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().APIKeyGroupPreference.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAPIKeyGroupPreference sets the old APIKeyGroupPreference of the mutation.
+func withAPIKeyGroupPreference(node *APIKeyGroupPreference) apikeygrouppreferenceOption {
+	return func(m *APIKeyGroupPreferenceMutation) {
+		m.oldValue = func(context.Context) (*APIKeyGroupPreference, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m APIKeyGroupPreferenceMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m APIKeyGroupPreferenceMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *APIKeyGroupPreferenceMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *APIKeyGroupPreferenceMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().APIKeyGroupPreference.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *APIKeyGroupPreferenceMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *APIKeyGroupPreferenceMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the APIKeyGroupPreference entity.
+// If the APIKeyGroupPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyGroupPreferenceMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *APIKeyGroupPreferenceMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *APIKeyGroupPreferenceMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *APIKeyGroupPreferenceMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the APIKeyGroupPreference entity.
+// If the APIKeyGroupPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyGroupPreferenceMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *APIKeyGroupPreferenceMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *APIKeyGroupPreferenceMutation) SetAPIKeyID(i int64) {
+	m.api_key = &i
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *APIKeyGroupPreferenceMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the APIKeyGroupPreference entity.
+// If the APIKeyGroupPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyGroupPreferenceMutation) OldAPIKeyID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *APIKeyGroupPreferenceMutation) ResetAPIKeyID() {
+	m.api_key = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *APIKeyGroupPreferenceMutation) SetGroupID(i int64) {
+	m.group = &i
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *APIKeyGroupPreferenceMutation) GroupID() (r int64, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the APIKeyGroupPreference entity.
+// If the APIKeyGroupPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyGroupPreferenceMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *APIKeyGroupPreferenceMutation) ResetGroupID() {
+	m.group = nil
+}
+
+// SetDisabled sets the "disabled" field.
+func (m *APIKeyGroupPreferenceMutation) SetDisabled(b bool) {
+	m.disabled = &b
+}
+
+// Disabled returns the value of the "disabled" field in the mutation.
+func (m *APIKeyGroupPreferenceMutation) Disabled() (r bool, exists bool) {
+	v := m.disabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabled returns the old "disabled" field's value of the APIKeyGroupPreference entity.
+// If the APIKeyGroupPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyGroupPreferenceMutation) OldDisabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabled: %w", err)
+	}
+	return oldValue.Disabled, nil
+}
+
+// ResetDisabled resets all changes to the "disabled" field.
+func (m *APIKeyGroupPreferenceMutation) ResetDisabled() {
+	m.disabled = nil
+}
+
+// SetPosition sets the "position" field.
+func (m *APIKeyGroupPreferenceMutation) SetPosition(i int) {
+	m.position = &i
+	m.addposition = nil
+}
+
+// Position returns the value of the "position" field in the mutation.
+func (m *APIKeyGroupPreferenceMutation) Position() (r int, exists bool) {
+	v := m.position
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPosition returns the old "position" field's value of the APIKeyGroupPreference entity.
+// If the APIKeyGroupPreference object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyGroupPreferenceMutation) OldPosition(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPosition is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPosition requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPosition: %w", err)
+	}
+	return oldValue.Position, nil
+}
+
+// AddPosition adds i to the "position" field.
+func (m *APIKeyGroupPreferenceMutation) AddPosition(i int) {
+	if m.addposition != nil {
+		*m.addposition += i
+	} else {
+		m.addposition = &i
+	}
+}
+
+// AddedPosition returns the value that was added to the "position" field in this mutation.
+func (m *APIKeyGroupPreferenceMutation) AddedPosition() (r int, exists bool) {
+	v := m.addposition
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPosition resets all changes to the "position" field.
+func (m *APIKeyGroupPreferenceMutation) ResetPosition() {
+	m.position = nil
+	m.addposition = nil
+}
+
+// ClearAPIKey clears the "api_key" edge to the APIKey entity.
+func (m *APIKeyGroupPreferenceMutation) ClearAPIKey() {
+	m.clearedapi_key = true
+	m.clearedFields[apikeygrouppreference.FieldAPIKeyID] = struct{}{}
+}
+
+// APIKeyCleared reports if the "api_key" edge to the APIKey entity was cleared.
+func (m *APIKeyGroupPreferenceMutation) APIKeyCleared() bool {
+	return m.clearedapi_key
+}
+
+// APIKeyIDs returns the "api_key" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// APIKeyID instead. It exists only for internal usage by the builders.
+func (m *APIKeyGroupPreferenceMutation) APIKeyIDs() (ids []int64) {
+	if id := m.api_key; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetAPIKey resets all changes to the "api_key" edge.
+func (m *APIKeyGroupPreferenceMutation) ResetAPIKey() {
+	m.api_key = nil
+	m.clearedapi_key = false
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (m *APIKeyGroupPreferenceMutation) ClearGroup() {
+	m.clearedgroup = true
+	m.clearedFields[apikeygrouppreference.FieldGroupID] = struct{}{}
+}
+
+// GroupCleared reports if the "group" edge to the Group entity was cleared.
+func (m *APIKeyGroupPreferenceMutation) GroupCleared() bool {
+	return m.clearedgroup
+}
+
+// GroupIDs returns the "group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GroupID instead. It exists only for internal usage by the builders.
+func (m *APIKeyGroupPreferenceMutation) GroupIDs() (ids []int64) {
+	if id := m.group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGroup resets all changes to the "group" edge.
+func (m *APIKeyGroupPreferenceMutation) ResetGroup() {
+	m.group = nil
+	m.clearedgroup = false
+}
+
+// Where appends a list predicates to the APIKeyGroupPreferenceMutation builder.
+func (m *APIKeyGroupPreferenceMutation) Where(ps ...predicate.APIKeyGroupPreference) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the APIKeyGroupPreferenceMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *APIKeyGroupPreferenceMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.APIKeyGroupPreference, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *APIKeyGroupPreferenceMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *APIKeyGroupPreferenceMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (APIKeyGroupPreference).
+func (m *APIKeyGroupPreferenceMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *APIKeyGroupPreferenceMutation) Fields() []string {
+	fields := make([]string, 0, 6)
+	if m.created_at != nil {
+		fields = append(fields, apikeygrouppreference.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, apikeygrouppreference.FieldUpdatedAt)
+	}
+	if m.api_key != nil {
+		fields = append(fields, apikeygrouppreference.FieldAPIKeyID)
+	}
+	if m.group != nil {
+		fields = append(fields, apikeygrouppreference.FieldGroupID)
+	}
+	if m.disabled != nil {
+		fields = append(fields, apikeygrouppreference.FieldDisabled)
+	}
+	if m.position != nil {
+		fields = append(fields, apikeygrouppreference.FieldPosition)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *APIKeyGroupPreferenceMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case apikeygrouppreference.FieldCreatedAt:
+		return m.CreatedAt()
+	case apikeygrouppreference.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case apikeygrouppreference.FieldAPIKeyID:
+		return m.APIKeyID()
+	case apikeygrouppreference.FieldGroupID:
+		return m.GroupID()
+	case apikeygrouppreference.FieldDisabled:
+		return m.Disabled()
+	case apikeygrouppreference.FieldPosition:
+		return m.Position()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *APIKeyGroupPreferenceMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case apikeygrouppreference.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case apikeygrouppreference.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case apikeygrouppreference.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case apikeygrouppreference.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case apikeygrouppreference.FieldDisabled:
+		return m.OldDisabled(ctx)
+	case apikeygrouppreference.FieldPosition:
+		return m.OldPosition(ctx)
+	}
+	return nil, fmt.Errorf("unknown APIKeyGroupPreference field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *APIKeyGroupPreferenceMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case apikeygrouppreference.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case apikeygrouppreference.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case apikeygrouppreference.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case apikeygrouppreference.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case apikeygrouppreference.FieldDisabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabled(v)
+		return nil
+	case apikeygrouppreference.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown APIKeyGroupPreference field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *APIKeyGroupPreferenceMutation) AddedFields() []string {
+	var fields []string
+	if m.addposition != nil {
+		fields = append(fields, apikeygrouppreference.FieldPosition)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *APIKeyGroupPreferenceMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case apikeygrouppreference.FieldPosition:
+		return m.AddedPosition()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *APIKeyGroupPreferenceMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case apikeygrouppreference.FieldPosition:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPosition(v)
+		return nil
+	}
+	return fmt.Errorf("unknown APIKeyGroupPreference numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *APIKeyGroupPreferenceMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *APIKeyGroupPreferenceMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *APIKeyGroupPreferenceMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown APIKeyGroupPreference nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *APIKeyGroupPreferenceMutation) ResetField(name string) error {
+	switch name {
+	case apikeygrouppreference.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case apikeygrouppreference.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case apikeygrouppreference.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case apikeygrouppreference.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case apikeygrouppreference.FieldDisabled:
+		m.ResetDisabled()
+		return nil
+	case apikeygrouppreference.FieldPosition:
+		m.ResetPosition()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKeyGroupPreference field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *APIKeyGroupPreferenceMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.api_key != nil {
+		edges = append(edges, apikeygrouppreference.EdgeAPIKey)
+	}
+	if m.group != nil {
+		edges = append(edges, apikeygrouppreference.EdgeGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *APIKeyGroupPreferenceMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case apikeygrouppreference.EdgeAPIKey:
+		if id := m.api_key; id != nil {
+			return []ent.Value{*id}
+		}
+	case apikeygrouppreference.EdgeGroup:
+		if id := m.group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *APIKeyGroupPreferenceMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *APIKeyGroupPreferenceMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *APIKeyGroupPreferenceMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedapi_key {
+		edges = append(edges, apikeygrouppreference.EdgeAPIKey)
+	}
+	if m.clearedgroup {
+		edges = append(edges, apikeygrouppreference.EdgeGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *APIKeyGroupPreferenceMutation) EdgeCleared(name string) bool {
+	switch name {
+	case apikeygrouppreference.EdgeAPIKey:
+		return m.clearedapi_key
+	case apikeygrouppreference.EdgeGroup:
+		return m.clearedgroup
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *APIKeyGroupPreferenceMutation) ClearEdge(name string) error {
+	switch name {
+	case apikeygrouppreference.EdgeAPIKey:
+		m.ClearAPIKey()
+		return nil
+	case apikeygrouppreference.EdgeGroup:
+		m.ClearGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKeyGroupPreference unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *APIKeyGroupPreferenceMutation) ResetEdge(name string) error {
+	switch name {
+	case apikeygrouppreference.EdgeAPIKey:
+		m.ResetAPIKey()
+		return nil
+	case apikeygrouppreference.EdgeGroup:
+		m.ResetGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown APIKeyGroupPreference edge %s", name)
 }
 
 // AccountMutation represents an operation that mutates the Account nodes in the graph.
@@ -22173,6 +23155,10 @@ type GroupMutation struct {
 	addprofit_min_margin                    *float64
 	profit_safety_buffer                    *float64
 	addprofit_safety_buffer                 *float64
+	probe_enabled                           *bool
+	probe_model                             *string
+	probe_interval_seconds                  *int
+	addprobe_interval_seconds               *int
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -22186,6 +23172,15 @@ type GroupMutation struct {
 	usage_logs                              map[int64]struct{}
 	removedusage_logs                       map[int64]struct{}
 	clearedusage_logs                       bool
+	health_state                            map[int64]struct{}
+	removedhealth_state                     map[int64]struct{}
+	clearedhealth_state                     bool
+	health_events                           map[int64]struct{}
+	removedhealth_events                    map[int64]struct{}
+	clearedhealth_events                    bool
+	key_preferences                         map[int64]struct{}
+	removedkey_preferences                  map[int64]struct{}
+	clearedkey_preferences                  bool
 	accounts                                map[int64]struct{}
 	removedaccounts                         map[int64]struct{}
 	clearedaccounts                         bool
@@ -25415,6 +26410,134 @@ func (m *GroupMutation) ResetProfitSafetyBuffer() {
 	m.addprofit_safety_buffer = nil
 }
 
+// SetProbeEnabled sets the "probe_enabled" field.
+func (m *GroupMutation) SetProbeEnabled(b bool) {
+	m.probe_enabled = &b
+}
+
+// ProbeEnabled returns the value of the "probe_enabled" field in the mutation.
+func (m *GroupMutation) ProbeEnabled() (r bool, exists bool) {
+	v := m.probe_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeEnabled returns the old "probe_enabled" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldProbeEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeEnabled: %w", err)
+	}
+	return oldValue.ProbeEnabled, nil
+}
+
+// ResetProbeEnabled resets all changes to the "probe_enabled" field.
+func (m *GroupMutation) ResetProbeEnabled() {
+	m.probe_enabled = nil
+}
+
+// SetProbeModel sets the "probe_model" field.
+func (m *GroupMutation) SetProbeModel(s string) {
+	m.probe_model = &s
+}
+
+// ProbeModel returns the value of the "probe_model" field in the mutation.
+func (m *GroupMutation) ProbeModel() (r string, exists bool) {
+	v := m.probe_model
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeModel returns the old "probe_model" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldProbeModel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeModel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeModel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeModel: %w", err)
+	}
+	return oldValue.ProbeModel, nil
+}
+
+// ResetProbeModel resets all changes to the "probe_model" field.
+func (m *GroupMutation) ResetProbeModel() {
+	m.probe_model = nil
+}
+
+// SetProbeIntervalSeconds sets the "probe_interval_seconds" field.
+func (m *GroupMutation) SetProbeIntervalSeconds(i int) {
+	m.probe_interval_seconds = &i
+	m.addprobe_interval_seconds = nil
+}
+
+// ProbeIntervalSeconds returns the value of the "probe_interval_seconds" field in the mutation.
+func (m *GroupMutation) ProbeIntervalSeconds() (r int, exists bool) {
+	v := m.probe_interval_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeIntervalSeconds returns the old "probe_interval_seconds" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldProbeIntervalSeconds(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeIntervalSeconds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeIntervalSeconds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeIntervalSeconds: %w", err)
+	}
+	return oldValue.ProbeIntervalSeconds, nil
+}
+
+// AddProbeIntervalSeconds adds i to the "probe_interval_seconds" field.
+func (m *GroupMutation) AddProbeIntervalSeconds(i int) {
+	if m.addprobe_interval_seconds != nil {
+		*m.addprobe_interval_seconds += i
+	} else {
+		m.addprobe_interval_seconds = &i
+	}
+}
+
+// AddedProbeIntervalSeconds returns the value that was added to the "probe_interval_seconds" field in this mutation.
+func (m *GroupMutation) AddedProbeIntervalSeconds() (r int, exists bool) {
+	v := m.addprobe_interval_seconds
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProbeIntervalSeconds resets all changes to the "probe_interval_seconds" field.
+func (m *GroupMutation) ResetProbeIntervalSeconds() {
+	m.probe_interval_seconds = nil
+	m.addprobe_interval_seconds = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -25631,6 +26754,168 @@ func (m *GroupMutation) ResetUsageLogs() {
 	m.removedusage_logs = nil
 }
 
+// AddHealthStateIDs adds the "health_state" edge to the GroupHealthState entity by ids.
+func (m *GroupMutation) AddHealthStateIDs(ids ...int64) {
+	if m.health_state == nil {
+		m.health_state = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.health_state[ids[i]] = struct{}{}
+	}
+}
+
+// ClearHealthState clears the "health_state" edge to the GroupHealthState entity.
+func (m *GroupMutation) ClearHealthState() {
+	m.clearedhealth_state = true
+}
+
+// HealthStateCleared reports if the "health_state" edge to the GroupHealthState entity was cleared.
+func (m *GroupMutation) HealthStateCleared() bool {
+	return m.clearedhealth_state
+}
+
+// RemoveHealthStateIDs removes the "health_state" edge to the GroupHealthState entity by IDs.
+func (m *GroupMutation) RemoveHealthStateIDs(ids ...int64) {
+	if m.removedhealth_state == nil {
+		m.removedhealth_state = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.health_state, ids[i])
+		m.removedhealth_state[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedHealthState returns the removed IDs of the "health_state" edge to the GroupHealthState entity.
+func (m *GroupMutation) RemovedHealthStateIDs() (ids []int64) {
+	for id := range m.removedhealth_state {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// HealthStateIDs returns the "health_state" edge IDs in the mutation.
+func (m *GroupMutation) HealthStateIDs() (ids []int64) {
+	for id := range m.health_state {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetHealthState resets all changes to the "health_state" edge.
+func (m *GroupMutation) ResetHealthState() {
+	m.health_state = nil
+	m.clearedhealth_state = false
+	m.removedhealth_state = nil
+}
+
+// AddHealthEventIDs adds the "health_events" edge to the GroupHealthEvent entity by ids.
+func (m *GroupMutation) AddHealthEventIDs(ids ...int64) {
+	if m.health_events == nil {
+		m.health_events = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.health_events[ids[i]] = struct{}{}
+	}
+}
+
+// ClearHealthEvents clears the "health_events" edge to the GroupHealthEvent entity.
+func (m *GroupMutation) ClearHealthEvents() {
+	m.clearedhealth_events = true
+}
+
+// HealthEventsCleared reports if the "health_events" edge to the GroupHealthEvent entity was cleared.
+func (m *GroupMutation) HealthEventsCleared() bool {
+	return m.clearedhealth_events
+}
+
+// RemoveHealthEventIDs removes the "health_events" edge to the GroupHealthEvent entity by IDs.
+func (m *GroupMutation) RemoveHealthEventIDs(ids ...int64) {
+	if m.removedhealth_events == nil {
+		m.removedhealth_events = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.health_events, ids[i])
+		m.removedhealth_events[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedHealthEvents returns the removed IDs of the "health_events" edge to the GroupHealthEvent entity.
+func (m *GroupMutation) RemovedHealthEventsIDs() (ids []int64) {
+	for id := range m.removedhealth_events {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// HealthEventsIDs returns the "health_events" edge IDs in the mutation.
+func (m *GroupMutation) HealthEventsIDs() (ids []int64) {
+	for id := range m.health_events {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetHealthEvents resets all changes to the "health_events" edge.
+func (m *GroupMutation) ResetHealthEvents() {
+	m.health_events = nil
+	m.clearedhealth_events = false
+	m.removedhealth_events = nil
+}
+
+// AddKeyPreferenceIDs adds the "key_preferences" edge to the APIKeyGroupPreference entity by ids.
+func (m *GroupMutation) AddKeyPreferenceIDs(ids ...int64) {
+	if m.key_preferences == nil {
+		m.key_preferences = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.key_preferences[ids[i]] = struct{}{}
+	}
+}
+
+// ClearKeyPreferences clears the "key_preferences" edge to the APIKeyGroupPreference entity.
+func (m *GroupMutation) ClearKeyPreferences() {
+	m.clearedkey_preferences = true
+}
+
+// KeyPreferencesCleared reports if the "key_preferences" edge to the APIKeyGroupPreference entity was cleared.
+func (m *GroupMutation) KeyPreferencesCleared() bool {
+	return m.clearedkey_preferences
+}
+
+// RemoveKeyPreferenceIDs removes the "key_preferences" edge to the APIKeyGroupPreference entity by IDs.
+func (m *GroupMutation) RemoveKeyPreferenceIDs(ids ...int64) {
+	if m.removedkey_preferences == nil {
+		m.removedkey_preferences = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.key_preferences, ids[i])
+		m.removedkey_preferences[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedKeyPreferences returns the removed IDs of the "key_preferences" edge to the APIKeyGroupPreference entity.
+func (m *GroupMutation) RemovedKeyPreferencesIDs() (ids []int64) {
+	for id := range m.removedkey_preferences {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// KeyPreferencesIDs returns the "key_preferences" edge IDs in the mutation.
+func (m *GroupMutation) KeyPreferencesIDs() (ids []int64) {
+	for id := range m.key_preferences {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetKeyPreferences resets all changes to the "key_preferences" edge.
+func (m *GroupMutation) ResetKeyPreferences() {
+	m.key_preferences = nil
+	m.clearedkey_preferences = false
+	m.removedkey_preferences = nil
+}
+
 // AddAccountIDs adds the "accounts" edge to the Account entity by ids.
 func (m *GroupMutation) AddAccountIDs(ids ...int64) {
 	if m.accounts == nil {
@@ -25773,7 +27058,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 62)
+	fields := make([]string, 0, 65)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -25960,6 +27245,15 @@ func (m *GroupMutation) Fields() []string {
 	if m.profit_safety_buffer != nil {
 		fields = append(fields, group.FieldProfitSafetyBuffer)
 	}
+	if m.probe_enabled != nil {
+		fields = append(fields, group.FieldProbeEnabled)
+	}
+	if m.probe_model != nil {
+		fields = append(fields, group.FieldProbeModel)
+	}
+	if m.probe_interval_seconds != nil {
+		fields = append(fields, group.FieldProbeIntervalSeconds)
+	}
 	return fields
 }
 
@@ -26092,6 +27386,12 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.ProfitMinMargin()
 	case group.FieldProfitSafetyBuffer:
 		return m.ProfitSafetyBuffer()
+	case group.FieldProbeEnabled:
+		return m.ProbeEnabled()
+	case group.FieldProbeModel:
+		return m.ProbeModel()
+	case group.FieldProbeIntervalSeconds:
+		return m.ProbeIntervalSeconds()
 	}
 	return nil, false
 }
@@ -26225,6 +27525,12 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldProfitMinMargin(ctx)
 	case group.FieldProfitSafetyBuffer:
 		return m.OldProfitSafetyBuffer(ctx)
+	case group.FieldProbeEnabled:
+		return m.OldProbeEnabled(ctx)
+	case group.FieldProbeModel:
+		return m.OldProbeModel(ctx)
+	case group.FieldProbeIntervalSeconds:
+		return m.OldProbeIntervalSeconds(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -26668,6 +27974,27 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProfitSafetyBuffer(v)
 		return nil
+	case group.FieldProbeEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeEnabled(v)
+		return nil
+	case group.FieldProbeModel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeModel(v)
+		return nil
+	case group.FieldProbeIntervalSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeIntervalSeconds(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
@@ -26757,6 +28084,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addprofit_safety_buffer != nil {
 		fields = append(fields, group.FieldProfitSafetyBuffer)
 	}
+	if m.addprobe_interval_seconds != nil {
+		fields = append(fields, group.FieldProbeIntervalSeconds)
+	}
 	return fields
 }
 
@@ -26819,6 +28149,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedProfitMinMargin()
 	case group.FieldProfitSafetyBuffer:
 		return m.AddedProfitSafetyBuffer()
+	case group.FieldProbeIntervalSeconds:
+		return m.AddedProbeIntervalSeconds()
 	}
 	return nil, false
 }
@@ -27016,6 +28348,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddProfitSafetyBuffer(v)
+		return nil
+	case group.FieldProbeIntervalSeconds:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeIntervalSeconds(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
@@ -27365,13 +28704,22 @@ func (m *GroupMutation) ResetField(name string) error {
 	case group.FieldProfitSafetyBuffer:
 		m.ResetProfitSafetyBuffer()
 		return nil
+	case group.FieldProbeEnabled:
+		m.ResetProbeEnabled()
+		return nil
+	case group.FieldProbeModel:
+		m.ResetProbeModel()
+		return nil
+	case group.FieldProbeIntervalSeconds:
+		m.ResetProbeIntervalSeconds()
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *GroupMutation) AddedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 9)
 	if m.api_keys != nil {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -27383,6 +28731,15 @@ func (m *GroupMutation) AddedEdges() []string {
 	}
 	if m.usage_logs != nil {
 		edges = append(edges, group.EdgeUsageLogs)
+	}
+	if m.health_state != nil {
+		edges = append(edges, group.EdgeHealthState)
+	}
+	if m.health_events != nil {
+		edges = append(edges, group.EdgeHealthEvents)
+	}
+	if m.key_preferences != nil {
+		edges = append(edges, group.EdgeKeyPreferences)
 	}
 	if m.accounts != nil {
 		edges = append(edges, group.EdgeAccounts)
@@ -27421,6 +28778,24 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeHealthState:
+		ids := make([]ent.Value, 0, len(m.health_state))
+		for id := range m.health_state {
+			ids = append(ids, id)
+		}
+		return ids
+	case group.EdgeHealthEvents:
+		ids := make([]ent.Value, 0, len(m.health_events))
+		for id := range m.health_events {
+			ids = append(ids, id)
+		}
+		return ids
+	case group.EdgeKeyPreferences:
+		ids := make([]ent.Value, 0, len(m.key_preferences))
+		for id := range m.key_preferences {
+			ids = append(ids, id)
+		}
+		return ids
 	case group.EdgeAccounts:
 		ids := make([]ent.Value, 0, len(m.accounts))
 		for id := range m.accounts {
@@ -27439,7 +28814,7 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *GroupMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 9)
 	if m.removedapi_keys != nil {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -27451,6 +28826,15 @@ func (m *GroupMutation) RemovedEdges() []string {
 	}
 	if m.removedusage_logs != nil {
 		edges = append(edges, group.EdgeUsageLogs)
+	}
+	if m.removedhealth_state != nil {
+		edges = append(edges, group.EdgeHealthState)
+	}
+	if m.removedhealth_events != nil {
+		edges = append(edges, group.EdgeHealthEvents)
+	}
+	if m.removedkey_preferences != nil {
+		edges = append(edges, group.EdgeKeyPreferences)
 	}
 	if m.removedaccounts != nil {
 		edges = append(edges, group.EdgeAccounts)
@@ -27489,6 +28873,24 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeHealthState:
+		ids := make([]ent.Value, 0, len(m.removedhealth_state))
+		for id := range m.removedhealth_state {
+			ids = append(ids, id)
+		}
+		return ids
+	case group.EdgeHealthEvents:
+		ids := make([]ent.Value, 0, len(m.removedhealth_events))
+		for id := range m.removedhealth_events {
+			ids = append(ids, id)
+		}
+		return ids
+	case group.EdgeKeyPreferences:
+		ids := make([]ent.Value, 0, len(m.removedkey_preferences))
+		for id := range m.removedkey_preferences {
+			ids = append(ids, id)
+		}
+		return ids
 	case group.EdgeAccounts:
 		ids := make([]ent.Value, 0, len(m.removedaccounts))
 		for id := range m.removedaccounts {
@@ -27507,7 +28909,7 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *GroupMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 6)
+	edges := make([]string, 0, 9)
 	if m.clearedapi_keys {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -27519,6 +28921,15 @@ func (m *GroupMutation) ClearedEdges() []string {
 	}
 	if m.clearedusage_logs {
 		edges = append(edges, group.EdgeUsageLogs)
+	}
+	if m.clearedhealth_state {
+		edges = append(edges, group.EdgeHealthState)
+	}
+	if m.clearedhealth_events {
+		edges = append(edges, group.EdgeHealthEvents)
+	}
+	if m.clearedkey_preferences {
+		edges = append(edges, group.EdgeKeyPreferences)
 	}
 	if m.clearedaccounts {
 		edges = append(edges, group.EdgeAccounts)
@@ -27541,6 +28952,12 @@ func (m *GroupMutation) EdgeCleared(name string) bool {
 		return m.clearedsubscriptions
 	case group.EdgeUsageLogs:
 		return m.clearedusage_logs
+	case group.EdgeHealthState:
+		return m.clearedhealth_state
+	case group.EdgeHealthEvents:
+		return m.clearedhealth_events
+	case group.EdgeKeyPreferences:
+		return m.clearedkey_preferences
 	case group.EdgeAccounts:
 		return m.clearedaccounts
 	case group.EdgeAllowedUsers:
@@ -27573,6 +28990,15 @@ func (m *GroupMutation) ResetEdge(name string) error {
 	case group.EdgeUsageLogs:
 		m.ResetUsageLogs()
 		return nil
+	case group.EdgeHealthState:
+		m.ResetHealthState()
+		return nil
+	case group.EdgeHealthEvents:
+		m.ResetHealthEvents()
+		return nil
+	case group.EdgeKeyPreferences:
+		m.ResetKeyPreferences()
+		return nil
 	case group.EdgeAccounts:
 		m.ResetAccounts()
 		return nil
@@ -27581,6 +29007,3081 @@ func (m *GroupMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Group edge %s", name)
+}
+
+// GroupHealthEventMutation represents an operation that mutates the GroupHealthEvent nodes in the graph.
+type GroupHealthEventMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int64
+	created_at       *time.Time
+	updated_at       *time.Time
+	account_id       *int64
+	addaccount_id    *int64
+	kind             *string
+	success          *bool
+	is_probe         *bool
+	semantic_started *bool
+	error_category   *string
+	ttft_ms          *int
+	addttft_ms       *int
+	total_ms         *int
+	addtotal_ms      *int
+	observed_at      *time.Time
+	error_message    *string
+	clearedFields    map[string]struct{}
+	group            *int64
+	clearedgroup     bool
+	done             bool
+	oldValue         func(context.Context) (*GroupHealthEvent, error)
+	predicates       []predicate.GroupHealthEvent
+}
+
+var _ ent.Mutation = (*GroupHealthEventMutation)(nil)
+
+// grouphealtheventOption allows management of the mutation configuration using functional options.
+type grouphealtheventOption func(*GroupHealthEventMutation)
+
+// newGroupHealthEventMutation creates new mutation for the GroupHealthEvent entity.
+func newGroupHealthEventMutation(c config, op Op, opts ...grouphealtheventOption) *GroupHealthEventMutation {
+	m := &GroupHealthEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGroupHealthEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGroupHealthEventID sets the ID field of the mutation.
+func withGroupHealthEventID(id int64) grouphealtheventOption {
+	return func(m *GroupHealthEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GroupHealthEvent
+		)
+		m.oldValue = func(ctx context.Context) (*GroupHealthEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GroupHealthEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGroupHealthEvent sets the old GroupHealthEvent of the mutation.
+func withGroupHealthEvent(node *GroupHealthEvent) grouphealtheventOption {
+	return func(m *GroupHealthEventMutation) {
+		m.oldValue = func(context.Context) (*GroupHealthEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GroupHealthEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GroupHealthEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GroupHealthEventMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GroupHealthEventMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GroupHealthEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GroupHealthEventMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GroupHealthEventMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GroupHealthEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GroupHealthEventMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GroupHealthEventMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GroupHealthEventMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *GroupHealthEventMutation) SetGroupID(i int64) {
+	m.group = &i
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *GroupHealthEventMutation) GroupID() (r int64, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *GroupHealthEventMutation) ResetGroupID() {
+	m.group = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *GroupHealthEventMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *GroupHealthEventMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldAccountID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *GroupHealthEventMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *GroupHealthEventMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (m *GroupHealthEventMutation) ClearAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+	m.clearedFields[grouphealthevent.FieldAccountID] = struct{}{}
+}
+
+// AccountIDCleared returns if the "account_id" field was cleared in this mutation.
+func (m *GroupHealthEventMutation) AccountIDCleared() bool {
+	_, ok := m.clearedFields[grouphealthevent.FieldAccountID]
+	return ok
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *GroupHealthEventMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+	delete(m.clearedFields, grouphealthevent.FieldAccountID)
+}
+
+// SetKind sets the "kind" field.
+func (m *GroupHealthEventMutation) SetKind(s string) {
+	m.kind = &s
+}
+
+// Kind returns the value of the "kind" field in the mutation.
+func (m *GroupHealthEventMutation) Kind() (r string, exists bool) {
+	v := m.kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldKind returns the old "kind" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldKind: %w", err)
+	}
+	return oldValue.Kind, nil
+}
+
+// ResetKind resets all changes to the "kind" field.
+func (m *GroupHealthEventMutation) ResetKind() {
+	m.kind = nil
+}
+
+// SetSuccess sets the "success" field.
+func (m *GroupHealthEventMutation) SetSuccess(b bool) {
+	m.success = &b
+}
+
+// Success returns the value of the "success" field in the mutation.
+func (m *GroupHealthEventMutation) Success() (r bool, exists bool) {
+	v := m.success
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSuccess returns the old "success" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldSuccess(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSuccess is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSuccess requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSuccess: %w", err)
+	}
+	return oldValue.Success, nil
+}
+
+// ResetSuccess resets all changes to the "success" field.
+func (m *GroupHealthEventMutation) ResetSuccess() {
+	m.success = nil
+}
+
+// SetIsProbe sets the "is_probe" field.
+func (m *GroupHealthEventMutation) SetIsProbe(b bool) {
+	m.is_probe = &b
+}
+
+// IsProbe returns the value of the "is_probe" field in the mutation.
+func (m *GroupHealthEventMutation) IsProbe() (r bool, exists bool) {
+	v := m.is_probe
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIsProbe returns the old "is_probe" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldIsProbe(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIsProbe is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIsProbe requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIsProbe: %w", err)
+	}
+	return oldValue.IsProbe, nil
+}
+
+// ResetIsProbe resets all changes to the "is_probe" field.
+func (m *GroupHealthEventMutation) ResetIsProbe() {
+	m.is_probe = nil
+}
+
+// SetSemanticStarted sets the "semantic_started" field.
+func (m *GroupHealthEventMutation) SetSemanticStarted(b bool) {
+	m.semantic_started = &b
+}
+
+// SemanticStarted returns the value of the "semantic_started" field in the mutation.
+func (m *GroupHealthEventMutation) SemanticStarted() (r bool, exists bool) {
+	v := m.semantic_started
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSemanticStarted returns the old "semantic_started" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldSemanticStarted(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSemanticStarted is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSemanticStarted requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSemanticStarted: %w", err)
+	}
+	return oldValue.SemanticStarted, nil
+}
+
+// ResetSemanticStarted resets all changes to the "semantic_started" field.
+func (m *GroupHealthEventMutation) ResetSemanticStarted() {
+	m.semantic_started = nil
+}
+
+// SetErrorCategory sets the "error_category" field.
+func (m *GroupHealthEventMutation) SetErrorCategory(s string) {
+	m.error_category = &s
+}
+
+// ErrorCategory returns the value of the "error_category" field in the mutation.
+func (m *GroupHealthEventMutation) ErrorCategory() (r string, exists bool) {
+	v := m.error_category
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorCategory returns the old "error_category" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldErrorCategory(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorCategory is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorCategory requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorCategory: %w", err)
+	}
+	return oldValue.ErrorCategory, nil
+}
+
+// ClearErrorCategory clears the value of the "error_category" field.
+func (m *GroupHealthEventMutation) ClearErrorCategory() {
+	m.error_category = nil
+	m.clearedFields[grouphealthevent.FieldErrorCategory] = struct{}{}
+}
+
+// ErrorCategoryCleared returns if the "error_category" field was cleared in this mutation.
+func (m *GroupHealthEventMutation) ErrorCategoryCleared() bool {
+	_, ok := m.clearedFields[grouphealthevent.FieldErrorCategory]
+	return ok
+}
+
+// ResetErrorCategory resets all changes to the "error_category" field.
+func (m *GroupHealthEventMutation) ResetErrorCategory() {
+	m.error_category = nil
+	delete(m.clearedFields, grouphealthevent.FieldErrorCategory)
+}
+
+// SetTtftMs sets the "ttft_ms" field.
+func (m *GroupHealthEventMutation) SetTtftMs(i int) {
+	m.ttft_ms = &i
+	m.addttft_ms = nil
+}
+
+// TtftMs returns the value of the "ttft_ms" field in the mutation.
+func (m *GroupHealthEventMutation) TtftMs() (r int, exists bool) {
+	v := m.ttft_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTtftMs returns the old "ttft_ms" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldTtftMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTtftMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTtftMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTtftMs: %w", err)
+	}
+	return oldValue.TtftMs, nil
+}
+
+// AddTtftMs adds i to the "ttft_ms" field.
+func (m *GroupHealthEventMutation) AddTtftMs(i int) {
+	if m.addttft_ms != nil {
+		*m.addttft_ms += i
+	} else {
+		m.addttft_ms = &i
+	}
+}
+
+// AddedTtftMs returns the value that was added to the "ttft_ms" field in this mutation.
+func (m *GroupHealthEventMutation) AddedTtftMs() (r int, exists bool) {
+	v := m.addttft_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTtftMs resets all changes to the "ttft_ms" field.
+func (m *GroupHealthEventMutation) ResetTtftMs() {
+	m.ttft_ms = nil
+	m.addttft_ms = nil
+}
+
+// SetTotalMs sets the "total_ms" field.
+func (m *GroupHealthEventMutation) SetTotalMs(i int) {
+	m.total_ms = &i
+	m.addtotal_ms = nil
+}
+
+// TotalMs returns the value of the "total_ms" field in the mutation.
+func (m *GroupHealthEventMutation) TotalMs() (r int, exists bool) {
+	v := m.total_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalMs returns the old "total_ms" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldTotalMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalMs: %w", err)
+	}
+	return oldValue.TotalMs, nil
+}
+
+// AddTotalMs adds i to the "total_ms" field.
+func (m *GroupHealthEventMutation) AddTotalMs(i int) {
+	if m.addtotal_ms != nil {
+		*m.addtotal_ms += i
+	} else {
+		m.addtotal_ms = &i
+	}
+}
+
+// AddedTotalMs returns the value that was added to the "total_ms" field in this mutation.
+func (m *GroupHealthEventMutation) AddedTotalMs() (r int, exists bool) {
+	v := m.addtotal_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalMs resets all changes to the "total_ms" field.
+func (m *GroupHealthEventMutation) ResetTotalMs() {
+	m.total_ms = nil
+	m.addtotal_ms = nil
+}
+
+// SetObservedAt sets the "observed_at" field.
+func (m *GroupHealthEventMutation) SetObservedAt(t time.Time) {
+	m.observed_at = &t
+}
+
+// ObservedAt returns the value of the "observed_at" field in the mutation.
+func (m *GroupHealthEventMutation) ObservedAt() (r time.Time, exists bool) {
+	v := m.observed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldObservedAt returns the old "observed_at" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldObservedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldObservedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldObservedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldObservedAt: %w", err)
+	}
+	return oldValue.ObservedAt, nil
+}
+
+// ResetObservedAt resets all changes to the "observed_at" field.
+func (m *GroupHealthEventMutation) ResetObservedAt() {
+	m.observed_at = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *GroupHealthEventMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *GroupHealthEventMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the GroupHealthEvent entity.
+// If the GroupHealthEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthEventMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *GroupHealthEventMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[grouphealthevent.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *GroupHealthEventMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[grouphealthevent.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *GroupHealthEventMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, grouphealthevent.FieldErrorMessage)
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (m *GroupHealthEventMutation) ClearGroup() {
+	m.clearedgroup = true
+	m.clearedFields[grouphealthevent.FieldGroupID] = struct{}{}
+}
+
+// GroupCleared reports if the "group" edge to the Group entity was cleared.
+func (m *GroupHealthEventMutation) GroupCleared() bool {
+	return m.clearedgroup
+}
+
+// GroupIDs returns the "group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GroupID instead. It exists only for internal usage by the builders.
+func (m *GroupHealthEventMutation) GroupIDs() (ids []int64) {
+	if id := m.group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGroup resets all changes to the "group" edge.
+func (m *GroupHealthEventMutation) ResetGroup() {
+	m.group = nil
+	m.clearedgroup = false
+}
+
+// Where appends a list predicates to the GroupHealthEventMutation builder.
+func (m *GroupHealthEventMutation) Where(ps ...predicate.GroupHealthEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GroupHealthEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GroupHealthEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GroupHealthEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GroupHealthEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GroupHealthEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GroupHealthEvent).
+func (m *GroupHealthEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GroupHealthEventMutation) Fields() []string {
+	fields := make([]string, 0, 13)
+	if m.created_at != nil {
+		fields = append(fields, grouphealthevent.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, grouphealthevent.FieldUpdatedAt)
+	}
+	if m.group != nil {
+		fields = append(fields, grouphealthevent.FieldGroupID)
+	}
+	if m.account_id != nil {
+		fields = append(fields, grouphealthevent.FieldAccountID)
+	}
+	if m.kind != nil {
+		fields = append(fields, grouphealthevent.FieldKind)
+	}
+	if m.success != nil {
+		fields = append(fields, grouphealthevent.FieldSuccess)
+	}
+	if m.is_probe != nil {
+		fields = append(fields, grouphealthevent.FieldIsProbe)
+	}
+	if m.semantic_started != nil {
+		fields = append(fields, grouphealthevent.FieldSemanticStarted)
+	}
+	if m.error_category != nil {
+		fields = append(fields, grouphealthevent.FieldErrorCategory)
+	}
+	if m.ttft_ms != nil {
+		fields = append(fields, grouphealthevent.FieldTtftMs)
+	}
+	if m.total_ms != nil {
+		fields = append(fields, grouphealthevent.FieldTotalMs)
+	}
+	if m.observed_at != nil {
+		fields = append(fields, grouphealthevent.FieldObservedAt)
+	}
+	if m.error_message != nil {
+		fields = append(fields, grouphealthevent.FieldErrorMessage)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GroupHealthEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case grouphealthevent.FieldCreatedAt:
+		return m.CreatedAt()
+	case grouphealthevent.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case grouphealthevent.FieldGroupID:
+		return m.GroupID()
+	case grouphealthevent.FieldAccountID:
+		return m.AccountID()
+	case grouphealthevent.FieldKind:
+		return m.Kind()
+	case grouphealthevent.FieldSuccess:
+		return m.Success()
+	case grouphealthevent.FieldIsProbe:
+		return m.IsProbe()
+	case grouphealthevent.FieldSemanticStarted:
+		return m.SemanticStarted()
+	case grouphealthevent.FieldErrorCategory:
+		return m.ErrorCategory()
+	case grouphealthevent.FieldTtftMs:
+		return m.TtftMs()
+	case grouphealthevent.FieldTotalMs:
+		return m.TotalMs()
+	case grouphealthevent.FieldObservedAt:
+		return m.ObservedAt()
+	case grouphealthevent.FieldErrorMessage:
+		return m.ErrorMessage()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GroupHealthEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case grouphealthevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case grouphealthevent.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case grouphealthevent.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case grouphealthevent.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case grouphealthevent.FieldKind:
+		return m.OldKind(ctx)
+	case grouphealthevent.FieldSuccess:
+		return m.OldSuccess(ctx)
+	case grouphealthevent.FieldIsProbe:
+		return m.OldIsProbe(ctx)
+	case grouphealthevent.FieldSemanticStarted:
+		return m.OldSemanticStarted(ctx)
+	case grouphealthevent.FieldErrorCategory:
+		return m.OldErrorCategory(ctx)
+	case grouphealthevent.FieldTtftMs:
+		return m.OldTtftMs(ctx)
+	case grouphealthevent.FieldTotalMs:
+		return m.OldTotalMs(ctx)
+	case grouphealthevent.FieldObservedAt:
+		return m.OldObservedAt(ctx)
+	case grouphealthevent.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	}
+	return nil, fmt.Errorf("unknown GroupHealthEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupHealthEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case grouphealthevent.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case grouphealthevent.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case grouphealthevent.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case grouphealthevent.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case grouphealthevent.FieldKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetKind(v)
+		return nil
+	case grouphealthevent.FieldSuccess:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSuccess(v)
+		return nil
+	case grouphealthevent.FieldIsProbe:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIsProbe(v)
+		return nil
+	case grouphealthevent.FieldSemanticStarted:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSemanticStarted(v)
+		return nil
+	case grouphealthevent.FieldErrorCategory:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorCategory(v)
+		return nil
+	case grouphealthevent.FieldTtftMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTtftMs(v)
+		return nil
+	case grouphealthevent.FieldTotalMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalMs(v)
+		return nil
+	case grouphealthevent.FieldObservedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetObservedAt(v)
+		return nil
+	case grouphealthevent.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GroupHealthEventMutation) AddedFields() []string {
+	var fields []string
+	if m.addaccount_id != nil {
+		fields = append(fields, grouphealthevent.FieldAccountID)
+	}
+	if m.addttft_ms != nil {
+		fields = append(fields, grouphealthevent.FieldTtftMs)
+	}
+	if m.addtotal_ms != nil {
+		fields = append(fields, grouphealthevent.FieldTotalMs)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GroupHealthEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case grouphealthevent.FieldAccountID:
+		return m.AddedAccountID()
+	case grouphealthevent.FieldTtftMs:
+		return m.AddedTtftMs()
+	case grouphealthevent.FieldTotalMs:
+		return m.AddedTotalMs()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupHealthEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case grouphealthevent.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case grouphealthevent.FieldTtftMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTtftMs(v)
+		return nil
+	case grouphealthevent.FieldTotalMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GroupHealthEventMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(grouphealthevent.FieldAccountID) {
+		fields = append(fields, grouphealthevent.FieldAccountID)
+	}
+	if m.FieldCleared(grouphealthevent.FieldErrorCategory) {
+		fields = append(fields, grouphealthevent.FieldErrorCategory)
+	}
+	if m.FieldCleared(grouphealthevent.FieldErrorMessage) {
+		fields = append(fields, grouphealthevent.FieldErrorMessage)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GroupHealthEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GroupHealthEventMutation) ClearField(name string) error {
+	switch name {
+	case grouphealthevent.FieldAccountID:
+		m.ClearAccountID()
+		return nil
+	case grouphealthevent.FieldErrorCategory:
+		m.ClearErrorCategory()
+		return nil
+	case grouphealthevent.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GroupHealthEventMutation) ResetField(name string) error {
+	switch name {
+	case grouphealthevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case grouphealthevent.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case grouphealthevent.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case grouphealthevent.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case grouphealthevent.FieldKind:
+		m.ResetKind()
+		return nil
+	case grouphealthevent.FieldSuccess:
+		m.ResetSuccess()
+		return nil
+	case grouphealthevent.FieldIsProbe:
+		m.ResetIsProbe()
+		return nil
+	case grouphealthevent.FieldSemanticStarted:
+		m.ResetSemanticStarted()
+		return nil
+	case grouphealthevent.FieldErrorCategory:
+		m.ResetErrorCategory()
+		return nil
+	case grouphealthevent.FieldTtftMs:
+		m.ResetTtftMs()
+		return nil
+	case grouphealthevent.FieldTotalMs:
+		m.ResetTotalMs()
+		return nil
+	case grouphealthevent.FieldObservedAt:
+		m.ResetObservedAt()
+		return nil
+	case grouphealthevent.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GroupHealthEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.group != nil {
+		edges = append(edges, grouphealthevent.EdgeGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GroupHealthEventMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case grouphealthevent.EdgeGroup:
+		if id := m.group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GroupHealthEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GroupHealthEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GroupHealthEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedgroup {
+		edges = append(edges, grouphealthevent.EdgeGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GroupHealthEventMutation) EdgeCleared(name string) bool {
+	switch name {
+	case grouphealthevent.EdgeGroup:
+		return m.clearedgroup
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GroupHealthEventMutation) ClearEdge(name string) error {
+	switch name {
+	case grouphealthevent.EdgeGroup:
+		m.ClearGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GroupHealthEventMutation) ResetEdge(name string) error {
+	switch name {
+	case grouphealthevent.EdgeGroup:
+		m.ResetGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthEvent edge %s", name)
+}
+
+// GroupHealthStateMutation represents an operation that mutates the GroupHealthState nodes in the graph.
+type GroupHealthStateMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	created_at               *time.Time
+	updated_at               *time.Time
+	status                   *string
+	reason                   *string
+	last_probe_at            *time.Time
+	last_success_at          *time.Time
+	next_probe_at            *time.Time
+	failure_count            *int
+	addfailure_count         *int
+	probe_ttft_ms            *int
+	addprobe_ttft_ms         *int
+	probe_availability_6h    *float64
+	addprobe_availability_6h *float64
+	probe_ttft_avg_ms        *int
+	addprobe_ttft_avg_ms     *int
+	probe_ttft_p95_ms        *int
+	addprobe_ttft_p95_ms     *int
+	probe_samples            *int
+	addprobe_samples         *int
+	real_ttft_p50_ms         *int
+	addreal_ttft_p50_ms      *int
+	real_ttft_avg_ms         *int
+	addreal_ttft_avg_ms      *int
+	real_ttft_p95_ms         *int
+	addreal_ttft_p95_ms      *int
+	real_ttft_samples        *int
+	addreal_ttft_samples     *int
+	real_availability_6h     *float64
+	addreal_availability_6h  *float64
+	real_total_avg_ms        *int
+	addreal_total_avg_ms     *int
+	clearedFields            map[string]struct{}
+	group                    *int64
+	clearedgroup             bool
+	done                     bool
+	oldValue                 func(context.Context) (*GroupHealthState, error)
+	predicates               []predicate.GroupHealthState
+}
+
+var _ ent.Mutation = (*GroupHealthStateMutation)(nil)
+
+// grouphealthstateOption allows management of the mutation configuration using functional options.
+type grouphealthstateOption func(*GroupHealthStateMutation)
+
+// newGroupHealthStateMutation creates new mutation for the GroupHealthState entity.
+func newGroupHealthStateMutation(c config, op Op, opts ...grouphealthstateOption) *GroupHealthStateMutation {
+	m := &GroupHealthStateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGroupHealthState,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGroupHealthStateID sets the ID field of the mutation.
+func withGroupHealthStateID(id int64) grouphealthstateOption {
+	return func(m *GroupHealthStateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GroupHealthState
+		)
+		m.oldValue = func(ctx context.Context) (*GroupHealthState, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GroupHealthState.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGroupHealthState sets the old GroupHealthState of the mutation.
+func withGroupHealthState(node *GroupHealthState) grouphealthstateOption {
+	return func(m *GroupHealthStateMutation) {
+		m.oldValue = func(context.Context) (*GroupHealthState, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GroupHealthStateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GroupHealthStateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GroupHealthStateMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GroupHealthStateMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GroupHealthState.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *GroupHealthStateMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *GroupHealthStateMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *GroupHealthStateMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *GroupHealthStateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *GroupHealthStateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *GroupHealthStateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *GroupHealthStateMutation) SetGroupID(i int64) {
+	m.group = &i
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *GroupHealthStateMutation) GroupID() (r int64, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *GroupHealthStateMutation) ResetGroupID() {
+	m.group = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *GroupHealthStateMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *GroupHealthStateMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *GroupHealthStateMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetReason sets the "reason" field.
+func (m *GroupHealthStateMutation) SetReason(s string) {
+	m.reason = &s
+}
+
+// Reason returns the value of the "reason" field in the mutation.
+func (m *GroupHealthStateMutation) Reason() (r string, exists bool) {
+	v := m.reason
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldReason returns the old "reason" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldReason(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldReason is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldReason requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldReason: %w", err)
+	}
+	return oldValue.Reason, nil
+}
+
+// ClearReason clears the value of the "reason" field.
+func (m *GroupHealthStateMutation) ClearReason() {
+	m.reason = nil
+	m.clearedFields[grouphealthstate.FieldReason] = struct{}{}
+}
+
+// ReasonCleared returns if the "reason" field was cleared in this mutation.
+func (m *GroupHealthStateMutation) ReasonCleared() bool {
+	_, ok := m.clearedFields[grouphealthstate.FieldReason]
+	return ok
+}
+
+// ResetReason resets all changes to the "reason" field.
+func (m *GroupHealthStateMutation) ResetReason() {
+	m.reason = nil
+	delete(m.clearedFields, grouphealthstate.FieldReason)
+}
+
+// SetLastProbeAt sets the "last_probe_at" field.
+func (m *GroupHealthStateMutation) SetLastProbeAt(t time.Time) {
+	m.last_probe_at = &t
+}
+
+// LastProbeAt returns the value of the "last_probe_at" field in the mutation.
+func (m *GroupHealthStateMutation) LastProbeAt() (r time.Time, exists bool) {
+	v := m.last_probe_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastProbeAt returns the old "last_probe_at" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldLastProbeAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastProbeAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastProbeAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastProbeAt: %w", err)
+	}
+	return oldValue.LastProbeAt, nil
+}
+
+// ClearLastProbeAt clears the value of the "last_probe_at" field.
+func (m *GroupHealthStateMutation) ClearLastProbeAt() {
+	m.last_probe_at = nil
+	m.clearedFields[grouphealthstate.FieldLastProbeAt] = struct{}{}
+}
+
+// LastProbeAtCleared returns if the "last_probe_at" field was cleared in this mutation.
+func (m *GroupHealthStateMutation) LastProbeAtCleared() bool {
+	_, ok := m.clearedFields[grouphealthstate.FieldLastProbeAt]
+	return ok
+}
+
+// ResetLastProbeAt resets all changes to the "last_probe_at" field.
+func (m *GroupHealthStateMutation) ResetLastProbeAt() {
+	m.last_probe_at = nil
+	delete(m.clearedFields, grouphealthstate.FieldLastProbeAt)
+}
+
+// SetLastSuccessAt sets the "last_success_at" field.
+func (m *GroupHealthStateMutation) SetLastSuccessAt(t time.Time) {
+	m.last_success_at = &t
+}
+
+// LastSuccessAt returns the value of the "last_success_at" field in the mutation.
+func (m *GroupHealthStateMutation) LastSuccessAt() (r time.Time, exists bool) {
+	v := m.last_success_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastSuccessAt returns the old "last_success_at" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldLastSuccessAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastSuccessAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastSuccessAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastSuccessAt: %w", err)
+	}
+	return oldValue.LastSuccessAt, nil
+}
+
+// ClearLastSuccessAt clears the value of the "last_success_at" field.
+func (m *GroupHealthStateMutation) ClearLastSuccessAt() {
+	m.last_success_at = nil
+	m.clearedFields[grouphealthstate.FieldLastSuccessAt] = struct{}{}
+}
+
+// LastSuccessAtCleared returns if the "last_success_at" field was cleared in this mutation.
+func (m *GroupHealthStateMutation) LastSuccessAtCleared() bool {
+	_, ok := m.clearedFields[grouphealthstate.FieldLastSuccessAt]
+	return ok
+}
+
+// ResetLastSuccessAt resets all changes to the "last_success_at" field.
+func (m *GroupHealthStateMutation) ResetLastSuccessAt() {
+	m.last_success_at = nil
+	delete(m.clearedFields, grouphealthstate.FieldLastSuccessAt)
+}
+
+// SetNextProbeAt sets the "next_probe_at" field.
+func (m *GroupHealthStateMutation) SetNextProbeAt(t time.Time) {
+	m.next_probe_at = &t
+}
+
+// NextProbeAt returns the value of the "next_probe_at" field in the mutation.
+func (m *GroupHealthStateMutation) NextProbeAt() (r time.Time, exists bool) {
+	v := m.next_probe_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextProbeAt returns the old "next_probe_at" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldNextProbeAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextProbeAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextProbeAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextProbeAt: %w", err)
+	}
+	return oldValue.NextProbeAt, nil
+}
+
+// ClearNextProbeAt clears the value of the "next_probe_at" field.
+func (m *GroupHealthStateMutation) ClearNextProbeAt() {
+	m.next_probe_at = nil
+	m.clearedFields[grouphealthstate.FieldNextProbeAt] = struct{}{}
+}
+
+// NextProbeAtCleared returns if the "next_probe_at" field was cleared in this mutation.
+func (m *GroupHealthStateMutation) NextProbeAtCleared() bool {
+	_, ok := m.clearedFields[grouphealthstate.FieldNextProbeAt]
+	return ok
+}
+
+// ResetNextProbeAt resets all changes to the "next_probe_at" field.
+func (m *GroupHealthStateMutation) ResetNextProbeAt() {
+	m.next_probe_at = nil
+	delete(m.clearedFields, grouphealthstate.FieldNextProbeAt)
+}
+
+// SetFailureCount sets the "failure_count" field.
+func (m *GroupHealthStateMutation) SetFailureCount(i int) {
+	m.failure_count = &i
+	m.addfailure_count = nil
+}
+
+// FailureCount returns the value of the "failure_count" field in the mutation.
+func (m *GroupHealthStateMutation) FailureCount() (r int, exists bool) {
+	v := m.failure_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailureCount returns the old "failure_count" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldFailureCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailureCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailureCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailureCount: %w", err)
+	}
+	return oldValue.FailureCount, nil
+}
+
+// AddFailureCount adds i to the "failure_count" field.
+func (m *GroupHealthStateMutation) AddFailureCount(i int) {
+	if m.addfailure_count != nil {
+		*m.addfailure_count += i
+	} else {
+		m.addfailure_count = &i
+	}
+}
+
+// AddedFailureCount returns the value that was added to the "failure_count" field in this mutation.
+func (m *GroupHealthStateMutation) AddedFailureCount() (r int, exists bool) {
+	v := m.addfailure_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailureCount resets all changes to the "failure_count" field.
+func (m *GroupHealthStateMutation) ResetFailureCount() {
+	m.failure_count = nil
+	m.addfailure_count = nil
+}
+
+// SetProbeTtftMs sets the "probe_ttft_ms" field.
+func (m *GroupHealthStateMutation) SetProbeTtftMs(i int) {
+	m.probe_ttft_ms = &i
+	m.addprobe_ttft_ms = nil
+}
+
+// ProbeTtftMs returns the value of the "probe_ttft_ms" field in the mutation.
+func (m *GroupHealthStateMutation) ProbeTtftMs() (r int, exists bool) {
+	v := m.probe_ttft_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeTtftMs returns the old "probe_ttft_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldProbeTtftMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeTtftMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeTtftMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeTtftMs: %w", err)
+	}
+	return oldValue.ProbeTtftMs, nil
+}
+
+// AddProbeTtftMs adds i to the "probe_ttft_ms" field.
+func (m *GroupHealthStateMutation) AddProbeTtftMs(i int) {
+	if m.addprobe_ttft_ms != nil {
+		*m.addprobe_ttft_ms += i
+	} else {
+		m.addprobe_ttft_ms = &i
+	}
+}
+
+// AddedProbeTtftMs returns the value that was added to the "probe_ttft_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedProbeTtftMs() (r int, exists bool) {
+	v := m.addprobe_ttft_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProbeTtftMs resets all changes to the "probe_ttft_ms" field.
+func (m *GroupHealthStateMutation) ResetProbeTtftMs() {
+	m.probe_ttft_ms = nil
+	m.addprobe_ttft_ms = nil
+}
+
+// SetProbeAvailability6h sets the "probe_availability_6h" field.
+func (m *GroupHealthStateMutation) SetProbeAvailability6h(f float64) {
+	m.probe_availability_6h = &f
+	m.addprobe_availability_6h = nil
+}
+
+// ProbeAvailability6h returns the value of the "probe_availability_6h" field in the mutation.
+func (m *GroupHealthStateMutation) ProbeAvailability6h() (r float64, exists bool) {
+	v := m.probe_availability_6h
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeAvailability6h returns the old "probe_availability_6h" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldProbeAvailability6h(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeAvailability6h is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeAvailability6h requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeAvailability6h: %w", err)
+	}
+	return oldValue.ProbeAvailability6h, nil
+}
+
+// AddProbeAvailability6h adds f to the "probe_availability_6h" field.
+func (m *GroupHealthStateMutation) AddProbeAvailability6h(f float64) {
+	if m.addprobe_availability_6h != nil {
+		*m.addprobe_availability_6h += f
+	} else {
+		m.addprobe_availability_6h = &f
+	}
+}
+
+// AddedProbeAvailability6h returns the value that was added to the "probe_availability_6h" field in this mutation.
+func (m *GroupHealthStateMutation) AddedProbeAvailability6h() (r float64, exists bool) {
+	v := m.addprobe_availability_6h
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProbeAvailability6h resets all changes to the "probe_availability_6h" field.
+func (m *GroupHealthStateMutation) ResetProbeAvailability6h() {
+	m.probe_availability_6h = nil
+	m.addprobe_availability_6h = nil
+}
+
+// SetProbeTtftAvgMs sets the "probe_ttft_avg_ms" field.
+func (m *GroupHealthStateMutation) SetProbeTtftAvgMs(i int) {
+	m.probe_ttft_avg_ms = &i
+	m.addprobe_ttft_avg_ms = nil
+}
+
+// ProbeTtftAvgMs returns the value of the "probe_ttft_avg_ms" field in the mutation.
+func (m *GroupHealthStateMutation) ProbeTtftAvgMs() (r int, exists bool) {
+	v := m.probe_ttft_avg_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeTtftAvgMs returns the old "probe_ttft_avg_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldProbeTtftAvgMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeTtftAvgMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeTtftAvgMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeTtftAvgMs: %w", err)
+	}
+	return oldValue.ProbeTtftAvgMs, nil
+}
+
+// AddProbeTtftAvgMs adds i to the "probe_ttft_avg_ms" field.
+func (m *GroupHealthStateMutation) AddProbeTtftAvgMs(i int) {
+	if m.addprobe_ttft_avg_ms != nil {
+		*m.addprobe_ttft_avg_ms += i
+	} else {
+		m.addprobe_ttft_avg_ms = &i
+	}
+}
+
+// AddedProbeTtftAvgMs returns the value that was added to the "probe_ttft_avg_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedProbeTtftAvgMs() (r int, exists bool) {
+	v := m.addprobe_ttft_avg_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProbeTtftAvgMs resets all changes to the "probe_ttft_avg_ms" field.
+func (m *GroupHealthStateMutation) ResetProbeTtftAvgMs() {
+	m.probe_ttft_avg_ms = nil
+	m.addprobe_ttft_avg_ms = nil
+}
+
+// SetProbeTtftP95Ms sets the "probe_ttft_p95_ms" field.
+func (m *GroupHealthStateMutation) SetProbeTtftP95Ms(i int) {
+	m.probe_ttft_p95_ms = &i
+	m.addprobe_ttft_p95_ms = nil
+}
+
+// ProbeTtftP95Ms returns the value of the "probe_ttft_p95_ms" field in the mutation.
+func (m *GroupHealthStateMutation) ProbeTtftP95Ms() (r int, exists bool) {
+	v := m.probe_ttft_p95_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeTtftP95Ms returns the old "probe_ttft_p95_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldProbeTtftP95Ms(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeTtftP95Ms is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeTtftP95Ms requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeTtftP95Ms: %w", err)
+	}
+	return oldValue.ProbeTtftP95Ms, nil
+}
+
+// AddProbeTtftP95Ms adds i to the "probe_ttft_p95_ms" field.
+func (m *GroupHealthStateMutation) AddProbeTtftP95Ms(i int) {
+	if m.addprobe_ttft_p95_ms != nil {
+		*m.addprobe_ttft_p95_ms += i
+	} else {
+		m.addprobe_ttft_p95_ms = &i
+	}
+}
+
+// AddedProbeTtftP95Ms returns the value that was added to the "probe_ttft_p95_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedProbeTtftP95Ms() (r int, exists bool) {
+	v := m.addprobe_ttft_p95_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProbeTtftP95Ms resets all changes to the "probe_ttft_p95_ms" field.
+func (m *GroupHealthStateMutation) ResetProbeTtftP95Ms() {
+	m.probe_ttft_p95_ms = nil
+	m.addprobe_ttft_p95_ms = nil
+}
+
+// SetProbeSamples sets the "probe_samples" field.
+func (m *GroupHealthStateMutation) SetProbeSamples(i int) {
+	m.probe_samples = &i
+	m.addprobe_samples = nil
+}
+
+// ProbeSamples returns the value of the "probe_samples" field in the mutation.
+func (m *GroupHealthStateMutation) ProbeSamples() (r int, exists bool) {
+	v := m.probe_samples
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProbeSamples returns the old "probe_samples" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldProbeSamples(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProbeSamples is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProbeSamples requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProbeSamples: %w", err)
+	}
+	return oldValue.ProbeSamples, nil
+}
+
+// AddProbeSamples adds i to the "probe_samples" field.
+func (m *GroupHealthStateMutation) AddProbeSamples(i int) {
+	if m.addprobe_samples != nil {
+		*m.addprobe_samples += i
+	} else {
+		m.addprobe_samples = &i
+	}
+}
+
+// AddedProbeSamples returns the value that was added to the "probe_samples" field in this mutation.
+func (m *GroupHealthStateMutation) AddedProbeSamples() (r int, exists bool) {
+	v := m.addprobe_samples
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetProbeSamples resets all changes to the "probe_samples" field.
+func (m *GroupHealthStateMutation) ResetProbeSamples() {
+	m.probe_samples = nil
+	m.addprobe_samples = nil
+}
+
+// SetRealTtftP50Ms sets the "real_ttft_p50_ms" field.
+func (m *GroupHealthStateMutation) SetRealTtftP50Ms(i int) {
+	m.real_ttft_p50_ms = &i
+	m.addreal_ttft_p50_ms = nil
+}
+
+// RealTtftP50Ms returns the value of the "real_ttft_p50_ms" field in the mutation.
+func (m *GroupHealthStateMutation) RealTtftP50Ms() (r int, exists bool) {
+	v := m.real_ttft_p50_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRealTtftP50Ms returns the old "real_ttft_p50_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldRealTtftP50Ms(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRealTtftP50Ms is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRealTtftP50Ms requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRealTtftP50Ms: %w", err)
+	}
+	return oldValue.RealTtftP50Ms, nil
+}
+
+// AddRealTtftP50Ms adds i to the "real_ttft_p50_ms" field.
+func (m *GroupHealthStateMutation) AddRealTtftP50Ms(i int) {
+	if m.addreal_ttft_p50_ms != nil {
+		*m.addreal_ttft_p50_ms += i
+	} else {
+		m.addreal_ttft_p50_ms = &i
+	}
+}
+
+// AddedRealTtftP50Ms returns the value that was added to the "real_ttft_p50_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedRealTtftP50Ms() (r int, exists bool) {
+	v := m.addreal_ttft_p50_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRealTtftP50Ms resets all changes to the "real_ttft_p50_ms" field.
+func (m *GroupHealthStateMutation) ResetRealTtftP50Ms() {
+	m.real_ttft_p50_ms = nil
+	m.addreal_ttft_p50_ms = nil
+}
+
+// SetRealTtftAvgMs sets the "real_ttft_avg_ms" field.
+func (m *GroupHealthStateMutation) SetRealTtftAvgMs(i int) {
+	m.real_ttft_avg_ms = &i
+	m.addreal_ttft_avg_ms = nil
+}
+
+// RealTtftAvgMs returns the value of the "real_ttft_avg_ms" field in the mutation.
+func (m *GroupHealthStateMutation) RealTtftAvgMs() (r int, exists bool) {
+	v := m.real_ttft_avg_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRealTtftAvgMs returns the old "real_ttft_avg_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldRealTtftAvgMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRealTtftAvgMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRealTtftAvgMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRealTtftAvgMs: %w", err)
+	}
+	return oldValue.RealTtftAvgMs, nil
+}
+
+// AddRealTtftAvgMs adds i to the "real_ttft_avg_ms" field.
+func (m *GroupHealthStateMutation) AddRealTtftAvgMs(i int) {
+	if m.addreal_ttft_avg_ms != nil {
+		*m.addreal_ttft_avg_ms += i
+	} else {
+		m.addreal_ttft_avg_ms = &i
+	}
+}
+
+// AddedRealTtftAvgMs returns the value that was added to the "real_ttft_avg_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedRealTtftAvgMs() (r int, exists bool) {
+	v := m.addreal_ttft_avg_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRealTtftAvgMs resets all changes to the "real_ttft_avg_ms" field.
+func (m *GroupHealthStateMutation) ResetRealTtftAvgMs() {
+	m.real_ttft_avg_ms = nil
+	m.addreal_ttft_avg_ms = nil
+}
+
+// SetRealTtftP95Ms sets the "real_ttft_p95_ms" field.
+func (m *GroupHealthStateMutation) SetRealTtftP95Ms(i int) {
+	m.real_ttft_p95_ms = &i
+	m.addreal_ttft_p95_ms = nil
+}
+
+// RealTtftP95Ms returns the value of the "real_ttft_p95_ms" field in the mutation.
+func (m *GroupHealthStateMutation) RealTtftP95Ms() (r int, exists bool) {
+	v := m.real_ttft_p95_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRealTtftP95Ms returns the old "real_ttft_p95_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldRealTtftP95Ms(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRealTtftP95Ms is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRealTtftP95Ms requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRealTtftP95Ms: %w", err)
+	}
+	return oldValue.RealTtftP95Ms, nil
+}
+
+// AddRealTtftP95Ms adds i to the "real_ttft_p95_ms" field.
+func (m *GroupHealthStateMutation) AddRealTtftP95Ms(i int) {
+	if m.addreal_ttft_p95_ms != nil {
+		*m.addreal_ttft_p95_ms += i
+	} else {
+		m.addreal_ttft_p95_ms = &i
+	}
+}
+
+// AddedRealTtftP95Ms returns the value that was added to the "real_ttft_p95_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedRealTtftP95Ms() (r int, exists bool) {
+	v := m.addreal_ttft_p95_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRealTtftP95Ms resets all changes to the "real_ttft_p95_ms" field.
+func (m *GroupHealthStateMutation) ResetRealTtftP95Ms() {
+	m.real_ttft_p95_ms = nil
+	m.addreal_ttft_p95_ms = nil
+}
+
+// SetRealTtftSamples sets the "real_ttft_samples" field.
+func (m *GroupHealthStateMutation) SetRealTtftSamples(i int) {
+	m.real_ttft_samples = &i
+	m.addreal_ttft_samples = nil
+}
+
+// RealTtftSamples returns the value of the "real_ttft_samples" field in the mutation.
+func (m *GroupHealthStateMutation) RealTtftSamples() (r int, exists bool) {
+	v := m.real_ttft_samples
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRealTtftSamples returns the old "real_ttft_samples" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldRealTtftSamples(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRealTtftSamples is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRealTtftSamples requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRealTtftSamples: %w", err)
+	}
+	return oldValue.RealTtftSamples, nil
+}
+
+// AddRealTtftSamples adds i to the "real_ttft_samples" field.
+func (m *GroupHealthStateMutation) AddRealTtftSamples(i int) {
+	if m.addreal_ttft_samples != nil {
+		*m.addreal_ttft_samples += i
+	} else {
+		m.addreal_ttft_samples = &i
+	}
+}
+
+// AddedRealTtftSamples returns the value that was added to the "real_ttft_samples" field in this mutation.
+func (m *GroupHealthStateMutation) AddedRealTtftSamples() (r int, exists bool) {
+	v := m.addreal_ttft_samples
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRealTtftSamples resets all changes to the "real_ttft_samples" field.
+func (m *GroupHealthStateMutation) ResetRealTtftSamples() {
+	m.real_ttft_samples = nil
+	m.addreal_ttft_samples = nil
+}
+
+// SetRealAvailability6h sets the "real_availability_6h" field.
+func (m *GroupHealthStateMutation) SetRealAvailability6h(f float64) {
+	m.real_availability_6h = &f
+	m.addreal_availability_6h = nil
+}
+
+// RealAvailability6h returns the value of the "real_availability_6h" field in the mutation.
+func (m *GroupHealthStateMutation) RealAvailability6h() (r float64, exists bool) {
+	v := m.real_availability_6h
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRealAvailability6h returns the old "real_availability_6h" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldRealAvailability6h(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRealAvailability6h is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRealAvailability6h requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRealAvailability6h: %w", err)
+	}
+	return oldValue.RealAvailability6h, nil
+}
+
+// AddRealAvailability6h adds f to the "real_availability_6h" field.
+func (m *GroupHealthStateMutation) AddRealAvailability6h(f float64) {
+	if m.addreal_availability_6h != nil {
+		*m.addreal_availability_6h += f
+	} else {
+		m.addreal_availability_6h = &f
+	}
+}
+
+// AddedRealAvailability6h returns the value that was added to the "real_availability_6h" field in this mutation.
+func (m *GroupHealthStateMutation) AddedRealAvailability6h() (r float64, exists bool) {
+	v := m.addreal_availability_6h
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRealAvailability6h resets all changes to the "real_availability_6h" field.
+func (m *GroupHealthStateMutation) ResetRealAvailability6h() {
+	m.real_availability_6h = nil
+	m.addreal_availability_6h = nil
+}
+
+// SetRealTotalAvgMs sets the "real_total_avg_ms" field.
+func (m *GroupHealthStateMutation) SetRealTotalAvgMs(i int) {
+	m.real_total_avg_ms = &i
+	m.addreal_total_avg_ms = nil
+}
+
+// RealTotalAvgMs returns the value of the "real_total_avg_ms" field in the mutation.
+func (m *GroupHealthStateMutation) RealTotalAvgMs() (r int, exists bool) {
+	v := m.real_total_avg_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRealTotalAvgMs returns the old "real_total_avg_ms" field's value of the GroupHealthState entity.
+// If the GroupHealthState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupHealthStateMutation) OldRealTotalAvgMs(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRealTotalAvgMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRealTotalAvgMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRealTotalAvgMs: %w", err)
+	}
+	return oldValue.RealTotalAvgMs, nil
+}
+
+// AddRealTotalAvgMs adds i to the "real_total_avg_ms" field.
+func (m *GroupHealthStateMutation) AddRealTotalAvgMs(i int) {
+	if m.addreal_total_avg_ms != nil {
+		*m.addreal_total_avg_ms += i
+	} else {
+		m.addreal_total_avg_ms = &i
+	}
+}
+
+// AddedRealTotalAvgMs returns the value that was added to the "real_total_avg_ms" field in this mutation.
+func (m *GroupHealthStateMutation) AddedRealTotalAvgMs() (r int, exists bool) {
+	v := m.addreal_total_avg_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRealTotalAvgMs resets all changes to the "real_total_avg_ms" field.
+func (m *GroupHealthStateMutation) ResetRealTotalAvgMs() {
+	m.real_total_avg_ms = nil
+	m.addreal_total_avg_ms = nil
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (m *GroupHealthStateMutation) ClearGroup() {
+	m.clearedgroup = true
+	m.clearedFields[grouphealthstate.FieldGroupID] = struct{}{}
+}
+
+// GroupCleared reports if the "group" edge to the Group entity was cleared.
+func (m *GroupHealthStateMutation) GroupCleared() bool {
+	return m.clearedgroup
+}
+
+// GroupIDs returns the "group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GroupID instead. It exists only for internal usage by the builders.
+func (m *GroupHealthStateMutation) GroupIDs() (ids []int64) {
+	if id := m.group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGroup resets all changes to the "group" edge.
+func (m *GroupHealthStateMutation) ResetGroup() {
+	m.group = nil
+	m.clearedgroup = false
+}
+
+// Where appends a list predicates to the GroupHealthStateMutation builder.
+func (m *GroupHealthStateMutation) Where(ps ...predicate.GroupHealthState) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GroupHealthStateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GroupHealthStateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GroupHealthState, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GroupHealthStateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GroupHealthStateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GroupHealthState).
+func (m *GroupHealthStateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GroupHealthStateMutation) Fields() []string {
+	fields := make([]string, 0, 20)
+	if m.created_at != nil {
+		fields = append(fields, grouphealthstate.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, grouphealthstate.FieldUpdatedAt)
+	}
+	if m.group != nil {
+		fields = append(fields, grouphealthstate.FieldGroupID)
+	}
+	if m.status != nil {
+		fields = append(fields, grouphealthstate.FieldStatus)
+	}
+	if m.reason != nil {
+		fields = append(fields, grouphealthstate.FieldReason)
+	}
+	if m.last_probe_at != nil {
+		fields = append(fields, grouphealthstate.FieldLastProbeAt)
+	}
+	if m.last_success_at != nil {
+		fields = append(fields, grouphealthstate.FieldLastSuccessAt)
+	}
+	if m.next_probe_at != nil {
+		fields = append(fields, grouphealthstate.FieldNextProbeAt)
+	}
+	if m.failure_count != nil {
+		fields = append(fields, grouphealthstate.FieldFailureCount)
+	}
+	if m.probe_ttft_ms != nil {
+		fields = append(fields, grouphealthstate.FieldProbeTtftMs)
+	}
+	if m.probe_availability_6h != nil {
+		fields = append(fields, grouphealthstate.FieldProbeAvailability6h)
+	}
+	if m.probe_ttft_avg_ms != nil {
+		fields = append(fields, grouphealthstate.FieldProbeTtftAvgMs)
+	}
+	if m.probe_ttft_p95_ms != nil {
+		fields = append(fields, grouphealthstate.FieldProbeTtftP95Ms)
+	}
+	if m.probe_samples != nil {
+		fields = append(fields, grouphealthstate.FieldProbeSamples)
+	}
+	if m.real_ttft_p50_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftP50Ms)
+	}
+	if m.real_ttft_avg_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftAvgMs)
+	}
+	if m.real_ttft_p95_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftP95Ms)
+	}
+	if m.real_ttft_samples != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftSamples)
+	}
+	if m.real_availability_6h != nil {
+		fields = append(fields, grouphealthstate.FieldRealAvailability6h)
+	}
+	if m.real_total_avg_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTotalAvgMs)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GroupHealthStateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case grouphealthstate.FieldCreatedAt:
+		return m.CreatedAt()
+	case grouphealthstate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case grouphealthstate.FieldGroupID:
+		return m.GroupID()
+	case grouphealthstate.FieldStatus:
+		return m.Status()
+	case grouphealthstate.FieldReason:
+		return m.Reason()
+	case grouphealthstate.FieldLastProbeAt:
+		return m.LastProbeAt()
+	case grouphealthstate.FieldLastSuccessAt:
+		return m.LastSuccessAt()
+	case grouphealthstate.FieldNextProbeAt:
+		return m.NextProbeAt()
+	case grouphealthstate.FieldFailureCount:
+		return m.FailureCount()
+	case grouphealthstate.FieldProbeTtftMs:
+		return m.ProbeTtftMs()
+	case grouphealthstate.FieldProbeAvailability6h:
+		return m.ProbeAvailability6h()
+	case grouphealthstate.FieldProbeTtftAvgMs:
+		return m.ProbeTtftAvgMs()
+	case grouphealthstate.FieldProbeTtftP95Ms:
+		return m.ProbeTtftP95Ms()
+	case grouphealthstate.FieldProbeSamples:
+		return m.ProbeSamples()
+	case grouphealthstate.FieldRealTtftP50Ms:
+		return m.RealTtftP50Ms()
+	case grouphealthstate.FieldRealTtftAvgMs:
+		return m.RealTtftAvgMs()
+	case grouphealthstate.FieldRealTtftP95Ms:
+		return m.RealTtftP95Ms()
+	case grouphealthstate.FieldRealTtftSamples:
+		return m.RealTtftSamples()
+	case grouphealthstate.FieldRealAvailability6h:
+		return m.RealAvailability6h()
+	case grouphealthstate.FieldRealTotalAvgMs:
+		return m.RealTotalAvgMs()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GroupHealthStateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case grouphealthstate.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case grouphealthstate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case grouphealthstate.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case grouphealthstate.FieldStatus:
+		return m.OldStatus(ctx)
+	case grouphealthstate.FieldReason:
+		return m.OldReason(ctx)
+	case grouphealthstate.FieldLastProbeAt:
+		return m.OldLastProbeAt(ctx)
+	case grouphealthstate.FieldLastSuccessAt:
+		return m.OldLastSuccessAt(ctx)
+	case grouphealthstate.FieldNextProbeAt:
+		return m.OldNextProbeAt(ctx)
+	case grouphealthstate.FieldFailureCount:
+		return m.OldFailureCount(ctx)
+	case grouphealthstate.FieldProbeTtftMs:
+		return m.OldProbeTtftMs(ctx)
+	case grouphealthstate.FieldProbeAvailability6h:
+		return m.OldProbeAvailability6h(ctx)
+	case grouphealthstate.FieldProbeTtftAvgMs:
+		return m.OldProbeTtftAvgMs(ctx)
+	case grouphealthstate.FieldProbeTtftP95Ms:
+		return m.OldProbeTtftP95Ms(ctx)
+	case grouphealthstate.FieldProbeSamples:
+		return m.OldProbeSamples(ctx)
+	case grouphealthstate.FieldRealTtftP50Ms:
+		return m.OldRealTtftP50Ms(ctx)
+	case grouphealthstate.FieldRealTtftAvgMs:
+		return m.OldRealTtftAvgMs(ctx)
+	case grouphealthstate.FieldRealTtftP95Ms:
+		return m.OldRealTtftP95Ms(ctx)
+	case grouphealthstate.FieldRealTtftSamples:
+		return m.OldRealTtftSamples(ctx)
+	case grouphealthstate.FieldRealAvailability6h:
+		return m.OldRealAvailability6h(ctx)
+	case grouphealthstate.FieldRealTotalAvgMs:
+		return m.OldRealTotalAvgMs(ctx)
+	}
+	return nil, fmt.Errorf("unknown GroupHealthState field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupHealthStateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case grouphealthstate.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case grouphealthstate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case grouphealthstate.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case grouphealthstate.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case grouphealthstate.FieldReason:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetReason(v)
+		return nil
+	case grouphealthstate.FieldLastProbeAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastProbeAt(v)
+		return nil
+	case grouphealthstate.FieldLastSuccessAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastSuccessAt(v)
+		return nil
+	case grouphealthstate.FieldNextProbeAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextProbeAt(v)
+		return nil
+	case grouphealthstate.FieldFailureCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailureCount(v)
+		return nil
+	case grouphealthstate.FieldProbeTtftMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeTtftMs(v)
+		return nil
+	case grouphealthstate.FieldProbeAvailability6h:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeAvailability6h(v)
+		return nil
+	case grouphealthstate.FieldProbeTtftAvgMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeTtftAvgMs(v)
+		return nil
+	case grouphealthstate.FieldProbeTtftP95Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeTtftP95Ms(v)
+		return nil
+	case grouphealthstate.FieldProbeSamples:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProbeSamples(v)
+		return nil
+	case grouphealthstate.FieldRealTtftP50Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRealTtftP50Ms(v)
+		return nil
+	case grouphealthstate.FieldRealTtftAvgMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRealTtftAvgMs(v)
+		return nil
+	case grouphealthstate.FieldRealTtftP95Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRealTtftP95Ms(v)
+		return nil
+	case grouphealthstate.FieldRealTtftSamples:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRealTtftSamples(v)
+		return nil
+	case grouphealthstate.FieldRealAvailability6h:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRealAvailability6h(v)
+		return nil
+	case grouphealthstate.FieldRealTotalAvgMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRealTotalAvgMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthState field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GroupHealthStateMutation) AddedFields() []string {
+	var fields []string
+	if m.addfailure_count != nil {
+		fields = append(fields, grouphealthstate.FieldFailureCount)
+	}
+	if m.addprobe_ttft_ms != nil {
+		fields = append(fields, grouphealthstate.FieldProbeTtftMs)
+	}
+	if m.addprobe_availability_6h != nil {
+		fields = append(fields, grouphealthstate.FieldProbeAvailability6h)
+	}
+	if m.addprobe_ttft_avg_ms != nil {
+		fields = append(fields, grouphealthstate.FieldProbeTtftAvgMs)
+	}
+	if m.addprobe_ttft_p95_ms != nil {
+		fields = append(fields, grouphealthstate.FieldProbeTtftP95Ms)
+	}
+	if m.addprobe_samples != nil {
+		fields = append(fields, grouphealthstate.FieldProbeSamples)
+	}
+	if m.addreal_ttft_p50_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftP50Ms)
+	}
+	if m.addreal_ttft_avg_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftAvgMs)
+	}
+	if m.addreal_ttft_p95_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftP95Ms)
+	}
+	if m.addreal_ttft_samples != nil {
+		fields = append(fields, grouphealthstate.FieldRealTtftSamples)
+	}
+	if m.addreal_availability_6h != nil {
+		fields = append(fields, grouphealthstate.FieldRealAvailability6h)
+	}
+	if m.addreal_total_avg_ms != nil {
+		fields = append(fields, grouphealthstate.FieldRealTotalAvgMs)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GroupHealthStateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case grouphealthstate.FieldFailureCount:
+		return m.AddedFailureCount()
+	case grouphealthstate.FieldProbeTtftMs:
+		return m.AddedProbeTtftMs()
+	case grouphealthstate.FieldProbeAvailability6h:
+		return m.AddedProbeAvailability6h()
+	case grouphealthstate.FieldProbeTtftAvgMs:
+		return m.AddedProbeTtftAvgMs()
+	case grouphealthstate.FieldProbeTtftP95Ms:
+		return m.AddedProbeTtftP95Ms()
+	case grouphealthstate.FieldProbeSamples:
+		return m.AddedProbeSamples()
+	case grouphealthstate.FieldRealTtftP50Ms:
+		return m.AddedRealTtftP50Ms()
+	case grouphealthstate.FieldRealTtftAvgMs:
+		return m.AddedRealTtftAvgMs()
+	case grouphealthstate.FieldRealTtftP95Ms:
+		return m.AddedRealTtftP95Ms()
+	case grouphealthstate.FieldRealTtftSamples:
+		return m.AddedRealTtftSamples()
+	case grouphealthstate.FieldRealAvailability6h:
+		return m.AddedRealAvailability6h()
+	case grouphealthstate.FieldRealTotalAvgMs:
+		return m.AddedRealTotalAvgMs()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupHealthStateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case grouphealthstate.FieldFailureCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailureCount(v)
+		return nil
+	case grouphealthstate.FieldProbeTtftMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeTtftMs(v)
+		return nil
+	case grouphealthstate.FieldProbeAvailability6h:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeAvailability6h(v)
+		return nil
+	case grouphealthstate.FieldProbeTtftAvgMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeTtftAvgMs(v)
+		return nil
+	case grouphealthstate.FieldProbeTtftP95Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeTtftP95Ms(v)
+		return nil
+	case grouphealthstate.FieldProbeSamples:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddProbeSamples(v)
+		return nil
+	case grouphealthstate.FieldRealTtftP50Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRealTtftP50Ms(v)
+		return nil
+	case grouphealthstate.FieldRealTtftAvgMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRealTtftAvgMs(v)
+		return nil
+	case grouphealthstate.FieldRealTtftP95Ms:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRealTtftP95Ms(v)
+		return nil
+	case grouphealthstate.FieldRealTtftSamples:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRealTtftSamples(v)
+		return nil
+	case grouphealthstate.FieldRealAvailability6h:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRealAvailability6h(v)
+		return nil
+	case grouphealthstate.FieldRealTotalAvgMs:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRealTotalAvgMs(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthState numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GroupHealthStateMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(grouphealthstate.FieldReason) {
+		fields = append(fields, grouphealthstate.FieldReason)
+	}
+	if m.FieldCleared(grouphealthstate.FieldLastProbeAt) {
+		fields = append(fields, grouphealthstate.FieldLastProbeAt)
+	}
+	if m.FieldCleared(grouphealthstate.FieldLastSuccessAt) {
+		fields = append(fields, grouphealthstate.FieldLastSuccessAt)
+	}
+	if m.FieldCleared(grouphealthstate.FieldNextProbeAt) {
+		fields = append(fields, grouphealthstate.FieldNextProbeAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GroupHealthStateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GroupHealthStateMutation) ClearField(name string) error {
+	switch name {
+	case grouphealthstate.FieldReason:
+		m.ClearReason()
+		return nil
+	case grouphealthstate.FieldLastProbeAt:
+		m.ClearLastProbeAt()
+		return nil
+	case grouphealthstate.FieldLastSuccessAt:
+		m.ClearLastSuccessAt()
+		return nil
+	case grouphealthstate.FieldNextProbeAt:
+		m.ClearNextProbeAt()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthState nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GroupHealthStateMutation) ResetField(name string) error {
+	switch name {
+	case grouphealthstate.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case grouphealthstate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case grouphealthstate.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case grouphealthstate.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case grouphealthstate.FieldReason:
+		m.ResetReason()
+		return nil
+	case grouphealthstate.FieldLastProbeAt:
+		m.ResetLastProbeAt()
+		return nil
+	case grouphealthstate.FieldLastSuccessAt:
+		m.ResetLastSuccessAt()
+		return nil
+	case grouphealthstate.FieldNextProbeAt:
+		m.ResetNextProbeAt()
+		return nil
+	case grouphealthstate.FieldFailureCount:
+		m.ResetFailureCount()
+		return nil
+	case grouphealthstate.FieldProbeTtftMs:
+		m.ResetProbeTtftMs()
+		return nil
+	case grouphealthstate.FieldProbeAvailability6h:
+		m.ResetProbeAvailability6h()
+		return nil
+	case grouphealthstate.FieldProbeTtftAvgMs:
+		m.ResetProbeTtftAvgMs()
+		return nil
+	case grouphealthstate.FieldProbeTtftP95Ms:
+		m.ResetProbeTtftP95Ms()
+		return nil
+	case grouphealthstate.FieldProbeSamples:
+		m.ResetProbeSamples()
+		return nil
+	case grouphealthstate.FieldRealTtftP50Ms:
+		m.ResetRealTtftP50Ms()
+		return nil
+	case grouphealthstate.FieldRealTtftAvgMs:
+		m.ResetRealTtftAvgMs()
+		return nil
+	case grouphealthstate.FieldRealTtftP95Ms:
+		m.ResetRealTtftP95Ms()
+		return nil
+	case grouphealthstate.FieldRealTtftSamples:
+		m.ResetRealTtftSamples()
+		return nil
+	case grouphealthstate.FieldRealAvailability6h:
+		m.ResetRealAvailability6h()
+		return nil
+	case grouphealthstate.FieldRealTotalAvgMs:
+		m.ResetRealTotalAvgMs()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthState field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GroupHealthStateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.group != nil {
+		edges = append(edges, grouphealthstate.EdgeGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GroupHealthStateMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case grouphealthstate.EdgeGroup:
+		if id := m.group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GroupHealthStateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GroupHealthStateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GroupHealthStateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedgroup {
+		edges = append(edges, grouphealthstate.EdgeGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GroupHealthStateMutation) EdgeCleared(name string) bool {
+	switch name {
+	case grouphealthstate.EdgeGroup:
+		return m.clearedgroup
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GroupHealthStateMutation) ClearEdge(name string) error {
+	switch name {
+	case grouphealthstate.EdgeGroup:
+		m.ClearGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthState unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GroupHealthStateMutation) ResetEdge(name string) error {
+	switch name {
+	case grouphealthstate.EdgeGroup:
+		m.ResetGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupHealthState edge %s", name)
 }
 
 // IdempotencyRecordMutation represents an operation that mutates the IdempotencyRecord nodes in the graph.

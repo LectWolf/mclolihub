@@ -140,6 +140,12 @@ const (
 	FieldProfitMinMargin = "profit_min_margin"
 	// FieldProfitSafetyBuffer holds the string denoting the profit_safety_buffer field in the database.
 	FieldProfitSafetyBuffer = "profit_safety_buffer"
+	// FieldProbeEnabled holds the string denoting the probe_enabled field in the database.
+	FieldProbeEnabled = "probe_enabled"
+	// FieldProbeModel holds the string denoting the probe_model field in the database.
+	FieldProbeModel = "probe_model"
+	// FieldProbeIntervalSeconds holds the string denoting the probe_interval_seconds field in the database.
+	FieldProbeIntervalSeconds = "probe_interval_seconds"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -148,6 +154,12 @@ const (
 	EdgeSubscriptions = "subscriptions"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
+	// EdgeHealthState holds the string denoting the health_state edge name in mutations.
+	EdgeHealthState = "health_state"
+	// EdgeHealthEvents holds the string denoting the health_events edge name in mutations.
+	EdgeHealthEvents = "health_events"
+	// EdgeKeyPreferences holds the string denoting the key_preferences edge name in mutations.
+	EdgeKeyPreferences = "key_preferences"
 	// EdgeAccounts holds the string denoting the accounts edge name in mutations.
 	EdgeAccounts = "accounts"
 	// EdgeAllowedUsers holds the string denoting the allowed_users edge name in mutations.
@@ -186,6 +198,27 @@ const (
 	UsageLogsInverseTable = "usage_logs"
 	// UsageLogsColumn is the table column denoting the usage_logs relation/edge.
 	UsageLogsColumn = "group_id"
+	// HealthStateTable is the table that holds the health_state relation/edge.
+	HealthStateTable = "group_health_states"
+	// HealthStateInverseTable is the table name for the GroupHealthState entity.
+	// It exists in this package in order to avoid circular dependency with the "grouphealthstate" package.
+	HealthStateInverseTable = "group_health_states"
+	// HealthStateColumn is the table column denoting the health_state relation/edge.
+	HealthStateColumn = "group_id"
+	// HealthEventsTable is the table that holds the health_events relation/edge.
+	HealthEventsTable = "group_health_events"
+	// HealthEventsInverseTable is the table name for the GroupHealthEvent entity.
+	// It exists in this package in order to avoid circular dependency with the "grouphealthevent" package.
+	HealthEventsInverseTable = "group_health_events"
+	// HealthEventsColumn is the table column denoting the health_events relation/edge.
+	HealthEventsColumn = "group_id"
+	// KeyPreferencesTable is the table that holds the key_preferences relation/edge.
+	KeyPreferencesTable = "api_key_group_preferences"
+	// KeyPreferencesInverseTable is the table name for the APIKeyGroupPreference entity.
+	// It exists in this package in order to avoid circular dependency with the "apikeygrouppreference" package.
+	KeyPreferencesInverseTable = "api_key_group_preferences"
+	// KeyPreferencesColumn is the table column denoting the key_preferences relation/edge.
+	KeyPreferencesColumn = "group_id"
 	// AccountsTable is the table that holds the accounts relation/edge. The primary key declared below.
 	AccountsTable = "account_groups"
 	// AccountsInverseTable is the table name for the Account entity.
@@ -277,6 +310,9 @@ var Columns = []string{
 	FieldProfitControlEnabled,
 	FieldProfitMinMargin,
 	FieldProfitSafetyBuffer,
+	FieldProbeEnabled,
+	FieldProbeModel,
+	FieldProbeIntervalSeconds,
 }
 
 var (
@@ -412,6 +448,14 @@ var (
 	DefaultProfitMinMargin float64
 	// DefaultProfitSafetyBuffer holds the default value on creation for the "profit_safety_buffer" field.
 	DefaultProfitSafetyBuffer float64
+	// DefaultProbeEnabled holds the default value on creation for the "probe_enabled" field.
+	DefaultProbeEnabled bool
+	// DefaultProbeModel holds the default value on creation for the "probe_model" field.
+	DefaultProbeModel string
+	// ProbeModelValidator is a validator for the "probe_model" field. It is called by the builders before save.
+	ProbeModelValidator func(string) error
+	// DefaultProbeIntervalSeconds holds the default value on creation for the "probe_interval_seconds" field.
+	DefaultProbeIntervalSeconds int
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -697,6 +741,21 @@ func ByProfitSafetyBuffer(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProfitSafetyBuffer, opts...).ToFunc()
 }
 
+// ByProbeEnabled orders the results by the probe_enabled field.
+func ByProbeEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProbeEnabled, opts...).ToFunc()
+}
+
+// ByProbeModel orders the results by the probe_model field.
+func ByProbeModel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProbeModel, opts...).ToFunc()
+}
+
+// ByProbeIntervalSeconds orders the results by the probe_interval_seconds field.
+func ByProbeIntervalSeconds(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProbeIntervalSeconds, opts...).ToFunc()
+}
+
 // ByAPIKeysCount orders the results by api_keys count.
 func ByAPIKeysCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -750,6 +809,48 @@ func ByUsageLogsCount(opts ...sql.OrderTermOption) OrderOption {
 func ByUsageLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newUsageLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByHealthStateCount orders the results by health_state count.
+func ByHealthStateCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newHealthStateStep(), opts...)
+	}
+}
+
+// ByHealthState orders the results by health_state terms.
+func ByHealthState(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newHealthStateStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByHealthEventsCount orders the results by health_events count.
+func ByHealthEventsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newHealthEventsStep(), opts...)
+	}
+}
+
+// ByHealthEvents orders the results by health_events terms.
+func ByHealthEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newHealthEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByKeyPreferencesCount orders the results by key_preferences count.
+func ByKeyPreferencesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newKeyPreferencesStep(), opts...)
+	}
+}
+
+// ByKeyPreferences orders the results by key_preferences terms.
+func ByKeyPreferences(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newKeyPreferencesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -834,6 +935,27 @@ func newUsageLogsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageLogsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageLogsTable, UsageLogsColumn),
+	)
+}
+func newHealthStateStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(HealthStateInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, HealthStateTable, HealthStateColumn),
+	)
+}
+func newHealthEventsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(HealthEventsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, HealthEventsTable, HealthEventsColumn),
+	)
+}
+func newKeyPreferencesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(KeyPreferencesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, KeyPreferencesTable, KeyPreferencesColumn),
 	)
 }
 func newAccountsStep() *sqlgraph.Step {

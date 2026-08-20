@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/ent/batchimageevent"
@@ -29,6 +30,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -112,6 +115,7 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			apikey.Table:                        apikey.ValidColumn,
+			apikeygrouppreference.Table:         apikeygrouppreference.ValidColumn,
 			account.Table:                       account.ValidColumn,
 			accountgroup.Table:                  accountgroup.ValidColumn,
 			announcement.Table:                  announcement.ValidColumn,
@@ -128,6 +132,8 @@ func checkColumn(t, c string) error {
 			compositemodelroute.Table:           compositemodelroute.ValidColumn,
 			errorpassthroughrule.Table:          errorpassthroughrule.ValidColumn,
 			group.Table:                         group.ValidColumn,
+			grouphealthevent.Table:              grouphealthevent.ValidColumn,
+			grouphealthstate.Table:              grouphealthstate.ValidColumn,
 			idempotencyrecord.Table:             idempotencyrecord.ValidColumn,
 			identityadoptiondecision.Table:      identityadoptiondecision.ValidColumn,
 			paymentauditlog.Table:               paymentauditlog.ValidColumn,

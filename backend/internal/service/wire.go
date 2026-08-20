@@ -28,8 +28,9 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 
 // BuildInfo contains build information
 type BuildInfo struct {
-	Version   string
-	BuildType string
+	Version         string
+	UpstreamVersion string
+	BuildType       string
 }
 
 // ProvidePricingService creates and initializes PricingService
@@ -44,7 +45,7 @@ func ProvidePricingService(cfg *config.Config, remoteClient PricingRemoteClient)
 
 // ProvideUpdateService creates UpdateService with BuildInfo
 func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, buildInfo BuildInfo) *UpdateService {
-	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType)
+	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.UpstreamVersion, buildInfo.BuildType)
 }
 
 // ProvideEmailQueueService creates EmailQueueService with default worker count
@@ -608,6 +609,19 @@ func ProvideScheduledTestRunnerService(
 	return svc
 }
 
+// ProvideGroupHealthService creates and starts the active group-health runner.
+func ProvideGroupHealthService(
+	repo GroupHealthRepository,
+	accountRepo AccountRepository,
+	accountTestSvc *AccountTestService,
+	lockCache LeaderLockCache,
+	db *sql.DB,
+) *GroupHealthService {
+	svc := NewGroupHealthService(repo, accountRepo, accountTestSvc, lockCache, db)
+	svc.Start()
+	return svc
+}
+
 // ProvideOpsScheduledReportService creates and starts OpsScheduledReportService.
 func ProvideOpsScheduledReportService(
 	opsService *OpsService,
@@ -895,6 +909,7 @@ var ProviderSet = wire.NewSet(
 	ProvideIdempotencyCleanupService,
 	ProvideScheduledTestService,
 	ProvideScheduledTestRunnerService,
+	ProvideGroupHealthService,
 	NewGroupCapacityService,
 	NewChannelService,
 	wire.Bind(new(ChannelCacheInvalidator), new(*ChannelService)),

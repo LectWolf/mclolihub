@@ -34,6 +34,10 @@ type APIKey struct {
 	Name string `json:"name,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID *int64 `json:"group_id,omitempty"`
+	// fixed/cheapest/fastest/custom
+	RouteMode string `json:"route_mode,omitempty"`
+	// 允许调用的最大生效倍率，NULL 表示不限制
+	MaxRateMultiplier *float64 `json:"max_rate_multiplier,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// Last usage time of this API key
@@ -80,9 +84,11 @@ type APIKeyEdges struct {
 	Group *Group `json:"group,omitempty"`
 	// UsageLogs holds the value of the usage_logs edge.
 	UsageLogs []*UsageLog `json:"usage_logs,omitempty"`
+	// GroupPreferences holds the value of the group_preferences edge.
+	GroupPreferences []*APIKeyGroupPreference `json:"group_preferences,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -116,6 +122,15 @@ func (e APIKeyEdges) UsageLogsOrErr() ([]*UsageLog, error) {
 	return nil, &NotLoadedError{edge: "usage_logs"}
 }
 
+// GroupPreferencesOrErr returns the GroupPreferences value or an error if the edge
+// was not loaded in eager-loading.
+func (e APIKeyEdges) GroupPreferencesOrErr() ([]*APIKeyGroupPreference, error) {
+	if e.loadedTypes[3] {
+		return e.GroupPreferences, nil
+	}
+	return nil, &NotLoadedError{edge: "group_preferences"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*APIKey) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -123,11 +138,11 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case apikey.FieldIPWhitelist, apikey.FieldIPBlacklist:
 			values[i] = new([]byte)
-		case apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
+		case apikey.FieldMaxRateMultiplier, apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
 		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
 			values[i] = new(sql.NullInt64)
-		case apikey.FieldKey, apikey.FieldName, apikey.FieldStatus:
+		case apikey.FieldKey, apikey.FieldName, apikey.FieldRouteMode, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
 		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
 			values[i] = new(sql.NullTime)
@@ -195,6 +210,19 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.GroupID = new(int64)
 				*_m.GroupID = value.Int64
+			}
+		case apikey.FieldRouteMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field route_mode", values[i])
+			} else if value.Valid {
+				_m.RouteMode = value.String
+			}
+		case apikey.FieldMaxRateMultiplier:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field max_rate_multiplier", values[i])
+			} else if value.Valid {
+				_m.MaxRateMultiplier = new(float64)
+				*_m.MaxRateMultiplier = value.Float64
 			}
 		case apikey.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -329,6 +357,11 @@ func (_m *APIKey) QueryUsageLogs() *UsageLogQuery {
 	return NewAPIKeyClient(_m.config).QueryUsageLogs(_m)
 }
 
+// QueryGroupPreferences queries the "group_preferences" edge of the APIKey entity.
+func (_m *APIKey) QueryGroupPreferences() *APIKeyGroupPreferenceQuery {
+	return NewAPIKeyClient(_m.config).QueryGroupPreferences(_m)
+}
+
 // Update returns a builder for updating this APIKey.
 // Note that you need to call APIKey.Unwrap() before calling this method if this APIKey
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -374,6 +407,14 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	if v := _m.GroupID; v != nil {
 		builder.WriteString("group_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("route_mode=")
+	builder.WriteString(_m.RouteMode)
+	builder.WriteString(", ")
+	if v := _m.MaxRateMultiplier; v != nil {
+		builder.WriteString("max_rate_multiplier=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

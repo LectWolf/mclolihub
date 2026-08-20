@@ -16,6 +16,8 @@ type Tx struct {
 	config
 	// APIKey is the client for interacting with the APIKey builders.
 	APIKey *APIKeyClient
+	// APIKeyGroupPreference is the client for interacting with the APIKeyGroupPreference builders.
+	APIKeyGroupPreference *APIKeyGroupPreferenceClient
 	// Account is the client for interacting with the Account builders.
 	Account *AccountClient
 	// AccountGroup is the client for interacting with the AccountGroup builders.
@@ -48,6 +50,10 @@ type Tx struct {
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
+	// GroupHealthEvent is the client for interacting with the GroupHealthEvent builders.
+	GroupHealthEvent *GroupHealthEventClient
+	// GroupHealthState is the client for interacting with the GroupHealthState builders.
+	GroupHealthState *GroupHealthStateClient
 	// IdempotencyRecord is the client for interacting with the IdempotencyRecord builders.
 	IdempotencyRecord *IdempotencyRecordClient
 	// IdentityAdoptionDecision is the client for interacting with the IdentityAdoptionDecision builders.
@@ -224,6 +230,7 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
+	tx.APIKeyGroupPreference = NewAPIKeyGroupPreferenceClient(tx.config)
 	tx.Account = NewAccountClient(tx.config)
 	tx.AccountGroup = NewAccountGroupClient(tx.config)
 	tx.Announcement = NewAnnouncementClient(tx.config)
@@ -240,6 +247,8 @@ func (tx *Tx) init() {
 	tx.CompositeModelRoute = NewCompositeModelRouteClient(tx.config)
 	tx.ErrorPassthroughRule = NewErrorPassthroughRuleClient(tx.config)
 	tx.Group = NewGroupClient(tx.config)
+	tx.GroupHealthEvent = NewGroupHealthEventClient(tx.config)
+	tx.GroupHealthState = NewGroupHealthStateClient(tx.config)
 	tx.IdempotencyRecord = NewIdempotencyRecordClient(tx.config)
 	tx.IdentityAdoptionDecision = NewIdentityAdoptionDecisionClient(tx.config)
 	tx.PaymentAuditLog = NewPaymentAuditLogClient(tx.config)

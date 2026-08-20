@@ -75,6 +75,9 @@ type APIKeyUpdateFields struct {
 	RateLimitUsage bool
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
+	// RouteMode and MaxRateMultiplier control multi-group routing.
+	RouteMode         bool
+	MaxRateMultiplier bool
 }
 
 // IsEmpty 报告该次 Update 是否不写任何列。
@@ -123,6 +126,145 @@ type APIKeyRepository interface {
 
 type apiKeyAllByUserIDLister interface {
 	ListAllByUserID(ctx context.Context, userID int64, filters APIKeyListFilters) ([]APIKey, error)
+}
+
+type apiKeyPreferenceRepository interface {
+	SyncGroupPreferences(context.Context, int64, []APIKeyGroupPreference) error
+}
+
+type groupRouteHealthReader interface {
+	GetRouteHealth(context.Context, []int64) (map[int64]GroupRouteHealth, error)
+}
+
+// ResolveRoutingGroups returns the stable, filtered group order for a key. The
+// gateway consumes one account from each group in this order for dynamic modes.
+func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) ([]Group, error) {
+	if key == nil {
+		return nil, ErrAPIKeyNotFound
+	}
+	mode := key.RouteMode
+	if mode == "" {
+		mode = RouteModeFixed
+	}
+	if mode == RouteModeFixed {
+		if key.Group == nil {
+			return nil, ErrGroupNotFound
+		}
+		rate := key.Group.RateMultiplier
+		if s.userGroupRateRepo != nil {
+			if custom, err := s.userGroupRateRepo.GetByUserAndGroup(ctx, key.UserID, key.Group.ID); err == nil && custom != nil {
+				rate = *custom
+			}
+		}
+		if key.MaxRateMultiplier != nil && rate > *key.MaxRateMultiplier {
+			return nil, infraerrors.Forbidden("API_KEY_MAX_RATE_EXCEEDED", "fixed group exceeds API key max rate multiplier")
+		}
+		return []Group{*key.Group}, nil
+	}
+	groups, err := s.groupRepo.ListActive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rates := map[int64]float64{}
+	if s.userGroupRateRepo != nil {
+		rates, _ = s.userGroupRateRepo.GetByUserID(ctx, key.UserID)
+	}
+	preference := make(map[int64]APIKeyGroupPreference, len(key.GroupPreferences))
+	for _, item := range key.GroupPreferences {
+		preference[item.GroupID] = item
+	}
+	ids := make([]int64, 0, len(groups))
+	groupByID := make(map[int64]Group, len(groups))
+	for _, group := range groups {
+		ids = append(ids, group.ID)
+		groupByID[group.ID] = group
+	}
+	health := map[int64]GroupRouteHealth{}
+	if reader, ok := s.groupRepo.(groupRouteHealthReader); ok {
+		health, _ = reader.GetRouteHealth(ctx, ids)
+	}
+	candidates := make([]GroupRouteCandidate, 0, len(groups))
+	for _, group := range groups {
+		if key.User == nil || !s.canUserBindGroup(ctx, key.User, &group) {
+			continue
+		}
+		pref, configured := preference[group.ID]
+		if mode == RouteModeCustom && !configured {
+			continue
+		}
+		rate := group.RateMultiplier
+		if custom, ok := rates[group.ID]; ok {
+			rate = custom
+		}
+		h := health[group.ID]
+		candidates = append(candidates, GroupRouteCandidate{GroupID: group.ID, RateMultiplier: rate, Healthy: h.Healthy, ProbeEnabled: group.ProbeEnabled, Disabled: pref.Disabled, CustomPosition: pref.Position, AdminSortOrder: group.SortOrder, RealTTFTP50MS: h.RealTTFTP50MS, RealTTFTSamples: h.RealTTFTSamples, ProbeTTFTMS: h.ProbeTTFTMS})
+	}
+	ranked, err := RankGroupCandidates(mode, key.MaxRateMultiplier, candidates)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Group, 0, len(ranked))
+	for _, candidate := range ranked {
+		out = append(out, groupByID[candidate.GroupID])
+	}
+	if len(out) == 0 {
+		return nil, infraerrors.ServiceUnavailable("NO_HEALTHY_ROUTE_GROUP", "no healthy group matches API key routing policy")
+	}
+	return out, nil
+}
+
+func buildAPIKeyPreferences(disabled, custom []int64) []APIKeyGroupPreference {
+	seen := make(map[int64]struct{}, len(disabled)+len(custom))
+	out := make([]APIKeyGroupPreference, 0, len(disabled)+len(custom))
+	for _, id := range custom {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, APIKeyGroupPreference{GroupID: id, Position: len(out)})
+	}
+	for _, id := range disabled {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, APIKeyGroupPreference{GroupID: id, Disabled: true, Position: len(out)})
+	}
+	return out
+}
+
+func (s *APIKeyService) validateRoutingPreferences(ctx context.Context, user *User, mode string, disabled, custom []int64) error {
+	if mode == "" {
+		mode = RouteModeFixed
+	}
+	if mode == RouteModeCustom && len(custom) == 0 {
+		return infraerrors.BadRequest("API_KEY_CUSTOM_GROUPS_REQUIRED", "custom routing requires at least one group")
+	}
+	ids := disabled
+	if mode == RouteModeCustom {
+		ids = custom
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return infraerrors.BadRequest("API_KEY_ROUTE_GROUP_INVALID", "routing group id must be positive")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		group, err := s.groupRepo.GetByID(ctx, id)
+		if err != nil || !s.canUserBindGroup(ctx, user, group) {
+			return ErrGroupNotAllowed
+		}
+	}
+	return nil
 }
 
 // APIKeyRateLimitData holds rate limit usage and window state for an API key.
@@ -209,11 +351,15 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name        string   `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	Name              string   `json:"name"`
+	GroupID           *int64   `json:"group_id"`
+	RouteMode         string   `json:"route_mode"`
+	MaxRateMultiplier *float64 `json:"max_rate_multiplier"`
+	DisabledGroupIDs  []int64  `json:"disabled_group_ids"`
+	CustomGroupIDs    []int64  `json:"custom_group_ids"`
+	CustomKey         *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist       []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist       []string `json:"ip_blacklist"` // IP 黑名单
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -227,11 +373,16 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name        *string   `json:"name"`
-	GroupID     *int64    `json:"group_id"`
-	Status      *string   `json:"status"`
-	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
-	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
+	Name                 *string   `json:"name"`
+	GroupID              *int64    `json:"group_id"`
+	RouteMode            *string   `json:"route_mode"`
+	MaxRateMultiplier    *float64  `json:"max_rate_multiplier"`
+	MaxRateMultiplierSet bool      `json:"-"`
+	DisabledGroupIDs     *[]int64  `json:"disabled_group_ids"`
+	CustomGroupIDs       *[]int64  `json:"custom_group_ids"`
+	Status               *string   `json:"status"`
+	IPWhitelist          *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
+	IPBlacklist          *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -262,6 +413,16 @@ func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
 	if req.ExpiresInDays != nil && *req.ExpiresInDays <= 0 {
 		return infraerrors.BadRequest("API_KEY_EXPIRY_INVALID", "expires_in_days must be greater than zero")
 	}
+	if req.RouteMode != "" {
+		if err := ValidateRouteMode(req.RouteMode); err != nil {
+			return infraerrors.BadRequest("API_KEY_ROUTE_MODE_INVALID", err.Error())
+		}
+	}
+	if req.MaxRateMultiplier != nil {
+		if err := validateAPIKeyLimit(*req.MaxRateMultiplier); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -271,6 +432,16 @@ func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
 			if err := validateAPIKeyLimit(*v); err != nil {
 				return err
 			}
+		}
+	}
+	if req.RouteMode != nil {
+		if err := ValidateRouteMode(*req.RouteMode); err != nil {
+			return infraerrors.BadRequest("API_KEY_ROUTE_MODE_INVALID", err.Error())
+		}
+	}
+	if req.MaxRateMultiplier != nil {
+		if err := validateAPIKeyLimit(*req.MaxRateMultiplier); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -467,6 +638,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
+	if err := s.validateRoutingPreferences(ctx, user, req.RouteMode, req.DisabledGroupIDs, req.CustomGroupIDs); err != nil {
+		return nil, err
+	}
 
 	// 验证 IP 白名单格式
 	if len(req.IPWhitelist) > 0 {
@@ -532,18 +706,23 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        html.EscapeString(req.Name),
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		UserID:            userID,
+		Key:               key,
+		Name:              html.EscapeString(req.Name),
+		GroupID:           req.GroupID,
+		Status:            StatusActive,
+		RouteMode:         req.RouteMode,
+		MaxRateMultiplier: req.MaxRateMultiplier,
+		IPWhitelist:       req.IPWhitelist,
+		IPBlacklist:       req.IPBlacklist,
+		Quota:             req.Quota,
+		QuotaUsed:         0,
+		RateLimit5h:       req.RateLimit5h,
+		RateLimit1d:       req.RateLimit1d,
+		RateLimit7d:       req.RateLimit7d,
+	}
+	if apiKey.RouteMode == "" {
+		apiKey.RouteMode = RouteModeFixed
 	}
 
 	// Set expiration time if specified
@@ -554,6 +733,12 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
 		return nil, fmt.Errorf("create api key: %w", err)
+	}
+	apiKey.GroupPreferences = buildAPIKeyPreferences(req.DisabledGroupIDs, req.CustomGroupIDs)
+	if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok && len(apiKey.GroupPreferences) > 0 {
+		if err := repo.SyncGroupPreferences(ctx, apiKey.ID, apiKey.GroupPreferences); err != nil {
+			return nil, fmt.Errorf("save API key group preferences: %w", err)
+		}
 	}
 
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)
@@ -769,6 +954,33 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if apiKey.UserID != userID {
 		return nil, ErrInsufficientPerms
 	}
+	if req.RouteMode != nil || req.DisabledGroupIDs != nil || req.CustomGroupIDs != nil {
+		user, userErr := s.userRepo.GetByID(ctx, userID)
+		if userErr != nil {
+			return nil, fmt.Errorf("get user: %w", userErr)
+		}
+		mode := apiKey.RouteMode
+		if req.RouteMode != nil {
+			mode = *req.RouteMode
+		}
+		disabled, custom := make([]int64, 0), make([]int64, 0)
+		for _, pref := range apiKey.GroupPreferences {
+			if pref.Disabled {
+				disabled = append(disabled, pref.GroupID)
+			} else {
+				custom = append(custom, pref.GroupID)
+			}
+		}
+		if req.DisabledGroupIDs != nil {
+			disabled = *req.DisabledGroupIDs
+		}
+		if req.CustomGroupIDs != nil {
+			custom = *req.CustomGroupIDs
+		}
+		if err := s.validateRoutingPreferences(ctx, user, mode, disabled, custom); err != nil {
+			return nil, err
+		}
+	}
 
 	// 验证 IP 白名单格式
 	if req.IPWhitelist != nil && len(*req.IPWhitelist) > 0 {
@@ -815,6 +1027,14 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 		apiKey.GroupID = req.GroupID
 		fields.GroupID = true
+	}
+	if req.RouteMode != nil {
+		apiKey.RouteMode = *req.RouteMode
+		fields.RouteMode = true
+	}
+	if req.MaxRateMultiplierSet || req.MaxRateMultiplier != nil {
+		apiKey.MaxRateMultiplier = req.MaxRateMultiplier
+		fields.MaxRateMultiplier = true
 	}
 
 	if req.Status != nil {
@@ -900,6 +1120,21 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 	if err := s.apiKeyRepo.Update(ctx, apiKey, fields); err != nil {
 		return nil, fmt.Errorf("update api key: %w", err)
+	}
+	if req.DisabledGroupIDs != nil || req.CustomGroupIDs != nil {
+		disabled, custom := []int64{}, []int64{}
+		if req.DisabledGroupIDs != nil {
+			disabled = *req.DisabledGroupIDs
+		}
+		if req.CustomGroupIDs != nil {
+			custom = *req.CustomGroupIDs
+		}
+		apiKey.GroupPreferences = buildAPIKeyPreferences(disabled, custom)
+		if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok {
+			if err := repo.SyncGroupPreferences(ctx, apiKey.ID, apiKey.GroupPreferences); err != nil {
+				return nil, fmt.Errorf("save API key group preferences: %w", err)
+			}
+		}
 	}
 
 	s.InvalidateAuthCacheByKey(ctx, apiKey.Key)

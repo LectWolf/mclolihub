@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/ent/batchimageevent"
@@ -25,6 +26,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -131,6 +134,33 @@ func (f TraverseAPIKey) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.APIKeyQuery", q)
+}
+
+// The APIKeyGroupPreferenceFunc type is an adapter to allow the use of ordinary function as a Querier.
+type APIKeyGroupPreferenceFunc func(context.Context, *ent.APIKeyGroupPreferenceQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f APIKeyGroupPreferenceFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.APIKeyGroupPreferenceQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.APIKeyGroupPreferenceQuery", q)
+}
+
+// The TraverseAPIKeyGroupPreference type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseAPIKeyGroupPreference func(context.Context, *ent.APIKeyGroupPreferenceQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseAPIKeyGroupPreference) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseAPIKeyGroupPreference) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.APIKeyGroupPreferenceQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.APIKeyGroupPreferenceQuery", q)
 }
 
 // The AccountFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -563,6 +593,60 @@ func (f TraverseGroup) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.GroupQuery", q)
+}
+
+// The GroupHealthEventFunc type is an adapter to allow the use of ordinary function as a Querier.
+type GroupHealthEventFunc func(context.Context, *ent.GroupHealthEventQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f GroupHealthEventFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.GroupHealthEventQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.GroupHealthEventQuery", q)
+}
+
+// The TraverseGroupHealthEvent type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseGroupHealthEvent func(context.Context, *ent.GroupHealthEventQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseGroupHealthEvent) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseGroupHealthEvent) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.GroupHealthEventQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.GroupHealthEventQuery", q)
+}
+
+// The GroupHealthStateFunc type is an adapter to allow the use of ordinary function as a Querier.
+type GroupHealthStateFunc func(context.Context, *ent.GroupHealthStateQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f GroupHealthStateFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.GroupHealthStateQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.GroupHealthStateQuery", q)
+}
+
+// The TraverseGroupHealthState type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseGroupHealthState func(context.Context, *ent.GroupHealthStateQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseGroupHealthState) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseGroupHealthState) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.GroupHealthStateQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.GroupHealthStateQuery", q)
 }
 
 // The IdempotencyRecordFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -1164,6 +1248,8 @@ func NewQuery(q ent.Query) (Query, error) {
 	switch q := q.(type) {
 	case *ent.APIKeyQuery:
 		return &query[*ent.APIKeyQuery, predicate.APIKey, apikey.OrderOption]{typ: ent.TypeAPIKey, tq: q}, nil
+	case *ent.APIKeyGroupPreferenceQuery:
+		return &query[*ent.APIKeyGroupPreferenceQuery, predicate.APIKeyGroupPreference, apikeygrouppreference.OrderOption]{typ: ent.TypeAPIKeyGroupPreference, tq: q}, nil
 	case *ent.AccountQuery:
 		return &query[*ent.AccountQuery, predicate.Account, account.OrderOption]{typ: ent.TypeAccount, tq: q}, nil
 	case *ent.AccountGroupQuery:
@@ -1196,6 +1282,10 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.ErrorPassthroughRuleQuery, predicate.ErrorPassthroughRule, errorpassthroughrule.OrderOption]{typ: ent.TypeErrorPassthroughRule, tq: q}, nil
 	case *ent.GroupQuery:
 		return &query[*ent.GroupQuery, predicate.Group, group.OrderOption]{typ: ent.TypeGroup, tq: q}, nil
+	case *ent.GroupHealthEventQuery:
+		return &query[*ent.GroupHealthEventQuery, predicate.GroupHealthEvent, grouphealthevent.OrderOption]{typ: ent.TypeGroupHealthEvent, tq: q}, nil
+	case *ent.GroupHealthStateQuery:
+		return &query[*ent.GroupHealthStateQuery, predicate.GroupHealthState, grouphealthstate.OrderOption]{typ: ent.TypeGroupHealthState, tq: q}, nil
 	case *ent.IdempotencyRecordQuery:
 		return &query[*ent.IdempotencyRecordQuery, predicate.IdempotencyRecord, idempotencyrecord.OrderOption]{typ: ent.TypeIdempotencyRecord, tq: q}, nil
 	case *ent.IdentityAdoptionDecisionQuery:

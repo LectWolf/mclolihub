@@ -321,8 +321,9 @@ const statusClass = computed(() => {
   if (isTempUnschedulable.value) {
     return 'badge-warning'
   }
-  if (props.account.status !== 'active') {
-    return props.account.status === 'error' ? 'badge-danger' : 'badge-gray'
+	if (props.account.status !== 'active') {
+		if (props.account.status === 'balance_insufficient') return 'badge-info'
+		return props.account.status === 'error' ? 'badge-danger' : 'badge-gray'
   }
   if (isQuotaExceeded.value) {
     return 'badge-warning'

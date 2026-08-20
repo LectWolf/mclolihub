@@ -810,6 +810,7 @@ export default {
         accounts: 'Accounts',
         capacity: 'Capacity',
         usage: 'Usage',
+        health: 'Health',
         status: 'Status',
         actions: 'Actions',
         billingType: 'Billing Type',
@@ -825,6 +826,10 @@ export default {
       accountsRateLimited: 'Limited:',
       accountsTotal: 'Total:',
       accountsUnit: '',
+      healthMetrics: {
+        realP50: 'Real P50',
+        availability: '6h availability',
+      },
       rateAndAccounts: '{rate}x rate · {count} accounts',
       accountsCount: '{count} accounts',
       rateLabel: 'rate',

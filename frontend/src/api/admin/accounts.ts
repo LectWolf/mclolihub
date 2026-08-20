@@ -197,6 +197,11 @@ export async function update(id: number, updates: UpdateAccountRequest): Promise
   return data
 }
 
+export async function restoreBalance(id: number): Promise<{ account_id: number; status: string }> {
+  const { data } = await apiClient.post<{ account_id: number; status: string }>(`/admin/accounts/${id}/restore-balance`)
+  return data
+}
+
 /**
  * Check mixed-channel risk for account-group binding.
  */
@@ -992,6 +997,7 @@ export const accountsAPI = {
   create,
   duplicate,
   update,
+  restoreBalance,
   checkMixedChannelRisk,
   delete: deleteAccount,
   toggleStatus,

@@ -1,0 +1,56 @@
+services:
+  aihub:
+    image: ${AIHUB_IMAGE:-ghcr.io/lectwolf/mclolihub:0.1.179.1}
+    container_name: aihub
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-8080}:8080"
+    volumes:
+      - /data/aihub/data:/app/data
+    environment:
+      AUTO_SETUP: "true"
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      SERVER_MODE: release
+      RUN_MODE: ${RUN_MODE:-standard}
+      TZ: ${TZ:-Asia/Shanghai}
+      GOMAXPROCS: ${GOMAXPROCS:-2}
+      GOMEMLIMIT: ${GOMEMLIMIT:-640MiB}
+
+      DATABASE_HOST: ${DATABASE_HOST:?DATABASE_HOST is required}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_USER: ${DATABASE_USER:?DATABASE_USER is required}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+      DATABASE_DBNAME: ${DATABASE_DBNAME:-sub2api}
+      DATABASE_SSLMODE: ${DATABASE_SSLMODE:-disable}
+      DATABASE_MAX_OPEN_CONNS: ${DATABASE_MAX_OPEN_CONNS:-15}
+      DATABASE_MAX_IDLE_CONNS: ${DATABASE_MAX_IDLE_CONNS:-5}
+      DATABASE_CONN_MAX_LIFETIME_MINUTES: ${DATABASE_CONN_MAX_LIFETIME_MINUTES:-30}
+      DATABASE_CONN_MAX_IDLE_TIME_MINUTES: ${DATABASE_CONN_MAX_IDLE_TIME_MINUTES:-5}
+
+      REDIS_HOST: ${REDIS_HOST:?REDIS_HOST is required}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_USERNAME: ${REDIS_USERNAME:-}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      REDIS_POOL_SIZE: ${REDIS_POOL_SIZE:-64}
+      REDIS_MIN_IDLE_CONNS: ${REDIS_MIN_IDLE_CONNS:-5}
+      REDIS_ENABLE_TLS: ${REDIS_ENABLE_TLS:-false}
+
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sub2api.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY is required}
+      UPDATE_GITHUB_TOKEN: ${UPDATE_GITHUB_TOKEN:-}
+    mem_limit: ${AIHUB_MEMORY_LIMIT:-768m}
+    mem_reservation: ${AIHUB_MEMORY_RESERVATION:-256m}
+    cpus: ${AIHUB_CPU_LIMIT:-1.5}
+    networks:
+      - onepanel
+
+networks:
+  onepanel:
+    external: true
+    name: ${ONEPANEL_NETWORK:-1panel-network}

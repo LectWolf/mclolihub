@@ -23,9 +23,12 @@ type APIKeyAuthSnapshot struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"` // Expiration time (nil = never expires)
 
 	// Rate limit configuration (only limits, not usage - usage read from Redis at check time)
-	RateLimit5h float64 `json:"rate_limit_5h"`
-	RateLimit1d float64 `json:"rate_limit_1d"`
-	RateLimit7d float64 `json:"rate_limit_7d"`
+	RateLimit5h       float64                 `json:"rate_limit_5h"`
+	RateLimit1d       float64                 `json:"rate_limit_1d"`
+	RateLimit7d       float64                 `json:"rate_limit_7d"`
+	RouteMode         string                  `json:"route_mode"`
+	MaxRateMultiplier *float64                `json:"max_rate_multiplier,omitempty"`
+	GroupPreferences  []APIKeyGroupPreference `json:"group_preferences,omitempty"`
 }
 
 // APIKeyAuthUserSnapshot 用户快照
@@ -132,6 +135,9 @@ type APIKeyAuthGroupSnapshot struct {
 	ProfitControlEnabled bool    `json:"profit_control_enabled"`
 	ProfitMinMargin      float64 `json:"profit_min_margin"`
 	ProfitSafetyBuffer   float64 `json:"profit_safety_buffer"`
+	ProbeEnabled         bool    `json:"probe_enabled"`
+	ProbeModel           string  `json:"probe_model"`
+	ProbeIntervalSeconds int     `json:"probe_interval_seconds"`
 }
 
 // APIKeyAuthCacheEntry 缓存条目，支持负缓存

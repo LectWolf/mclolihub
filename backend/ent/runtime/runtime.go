@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	"github.com/Wei-Shaw/sub2api/ent/authidentitychannel"
 	"github.com/Wei-Shaw/sub2api/ent/batchimageevent"
@@ -22,6 +23,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/compositemodelroute"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
@@ -107,44 +110,73 @@ func init() {
 			return nil
 		}
 	}()
+	// apikeyDescRouteMode is the schema descriptor for route_mode field.
+	apikeyDescRouteMode := apikeyFields[4].Descriptor()
+	// apikey.DefaultRouteMode holds the default value on creation for the route_mode field.
+	apikey.DefaultRouteMode = apikeyDescRouteMode.Default.(string)
+	// apikey.RouteModeValidator is a validator for the "route_mode" field. It is called by the builders before save.
+	apikey.RouteModeValidator = apikeyDescRouteMode.Validators[0].(func(string) error)
 	// apikeyDescStatus is the schema descriptor for status field.
-	apikeyDescStatus := apikeyFields[4].Descriptor()
+	apikeyDescStatus := apikeyFields[6].Descriptor()
 	// apikey.DefaultStatus holds the default value on creation for the status field.
 	apikey.DefaultStatus = apikeyDescStatus.Default.(string)
 	// apikey.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	apikey.StatusValidator = apikeyDescStatus.Validators[0].(func(string) error)
 	// apikeyDescQuota is the schema descriptor for quota field.
-	apikeyDescQuota := apikeyFields[8].Descriptor()
+	apikeyDescQuota := apikeyFields[10].Descriptor()
 	// apikey.DefaultQuota holds the default value on creation for the quota field.
 	apikey.DefaultQuota = apikeyDescQuota.Default.(float64)
 	// apikeyDescQuotaUsed is the schema descriptor for quota_used field.
-	apikeyDescQuotaUsed := apikeyFields[9].Descriptor()
+	apikeyDescQuotaUsed := apikeyFields[11].Descriptor()
 	// apikey.DefaultQuotaUsed holds the default value on creation for the quota_used field.
 	apikey.DefaultQuotaUsed = apikeyDescQuotaUsed.Default.(float64)
 	// apikeyDescRateLimit5h is the schema descriptor for rate_limit_5h field.
-	apikeyDescRateLimit5h := apikeyFields[11].Descriptor()
+	apikeyDescRateLimit5h := apikeyFields[13].Descriptor()
 	// apikey.DefaultRateLimit5h holds the default value on creation for the rate_limit_5h field.
 	apikey.DefaultRateLimit5h = apikeyDescRateLimit5h.Default.(float64)
 	// apikeyDescRateLimit1d is the schema descriptor for rate_limit_1d field.
-	apikeyDescRateLimit1d := apikeyFields[12].Descriptor()
+	apikeyDescRateLimit1d := apikeyFields[14].Descriptor()
 	// apikey.DefaultRateLimit1d holds the default value on creation for the rate_limit_1d field.
 	apikey.DefaultRateLimit1d = apikeyDescRateLimit1d.Default.(float64)
 	// apikeyDescRateLimit7d is the schema descriptor for rate_limit_7d field.
-	apikeyDescRateLimit7d := apikeyFields[13].Descriptor()
+	apikeyDescRateLimit7d := apikeyFields[15].Descriptor()
 	// apikey.DefaultRateLimit7d holds the default value on creation for the rate_limit_7d field.
 	apikey.DefaultRateLimit7d = apikeyDescRateLimit7d.Default.(float64)
 	// apikeyDescUsage5h is the schema descriptor for usage_5h field.
-	apikeyDescUsage5h := apikeyFields[14].Descriptor()
+	apikeyDescUsage5h := apikeyFields[16].Descriptor()
 	// apikey.DefaultUsage5h holds the default value on creation for the usage_5h field.
 	apikey.DefaultUsage5h = apikeyDescUsage5h.Default.(float64)
 	// apikeyDescUsage1d is the schema descriptor for usage_1d field.
-	apikeyDescUsage1d := apikeyFields[15].Descriptor()
+	apikeyDescUsage1d := apikeyFields[17].Descriptor()
 	// apikey.DefaultUsage1d holds the default value on creation for the usage_1d field.
 	apikey.DefaultUsage1d = apikeyDescUsage1d.Default.(float64)
 	// apikeyDescUsage7d is the schema descriptor for usage_7d field.
-	apikeyDescUsage7d := apikeyFields[16].Descriptor()
+	apikeyDescUsage7d := apikeyFields[18].Descriptor()
 	// apikey.DefaultUsage7d holds the default value on creation for the usage_7d field.
 	apikey.DefaultUsage7d = apikeyDescUsage7d.Default.(float64)
+	apikeygrouppreferenceMixin := schema.APIKeyGroupPreference{}.Mixin()
+	apikeygrouppreferenceMixinFields0 := apikeygrouppreferenceMixin[0].Fields()
+	_ = apikeygrouppreferenceMixinFields0
+	apikeygrouppreferenceFields := schema.APIKeyGroupPreference{}.Fields()
+	_ = apikeygrouppreferenceFields
+	// apikeygrouppreferenceDescCreatedAt is the schema descriptor for created_at field.
+	apikeygrouppreferenceDescCreatedAt := apikeygrouppreferenceMixinFields0[0].Descriptor()
+	// apikeygrouppreference.DefaultCreatedAt holds the default value on creation for the created_at field.
+	apikeygrouppreference.DefaultCreatedAt = apikeygrouppreferenceDescCreatedAt.Default.(func() time.Time)
+	// apikeygrouppreferenceDescUpdatedAt is the schema descriptor for updated_at field.
+	apikeygrouppreferenceDescUpdatedAt := apikeygrouppreferenceMixinFields0[1].Descriptor()
+	// apikeygrouppreference.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	apikeygrouppreference.DefaultUpdatedAt = apikeygrouppreferenceDescUpdatedAt.Default.(func() time.Time)
+	// apikeygrouppreference.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	apikeygrouppreference.UpdateDefaultUpdatedAt = apikeygrouppreferenceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// apikeygrouppreferenceDescDisabled is the schema descriptor for disabled field.
+	apikeygrouppreferenceDescDisabled := apikeygrouppreferenceFields[2].Descriptor()
+	// apikeygrouppreference.DefaultDisabled holds the default value on creation for the disabled field.
+	apikeygrouppreference.DefaultDisabled = apikeygrouppreferenceDescDisabled.Default.(bool)
+	// apikeygrouppreferenceDescPosition is the schema descriptor for position field.
+	apikeygrouppreferenceDescPosition := apikeygrouppreferenceFields[3].Descriptor()
+	// apikeygrouppreference.DefaultPosition holds the default value on creation for the position field.
+	apikeygrouppreference.DefaultPosition = apikeygrouppreferenceDescPosition.Default.(int)
 	accountMixin := schema.Account{}.Mixin()
 	accountMixinHooks1 := accountMixin[1].Hooks()
 	account.Hooks[0] = accountMixinHooks1[0]
@@ -1205,6 +1237,134 @@ func init() {
 	groupDescProfitSafetyBuffer := groupFields[58].Descriptor()
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+	// groupDescProbeEnabled is the schema descriptor for probe_enabled field.
+	groupDescProbeEnabled := groupFields[59].Descriptor()
+	// group.DefaultProbeEnabled holds the default value on creation for the probe_enabled field.
+	group.DefaultProbeEnabled = groupDescProbeEnabled.Default.(bool)
+	// groupDescProbeModel is the schema descriptor for probe_model field.
+	groupDescProbeModel := groupFields[60].Descriptor()
+	// group.DefaultProbeModel holds the default value on creation for the probe_model field.
+	group.DefaultProbeModel = groupDescProbeModel.Default.(string)
+	// group.ProbeModelValidator is a validator for the "probe_model" field. It is called by the builders before save.
+	group.ProbeModelValidator = groupDescProbeModel.Validators[0].(func(string) error)
+	// groupDescProbeIntervalSeconds is the schema descriptor for probe_interval_seconds field.
+	groupDescProbeIntervalSeconds := groupFields[61].Descriptor()
+	// group.DefaultProbeIntervalSeconds holds the default value on creation for the probe_interval_seconds field.
+	group.DefaultProbeIntervalSeconds = groupDescProbeIntervalSeconds.Default.(int)
+	grouphealtheventMixin := schema.GroupHealthEvent{}.Mixin()
+	grouphealtheventMixinFields0 := grouphealtheventMixin[0].Fields()
+	_ = grouphealtheventMixinFields0
+	grouphealtheventFields := schema.GroupHealthEvent{}.Fields()
+	_ = grouphealtheventFields
+	// grouphealtheventDescCreatedAt is the schema descriptor for created_at field.
+	grouphealtheventDescCreatedAt := grouphealtheventMixinFields0[0].Descriptor()
+	// grouphealthevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grouphealthevent.DefaultCreatedAt = grouphealtheventDescCreatedAt.Default.(func() time.Time)
+	// grouphealtheventDescUpdatedAt is the schema descriptor for updated_at field.
+	grouphealtheventDescUpdatedAt := grouphealtheventMixinFields0[1].Descriptor()
+	// grouphealthevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	grouphealthevent.DefaultUpdatedAt = grouphealtheventDescUpdatedAt.Default.(func() time.Time)
+	// grouphealthevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	grouphealthevent.UpdateDefaultUpdatedAt = grouphealtheventDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// grouphealtheventDescKind is the schema descriptor for kind field.
+	grouphealtheventDescKind := grouphealtheventFields[2].Descriptor()
+	// grouphealthevent.DefaultKind holds the default value on creation for the kind field.
+	grouphealthevent.DefaultKind = grouphealtheventDescKind.Default.(string)
+	// grouphealthevent.KindValidator is a validator for the "kind" field. It is called by the builders before save.
+	grouphealthevent.KindValidator = grouphealtheventDescKind.Validators[0].(func(string) error)
+	// grouphealtheventDescSuccess is the schema descriptor for success field.
+	grouphealtheventDescSuccess := grouphealtheventFields[3].Descriptor()
+	// grouphealthevent.DefaultSuccess holds the default value on creation for the success field.
+	grouphealthevent.DefaultSuccess = grouphealtheventDescSuccess.Default.(bool)
+	// grouphealtheventDescIsProbe is the schema descriptor for is_probe field.
+	grouphealtheventDescIsProbe := grouphealtheventFields[4].Descriptor()
+	// grouphealthevent.DefaultIsProbe holds the default value on creation for the is_probe field.
+	grouphealthevent.DefaultIsProbe = grouphealtheventDescIsProbe.Default.(bool)
+	// grouphealtheventDescSemanticStarted is the schema descriptor for semantic_started field.
+	grouphealtheventDescSemanticStarted := grouphealtheventFields[5].Descriptor()
+	// grouphealthevent.DefaultSemanticStarted holds the default value on creation for the semantic_started field.
+	grouphealthevent.DefaultSemanticStarted = grouphealtheventDescSemanticStarted.Default.(bool)
+	// grouphealtheventDescErrorCategory is the schema descriptor for error_category field.
+	grouphealtheventDescErrorCategory := grouphealtheventFields[6].Descriptor()
+	// grouphealthevent.ErrorCategoryValidator is a validator for the "error_category" field. It is called by the builders before save.
+	grouphealthevent.ErrorCategoryValidator = grouphealtheventDescErrorCategory.Validators[0].(func(string) error)
+	// grouphealtheventDescTtftMs is the schema descriptor for ttft_ms field.
+	grouphealtheventDescTtftMs := grouphealtheventFields[7].Descriptor()
+	// grouphealthevent.DefaultTtftMs holds the default value on creation for the ttft_ms field.
+	grouphealthevent.DefaultTtftMs = grouphealtheventDescTtftMs.Default.(int)
+	// grouphealtheventDescTotalMs is the schema descriptor for total_ms field.
+	grouphealtheventDescTotalMs := grouphealtheventFields[8].Descriptor()
+	// grouphealthevent.DefaultTotalMs holds the default value on creation for the total_ms field.
+	grouphealthevent.DefaultTotalMs = grouphealtheventDescTotalMs.Default.(int)
+	grouphealthstateMixin := schema.GroupHealthState{}.Mixin()
+	grouphealthstateMixinFields0 := grouphealthstateMixin[0].Fields()
+	_ = grouphealthstateMixinFields0
+	grouphealthstateFields := schema.GroupHealthState{}.Fields()
+	_ = grouphealthstateFields
+	// grouphealthstateDescCreatedAt is the schema descriptor for created_at field.
+	grouphealthstateDescCreatedAt := grouphealthstateMixinFields0[0].Descriptor()
+	// grouphealthstate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	grouphealthstate.DefaultCreatedAt = grouphealthstateDescCreatedAt.Default.(func() time.Time)
+	// grouphealthstateDescUpdatedAt is the schema descriptor for updated_at field.
+	grouphealthstateDescUpdatedAt := grouphealthstateMixinFields0[1].Descriptor()
+	// grouphealthstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	grouphealthstate.DefaultUpdatedAt = grouphealthstateDescUpdatedAt.Default.(func() time.Time)
+	// grouphealthstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	grouphealthstate.UpdateDefaultUpdatedAt = grouphealthstateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// grouphealthstateDescStatus is the schema descriptor for status field.
+	grouphealthstateDescStatus := grouphealthstateFields[1].Descriptor()
+	// grouphealthstate.DefaultStatus holds the default value on creation for the status field.
+	grouphealthstate.DefaultStatus = grouphealthstateDescStatus.Default.(string)
+	// grouphealthstate.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	grouphealthstate.StatusValidator = grouphealthstateDescStatus.Validators[0].(func(string) error)
+	// grouphealthstateDescFailureCount is the schema descriptor for failure_count field.
+	grouphealthstateDescFailureCount := grouphealthstateFields[6].Descriptor()
+	// grouphealthstate.DefaultFailureCount holds the default value on creation for the failure_count field.
+	grouphealthstate.DefaultFailureCount = grouphealthstateDescFailureCount.Default.(int)
+	// grouphealthstateDescProbeTtftMs is the schema descriptor for probe_ttft_ms field.
+	grouphealthstateDescProbeTtftMs := grouphealthstateFields[7].Descriptor()
+	// grouphealthstate.DefaultProbeTtftMs holds the default value on creation for the probe_ttft_ms field.
+	grouphealthstate.DefaultProbeTtftMs = grouphealthstateDescProbeTtftMs.Default.(int)
+	// grouphealthstateDescProbeAvailability6h is the schema descriptor for probe_availability_6h field.
+	grouphealthstateDescProbeAvailability6h := grouphealthstateFields[8].Descriptor()
+	// grouphealthstate.DefaultProbeAvailability6h holds the default value on creation for the probe_availability_6h field.
+	grouphealthstate.DefaultProbeAvailability6h = grouphealthstateDescProbeAvailability6h.Default.(float64)
+	// grouphealthstateDescProbeTtftAvgMs is the schema descriptor for probe_ttft_avg_ms field.
+	grouphealthstateDescProbeTtftAvgMs := grouphealthstateFields[9].Descriptor()
+	// grouphealthstate.DefaultProbeTtftAvgMs holds the default value on creation for the probe_ttft_avg_ms field.
+	grouphealthstate.DefaultProbeTtftAvgMs = grouphealthstateDescProbeTtftAvgMs.Default.(int)
+	// grouphealthstateDescProbeTtftP95Ms is the schema descriptor for probe_ttft_p95_ms field.
+	grouphealthstateDescProbeTtftP95Ms := grouphealthstateFields[10].Descriptor()
+	// grouphealthstate.DefaultProbeTtftP95Ms holds the default value on creation for the probe_ttft_p95_ms field.
+	grouphealthstate.DefaultProbeTtftP95Ms = grouphealthstateDescProbeTtftP95Ms.Default.(int)
+	// grouphealthstateDescProbeSamples is the schema descriptor for probe_samples field.
+	grouphealthstateDescProbeSamples := grouphealthstateFields[11].Descriptor()
+	// grouphealthstate.DefaultProbeSamples holds the default value on creation for the probe_samples field.
+	grouphealthstate.DefaultProbeSamples = grouphealthstateDescProbeSamples.Default.(int)
+	// grouphealthstateDescRealTtftP50Ms is the schema descriptor for real_ttft_p50_ms field.
+	grouphealthstateDescRealTtftP50Ms := grouphealthstateFields[12].Descriptor()
+	// grouphealthstate.DefaultRealTtftP50Ms holds the default value on creation for the real_ttft_p50_ms field.
+	grouphealthstate.DefaultRealTtftP50Ms = grouphealthstateDescRealTtftP50Ms.Default.(int)
+	// grouphealthstateDescRealTtftAvgMs is the schema descriptor for real_ttft_avg_ms field.
+	grouphealthstateDescRealTtftAvgMs := grouphealthstateFields[13].Descriptor()
+	// grouphealthstate.DefaultRealTtftAvgMs holds the default value on creation for the real_ttft_avg_ms field.
+	grouphealthstate.DefaultRealTtftAvgMs = grouphealthstateDescRealTtftAvgMs.Default.(int)
+	// grouphealthstateDescRealTtftP95Ms is the schema descriptor for real_ttft_p95_ms field.
+	grouphealthstateDescRealTtftP95Ms := grouphealthstateFields[14].Descriptor()
+	// grouphealthstate.DefaultRealTtftP95Ms holds the default value on creation for the real_ttft_p95_ms field.
+	grouphealthstate.DefaultRealTtftP95Ms = grouphealthstateDescRealTtftP95Ms.Default.(int)
+	// grouphealthstateDescRealTtftSamples is the schema descriptor for real_ttft_samples field.
+	grouphealthstateDescRealTtftSamples := grouphealthstateFields[15].Descriptor()
+	// grouphealthstate.DefaultRealTtftSamples holds the default value on creation for the real_ttft_samples field.
+	grouphealthstate.DefaultRealTtftSamples = grouphealthstateDescRealTtftSamples.Default.(int)
+	// grouphealthstateDescRealAvailability6h is the schema descriptor for real_availability_6h field.
+	grouphealthstateDescRealAvailability6h := grouphealthstateFields[16].Descriptor()
+	// grouphealthstate.DefaultRealAvailability6h holds the default value on creation for the real_availability_6h field.
+	grouphealthstate.DefaultRealAvailability6h = grouphealthstateDescRealAvailability6h.Default.(float64)
+	// grouphealthstateDescRealTotalAvgMs is the schema descriptor for real_total_avg_ms field.
+	grouphealthstateDescRealTotalAvgMs := grouphealthstateFields[17].Descriptor()
+	// grouphealthstate.DefaultRealTotalAvgMs holds the default value on creation for the real_total_avg_ms field.
+	grouphealthstate.DefaultRealTotalAvgMs = grouphealthstateDescRealTotalAvgMs.Default.(int)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0

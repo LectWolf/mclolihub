@@ -2,31 +2,43 @@
  * System API endpoints for admin operations
  */
 
-import { apiClient } from '../client'
+import { apiClient } from "../client";
 
 export interface ReleaseInfo {
-  name: string
-  body: string
-  published_at: string
-  html_url: string
+  name: string;
+  body: string;
+  published_at: string;
+  html_url: string;
+}
+
+export interface UpdateChannelInfo {
+  current_version: string;
+  latest_version: string;
+  has_update: boolean;
+  release_info?: ReleaseInfo;
+  warning?: string;
 }
 
 export interface VersionInfo {
-  current_version: string
-  latest_version: string
-  has_update: boolean
-  release_info?: ReleaseInfo
-  cached: boolean
-  warning?: string
-  build_type: string // "source" for manual builds, "release" for CI builds
+  current_version: string;
+  latest_version: string;
+  has_update: boolean;
+  release_info?: ReleaseInfo;
+  cached: boolean;
+  warning?: string;
+  build_type: string; // "source" for manual builds, "release" for CI builds
+  upstream?: UpdateChannelInfo;
+  custom?: UpdateChannelInfo;
 }
 
 /**
  * Get current version
  */
 export async function getVersion(): Promise<{ version: string }> {
-  const { data } = await apiClient.get<{ version: string }>('/admin/system/version')
-  return data
+  const { data } = await apiClient.get<{ version: string }>(
+    "/admin/system/version",
+  );
+  return data;
 }
 
 /**
@@ -34,31 +46,36 @@ export async function getVersion(): Promise<{ version: string }> {
  * @param force - Force refresh from GitHub API
  */
 export async function checkUpdates(force = false): Promise<VersionInfo> {
-  const { data } = await apiClient.get<VersionInfo>('/admin/system/check-updates', {
-    params: force ? { force: 'true' } : undefined
-  })
-  return data
+  const { data } = await apiClient.get<VersionInfo>(
+    "/admin/system/check-updates",
+    {
+      params: force ? { force: "true" } : undefined,
+    },
+  );
+  return data;
 }
 
 export interface UpdateResult {
-  message: string
-  need_restart: boolean
+  message: string;
+  need_restart: boolean;
 }
 
 export interface RollbackVersionInfo {
-  version: string
-  published_at: string
-  html_url: string
+  version: string;
+  published_at: string;
+  html_url: string;
 }
 
 /**
  * Get versions available for rollback (up to 3 versions older than current)
  */
-export async function getRollbackVersions(): Promise<{ versions: RollbackVersionInfo[] }> {
+export async function getRollbackVersions(): Promise<{
+  versions: RollbackVersionInfo[];
+}> {
   const { data } = await apiClient.get<{ versions: RollbackVersionInfo[] }>(
-    '/admin/system/rollback-versions'
-  )
-  return data
+    "/admin/system/rollback-versions",
+  );
+  return data;
 }
 
 /**
@@ -67,17 +84,21 @@ export async function getRollbackVersions(): Promise<{ versions: RollbackVersion
  * abort the request mid-download (#4504), so these calls wait as long as the
  * backend allows (15 minutes server-side).
  */
-const UPDATE_REQUEST_TIMEOUT_MS = 15 * 60 * 1000
+const UPDATE_REQUEST_TIMEOUT_MS = 15 * 60 * 1000;
 
 /**
  * Perform system update
  * Downloads and applies the latest version
  */
 export async function performUpdate(): Promise<UpdateResult> {
-  const { data } = await apiClient.post<UpdateResult>('/admin/system/update', undefined, {
-    timeout: UPDATE_REQUEST_TIMEOUT_MS
-  })
-  return data
+  const { data } = await apiClient.post<UpdateResult>(
+    "/admin/system/update",
+    undefined,
+    {
+      timeout: UPDATE_REQUEST_TIMEOUT_MS,
+    },
+  );
+  return data;
 }
 
 /**
@@ -86,19 +107,21 @@ export async function performUpdate(): Promise<UpdateResult> {
  */
 export async function rollback(version?: string): Promise<UpdateResult> {
   const { data } = await apiClient.post<UpdateResult>(
-    '/admin/system/rollback',
+    "/admin/system/rollback",
     version ? { version } : undefined,
-    { timeout: UPDATE_REQUEST_TIMEOUT_MS }
-  )
-  return data
+    { timeout: UPDATE_REQUEST_TIMEOUT_MS },
+  );
+  return data;
 }
 
 /**
  * Restart the service
  */
 export async function restartService(): Promise<{ message: string }> {
-  const { data } = await apiClient.post<{ message: string }>('/admin/system/restart')
-  return data
+  const { data } = await apiClient.post<{ message: string }>(
+    "/admin/system/restart",
+  );
+  return data;
 }
 
 export const systemAPI = {
@@ -107,7 +130,7 @@ export const systemAPI = {
   performUpdate,
   getRollbackVersions,
   rollback,
-  restartService
-}
+  restartService,
+};
 
-export default systemAPI
+export default systemAPI;

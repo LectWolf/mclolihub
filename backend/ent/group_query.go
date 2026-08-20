@@ -16,7 +16,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthevent"
+	"github.com/Wei-Shaw/sub2api/ent/grouphealthstate"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -36,6 +39,9 @@ type GroupQuery struct {
 	withRedeemCodes       *RedeemCodeQuery
 	withSubscriptions     *UserSubscriptionQuery
 	withUsageLogs         *UsageLogQuery
+	withHealthState       *GroupHealthStateQuery
+	withHealthEvents      *GroupHealthEventQuery
+	withKeyPreferences    *APIKeyGroupPreferenceQuery
 	withAccounts          *AccountQuery
 	withAllowedUsers      *UserQuery
 	withAccountGroups     *AccountGroupQuery
@@ -158,6 +164,72 @@ func (_q *GroupQuery) QueryUsageLogs() *UsageLogQuery {
 			sqlgraph.From(group.Table, group.FieldID, selector),
 			sqlgraph.To(usagelog.Table, usagelog.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, group.UsageLogsTable, group.UsageLogsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryHealthState chains the current query on the "health_state" edge.
+func (_q *GroupQuery) QueryHealthState() *GroupHealthStateQuery {
+	query := (&GroupHealthStateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(grouphealthstate.Table, grouphealthstate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.HealthStateTable, group.HealthStateColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryHealthEvents chains the current query on the "health_events" edge.
+func (_q *GroupQuery) QueryHealthEvents() *GroupHealthEventQuery {
+	query := (&GroupHealthEventClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(grouphealthevent.Table, grouphealthevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.HealthEventsTable, group.HealthEventsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryKeyPreferences chains the current query on the "key_preferences" edge.
+func (_q *GroupQuery) QueryKeyPreferences() *APIKeyGroupPreferenceQuery {
+	query := (&APIKeyGroupPreferenceClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(apikeygrouppreference.Table, apikeygrouppreference.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, group.KeyPreferencesTable, group.KeyPreferencesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -449,6 +521,9 @@ func (_q *GroupQuery) Clone() *GroupQuery {
 		withRedeemCodes:       _q.withRedeemCodes.Clone(),
 		withSubscriptions:     _q.withSubscriptions.Clone(),
 		withUsageLogs:         _q.withUsageLogs.Clone(),
+		withHealthState:       _q.withHealthState.Clone(),
+		withHealthEvents:      _q.withHealthEvents.Clone(),
+		withKeyPreferences:    _q.withKeyPreferences.Clone(),
 		withAccounts:          _q.withAccounts.Clone(),
 		withAllowedUsers:      _q.withAllowedUsers.Clone(),
 		withAccountGroups:     _q.withAccountGroups.Clone(),
@@ -500,6 +575,39 @@ func (_q *GroupQuery) WithUsageLogs(opts ...func(*UsageLogQuery)) *GroupQuery {
 		opt(query)
 	}
 	_q.withUsageLogs = query
+	return _q
+}
+
+// WithHealthState tells the query-builder to eager-load the nodes that are connected to
+// the "health_state" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *GroupQuery) WithHealthState(opts ...func(*GroupHealthStateQuery)) *GroupQuery {
+	query := (&GroupHealthStateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withHealthState = query
+	return _q
+}
+
+// WithHealthEvents tells the query-builder to eager-load the nodes that are connected to
+// the "health_events" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *GroupQuery) WithHealthEvents(opts ...func(*GroupHealthEventQuery)) *GroupQuery {
+	query := (&GroupHealthEventClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withHealthEvents = query
+	return _q
+}
+
+// WithKeyPreferences tells the query-builder to eager-load the nodes that are connected to
+// the "key_preferences" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *GroupQuery) WithKeyPreferences(opts ...func(*APIKeyGroupPreferenceQuery)) *GroupQuery {
+	query := (&APIKeyGroupPreferenceClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withKeyPreferences = query
 	return _q
 }
 
@@ -625,11 +733,14 @@ func (_q *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 	var (
 		nodes       = []*Group{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
+		loadedTypes = [11]bool{
 			_q.withAPIKeys != nil,
 			_q.withRedeemCodes != nil,
 			_q.withSubscriptions != nil,
 			_q.withUsageLogs != nil,
+			_q.withHealthState != nil,
+			_q.withHealthEvents != nil,
+			_q.withKeyPreferences != nil,
 			_q.withAccounts != nil,
 			_q.withAllowedUsers != nil,
 			_q.withAccountGroups != nil,
@@ -682,6 +793,27 @@ func (_q *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 		if err := _q.loadUsageLogs(ctx, query, nodes,
 			func(n *Group) { n.Edges.UsageLogs = []*UsageLog{} },
 			func(n *Group, e *UsageLog) { n.Edges.UsageLogs = append(n.Edges.UsageLogs, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withHealthState; query != nil {
+		if err := _q.loadHealthState(ctx, query, nodes,
+			func(n *Group) { n.Edges.HealthState = []*GroupHealthState{} },
+			func(n *Group, e *GroupHealthState) { n.Edges.HealthState = append(n.Edges.HealthState, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withHealthEvents; query != nil {
+		if err := _q.loadHealthEvents(ctx, query, nodes,
+			func(n *Group) { n.Edges.HealthEvents = []*GroupHealthEvent{} },
+			func(n *Group, e *GroupHealthEvent) { n.Edges.HealthEvents = append(n.Edges.HealthEvents, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withKeyPreferences; query != nil {
+		if err := _q.loadKeyPreferences(ctx, query, nodes,
+			func(n *Group) { n.Edges.KeyPreferences = []*APIKeyGroupPreference{} },
+			func(n *Group, e *APIKeyGroupPreference) { n.Edges.KeyPreferences = append(n.Edges.KeyPreferences, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -840,6 +972,96 @@ func (_q *GroupQuery) loadUsageLogs(ctx context.Context, query *UsageLogQuery, n
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "group_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *GroupQuery) loadHealthState(ctx context.Context, query *GroupHealthStateQuery, nodes []*Group, init func(*Group), assign func(*Group, *GroupHealthState)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int64]*Group)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(grouphealthstate.FieldGroupID)
+	}
+	query.Where(predicate.GroupHealthState(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(group.HealthStateColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.GroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "group_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *GroupQuery) loadHealthEvents(ctx context.Context, query *GroupHealthEventQuery, nodes []*Group, init func(*Group), assign func(*Group, *GroupHealthEvent)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int64]*Group)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(grouphealthevent.FieldGroupID)
+	}
+	query.Where(predicate.GroupHealthEvent(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(group.HealthEventsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.GroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "group_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *GroupQuery) loadKeyPreferences(ctx context.Context, query *APIKeyGroupPreferenceQuery, nodes []*Group, init func(*Group), assign func(*Group, *APIKeyGroupPreference)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int64]*Group)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(apikeygrouppreference.FieldGroupID)
+	}
+	query.Where(predicate.APIKeyGroupPreference(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(group.KeyPreferencesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.GroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "group_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

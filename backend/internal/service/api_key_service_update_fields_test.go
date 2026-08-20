@@ -108,6 +108,18 @@ func TestAPIKeyUpdate_DeclaresUsageColumnsOnExplicitReset(t *testing.T) {
 	require.Equal(t, []APIKeyUpdateFields{{QuotaUsed: true, RateLimitUsage: true}}, repo.updateFields)
 }
 
+func TestAPIKeyUpdate_ClearsMaxRateMultiplierWhenExplicitlyNull(t *testing.T) {
+	currentMax := 1.5
+	svc, repo := newUpdateFieldsAPIKeyService(&APIKey{
+		ID: 1, UserID: 7, Key: "sk-test", Status: StatusActive, MaxRateMultiplier: &currentMax,
+	})
+
+	updated, err := svc.Update(context.Background(), 1, 7, UpdateAPIKeyRequest{MaxRateMultiplierSet: true})
+	require.NoError(t, err)
+	require.Nil(t, updated.MaxRateMultiplier)
+	require.Equal(t, []APIKeyUpdateFields{{MaxRateMultiplier: true}}, repo.updateFields)
+}
+
 // 配额扩容会顺带把 quota_exhausted 复活为 active，此时必须声明 status。
 func TestAPIKeyUpdate_DeclaresStatusWhenReactivated(t *testing.T) {
 	quota := 500.0

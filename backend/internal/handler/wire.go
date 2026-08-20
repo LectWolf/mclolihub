@@ -106,12 +106,16 @@ func ProvideGatewayHandler(
 	userMsgQueueService *service.UserMessageQueueService,
 	cfg *config.Config,
 	settingService *service.SettingService,
+	groupHealthService *service.GroupHealthService,
+	subscriptionService *service.SubscriptionService,
 	coordinator *securityaudit.Coordinator,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService,
 		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
 		errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
 	h.securityAuditCoordinator = coordinator
+	h.SetGroupHealthService(groupHealthService)
+	h.SetSubscriptionService(subscriptionService)
 	return h
 }
 
@@ -178,6 +182,7 @@ func ProvideHandlers(
 	announcementHandler *AnnouncementHandler,
 	channelMonitorUserHandler *ChannelMonitorUserHandler,
 	channelMonitorV2Handler *ChannelMonitorV2Handler,
+	groupHealthHandler *GroupHealthHandler,
 	adminHandlers *AdminHandlers,
 	gatewayHandler *GatewayHandler,
 	openaiGatewayHandler *OpenAIGatewayHandler,
@@ -203,6 +208,7 @@ func ProvideHandlers(
 		Announcement:     announcementHandler,
 		ChannelMonitor:   channelMonitorUserHandler,
 		ChannelMonitorV2: channelMonitorV2Handler,
+		GroupHealth:      groupHealthHandler,
 		Admin:            adminHandlers,
 		Gateway:          gatewayHandler,
 		OpenAIGateway:    openaiGatewayHandler,
@@ -230,6 +236,7 @@ var ProviderSet = wire.NewSet(
 	NewAnnouncementHandler,
 	NewChannelMonitorUserHandler,
 	NewChannelMonitorV2Handler,
+	NewGroupHealthHandler,
 	ProvideGatewayHandler,
 	ProvideOpenAIGatewayHandler,
 	NewTotpHandler,

@@ -90,6 +90,16 @@ func GroupID(v int64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldGroupID, v))
 }
 
+// RouteMode applies equality check predicate on the "route_mode" field. It's identical to RouteModeEQ.
+func RouteMode(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldRouteMode, v))
+}
+
+// MaxRateMultiplier applies equality check predicate on the "max_rate_multiplier" field. It's identical to MaxRateMultiplierEQ.
+func MaxRateMultiplier(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldMaxRateMultiplier, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldStatus, v))
@@ -468,6 +478,121 @@ func GroupIDIsNil() predicate.APIKey {
 // GroupIDNotNil applies the NotNil predicate on the "group_id" field.
 func GroupIDNotNil() predicate.APIKey {
 	return predicate.APIKey(sql.FieldNotNull(FieldGroupID))
+}
+
+// RouteModeEQ applies the EQ predicate on the "route_mode" field.
+func RouteModeEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldRouteMode, v))
+}
+
+// RouteModeNEQ applies the NEQ predicate on the "route_mode" field.
+func RouteModeNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldRouteMode, v))
+}
+
+// RouteModeIn applies the In predicate on the "route_mode" field.
+func RouteModeIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldRouteMode, vs...))
+}
+
+// RouteModeNotIn applies the NotIn predicate on the "route_mode" field.
+func RouteModeNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldRouteMode, vs...))
+}
+
+// RouteModeGT applies the GT predicate on the "route_mode" field.
+func RouteModeGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldRouteMode, v))
+}
+
+// RouteModeGTE applies the GTE predicate on the "route_mode" field.
+func RouteModeGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldRouteMode, v))
+}
+
+// RouteModeLT applies the LT predicate on the "route_mode" field.
+func RouteModeLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldRouteMode, v))
+}
+
+// RouteModeLTE applies the LTE predicate on the "route_mode" field.
+func RouteModeLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldRouteMode, v))
+}
+
+// RouteModeContains applies the Contains predicate on the "route_mode" field.
+func RouteModeContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldRouteMode, v))
+}
+
+// RouteModeHasPrefix applies the HasPrefix predicate on the "route_mode" field.
+func RouteModeHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldRouteMode, v))
+}
+
+// RouteModeHasSuffix applies the HasSuffix predicate on the "route_mode" field.
+func RouteModeHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldRouteMode, v))
+}
+
+// RouteModeEqualFold applies the EqualFold predicate on the "route_mode" field.
+func RouteModeEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldRouteMode, v))
+}
+
+// RouteModeContainsFold applies the ContainsFold predicate on the "route_mode" field.
+func RouteModeContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldRouteMode, v))
+}
+
+// MaxRateMultiplierEQ applies the EQ predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierEQ(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldMaxRateMultiplier, v))
+}
+
+// MaxRateMultiplierNEQ applies the NEQ predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierNEQ(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldMaxRateMultiplier, v))
+}
+
+// MaxRateMultiplierIn applies the In predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierIn(vs ...float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldMaxRateMultiplier, vs...))
+}
+
+// MaxRateMultiplierNotIn applies the NotIn predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierNotIn(vs ...float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldMaxRateMultiplier, vs...))
+}
+
+// MaxRateMultiplierGT applies the GT predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierGT(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldMaxRateMultiplier, v))
+}
+
+// MaxRateMultiplierGTE applies the GTE predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierGTE(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldMaxRateMultiplier, v))
+}
+
+// MaxRateMultiplierLT applies the LT predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierLT(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldMaxRateMultiplier, v))
+}
+
+// MaxRateMultiplierLTE applies the LTE predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierLTE(v float64) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldMaxRateMultiplier, v))
+}
+
+// MaxRateMultiplierIsNil applies the IsNil predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierIsNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldIsNull(FieldMaxRateMultiplier))
+}
+
+// MaxRateMultiplierNotNil applies the NotNil predicate on the "max_rate_multiplier" field.
+func MaxRateMultiplierNotNil() predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotNull(FieldMaxRateMultiplier))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
@@ -1186,6 +1311,29 @@ func HasUsageLogs() predicate.APIKey {
 func HasUsageLogsWith(preds ...predicate.UsageLog) predicate.APIKey {
 	return predicate.APIKey(func(s *sql.Selector) {
 		step := newUsageLogsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasGroupPreferences applies the HasEdge predicate on the "group_preferences" edge.
+func HasGroupPreferences() predicate.APIKey {
+	return predicate.APIKey(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, GroupPreferencesTable, GroupPreferencesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGroupPreferencesWith applies the HasEdge predicate on the "group_preferences" edge with a given conditions (other predicates).
+func HasGroupPreferencesWith(preds ...predicate.APIKeyGroupPreference) predicate.APIKey {
+	return predicate.APIKey(func(s *sql.Selector) {
+		step := newGroupPreferencesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

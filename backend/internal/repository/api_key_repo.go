@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygrouppreference"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
@@ -49,6 +51,13 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetName(key.Name).
 		SetStatus(key.Status).
 		SetNillableGroupID(key.GroupID).
+		SetRouteMode(func() string {
+			if key.RouteMode == "" {
+				return service.RouteModeFixed
+			}
+			return key.RouteMode
+		}()).
+		SetNillableMaxRateMultiplier(key.MaxRateMultiplier).
 		SetNillableLastUsedAt(key.LastUsedAt).
 		SetQuota(key.Quota).
 		SetQuotaUsed(key.QuotaUsed).
@@ -79,6 +88,7 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 		Where(apikey.IDEQ(id)).
 		WithUser().
 		WithGroup().
+		WithGroupPreferences().
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
@@ -117,6 +127,7 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 			})
 		}).
 		WithGroup().
+		WithGroupPreferences().
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
@@ -134,6 +145,8 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldID,
 			apikey.FieldUserID,
 			apikey.FieldGroupID,
+			apikey.FieldRouteMode,
+			apikey.FieldMaxRateMultiplier,
 			apikey.FieldName,
 			apikey.FieldStatus,
 			apikey.FieldIPWhitelist,
@@ -225,8 +238,11 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldProfitControlEnabled,
 				group.FieldProfitMinMargin,
 				group.FieldProfitSafetyBuffer,
+				group.FieldProbeEnabled,
+				group.FieldProbeModel,
+				group.FieldProbeIntervalSeconds,
 			)
-		}).
+		}).WithGroupPreferences().
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
@@ -299,6 +315,16 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 			builder.SetGroupID(*key.GroupID)
 		} else {
 			builder.ClearGroupID()
+		}
+	}
+	if fields.RouteMode {
+		builder.SetRouteMode(key.RouteMode)
+	}
+	if fields.MaxRateMultiplier {
+		if key.MaxRateMultiplier != nil {
+			builder.SetMaxRateMultiplier(*key.MaxRateMultiplier)
+		} else {
+			builder.ClearMaxRateMultiplier()
 		}
 	}
 
@@ -460,6 +486,7 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 
 	keysQuery := q.
 		WithGroup().
+		WithGroupPreferences().
 		Offset(params.Offset()).
 		Limit(params.Limit())
 	for _, order := range apiKeyListOrder(params) {
@@ -485,6 +512,7 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 func (r *apiKeyRepository) ListAllByUserID(ctx context.Context, userID int64, filters service.APIKeyListFilters) ([]service.APIKey, error) {
 	keys, err := r.apiKeyListByUserIDQuery(userID, filters).
 		WithGroup().
+		WithGroupPreferences().
 		Order(dbent.Asc(apikey.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -868,29 +896,31 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		return nil
 	}
 	out := &service.APIKey{
-		ID:            m.ID,
-		UserID:        m.UserID,
-		Key:           m.Key,
-		Name:          m.Name,
-		Status:        m.Status,
-		IPWhitelist:   m.IPWhitelist,
-		IPBlacklist:   m.IPBlacklist,
-		LastUsedAt:    m.LastUsedAt,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-		GroupID:       m.GroupID,
-		Quota:         m.Quota,
-		QuotaUsed:     m.QuotaUsed,
-		ExpiresAt:     m.ExpiresAt,
-		RateLimit5h:   m.RateLimit5h,
-		RateLimit1d:   m.RateLimit1d,
-		RateLimit7d:   m.RateLimit7d,
-		Usage5h:       m.Usage5h,
-		Usage1d:       m.Usage1d,
-		Usage7d:       m.Usage7d,
-		Window5hStart: m.Window5hStart,
-		Window1dStart: m.Window1dStart,
-		Window7dStart: m.Window7dStart,
+		ID:                m.ID,
+		UserID:            m.UserID,
+		Key:               m.Key,
+		Name:              m.Name,
+		Status:            m.Status,
+		IPWhitelist:       m.IPWhitelist,
+		IPBlacklist:       m.IPBlacklist,
+		LastUsedAt:        m.LastUsedAt,
+		CreatedAt:         m.CreatedAt,
+		UpdatedAt:         m.UpdatedAt,
+		GroupID:           m.GroupID,
+		RouteMode:         m.RouteMode,
+		MaxRateMultiplier: m.MaxRateMultiplier,
+		Quota:             m.Quota,
+		QuotaUsed:         m.QuotaUsed,
+		ExpiresAt:         m.ExpiresAt,
+		RateLimit5h:       m.RateLimit5h,
+		RateLimit1d:       m.RateLimit1d,
+		RateLimit7d:       m.RateLimit7d,
+		Usage5h:           m.Usage5h,
+		Usage1d:           m.Usage1d,
+		Usage7d:           m.Usage7d,
+		Window5hStart:     m.Window5hStart,
+		Window1dStart:     m.Window1dStart,
+		Window7dStart:     m.Window7dStart,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)
@@ -906,7 +936,31 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 	if m.Edges.Group != nil {
 		out.Group = groupEntityToService(m.Edges.Group)
 	}
+	if len(m.Edges.GroupPreferences) > 0 {
+		out.GroupPreferences = make([]service.APIKeyGroupPreference, 0, len(m.Edges.GroupPreferences))
+		for _, preference := range m.Edges.GroupPreferences {
+			out.GroupPreferences = append(out.GroupPreferences, service.APIKeyGroupPreference{GroupID: preference.GroupID, Disabled: preference.Disabled, Position: preference.Position})
+		}
+		sort.Slice(out.GroupPreferences, func(i, j int) bool { return out.GroupPreferences[i].Position < out.GroupPreferences[j].Position })
+	}
 	return out
+}
+
+func (r *apiKeyRepository) SyncGroupPreferences(ctx context.Context, apiKeyID int64, preferences []service.APIKeyGroupPreference) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.APIKeyGroupPreference.Delete().Where(apikeygrouppreference.APIKeyIDEQ(apiKeyID)).Exec(ctx); err != nil {
+		return err
+	}
+	for _, preference := range preferences {
+		if _, err := tx.APIKeyGroupPreference.Create().SetAPIKeyID(apiKeyID).SetGroupID(preference.GroupID).SetDisabled(preference.Disabled).SetPosition(preference.Position).Save(ctx); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func userEntityToService(u *dbent.User) *service.User {
@@ -1020,6 +1074,9 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		ProfitControlEnabled:            g.ProfitControlEnabled,
 		ProfitMinMargin:                 g.ProfitMinMargin,
 		ProfitSafetyBuffer:              g.ProfitSafetyBuffer,
+		ProbeEnabled:                    g.ProbeEnabled,
+		ProbeModel:                      g.ProbeModel,
+		ProbeIntervalSeconds:            g.ProbeIntervalSeconds,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

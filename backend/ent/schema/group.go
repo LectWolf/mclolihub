@@ -289,6 +289,18 @@ func (Group) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(0).
 			Comment("安全缓冲，小数；与 margin 相加后从下游倍率中扣除，默认 0"),
+
+		// 分组主动探测配置。探测状态与配置分离，避免高频运行状态污染分组基础信息。
+		field.Bool("probe_enabled").
+			Default(false).
+			Comment("是否启用分组主动探测"),
+		field.String("probe_model").
+			MaxLen(100).
+			Default("gpt-5.6-sol").
+			Comment("主动探测使用的模型"),
+		field.Int("probe_interval_seconds").
+			Default(600).
+			Comment("正常探测间隔，范围 30 秒到 1 小时"),
 	}
 }
 
@@ -298,6 +310,9 @@ func (Group) Edges() []ent.Edge {
 		edge.To("redeem_codes", RedeemCode.Type),
 		edge.To("subscriptions", UserSubscription.Type),
 		edge.To("usage_logs", UsageLog.Type),
+		edge.To("health_state", GroupHealthState.Type),
+		edge.To("health_events", GroupHealthEvent.Type),
+		edge.To("key_preferences", APIKeyGroupPreference.Type),
 		edge.From("accounts", Account.Type).
 			Ref("groups").
 			Through("account_groups", AccountGroup.Type),

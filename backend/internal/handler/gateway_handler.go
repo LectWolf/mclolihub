@@ -57,6 +57,57 @@ type GatewayHandler struct {
 	maxAccountSwitchesGemini  int
 	cfg                       *config.Config
 	settingService            *service.SettingService
+	groupHealthService        *service.GroupHealthService
+	subscriptionService       *service.SubscriptionService
+}
+
+func (h *GatewayHandler) SetGroupHealthService(groupHealthService *service.GroupHealthService) {
+	h.groupHealthService = groupHealthService
+}
+
+func (h *GatewayHandler) SetSubscriptionService(subscriptionService *service.SubscriptionService) {
+	h.subscriptionService = subscriptionService
+}
+
+func (h *GatewayHandler) subscriptionForRoutingGroup(ctx context.Context, userID int64, apiKey *service.APIKey) (*service.UserSubscription, error) {
+	if apiKey == nil || apiKey.Group == nil || !apiKey.Group.IsSubscriptionType() {
+		return nil, nil
+	}
+	if h.subscriptionService == nil {
+		return nil, service.ErrSubscriptionInvalid
+	}
+	return h.subscriptionService.GetActiveSubscription(ctx, userID, apiKey.Group.ID)
+}
+
+func routingFallbackGroupID(apiKey *service.APIKey) *int64 {
+	if apiKey == nil || apiKey.Group == nil {
+		return nil
+	}
+	return apiKey.Group.FallbackGroupIDOnInvalidRequest
+}
+
+func (h *GatewayHandler) reportDynamicGroupFailure(apiKey *service.APIKey, account *service.Account, failoverErr *service.UpstreamFailoverError, semanticStarted bool) {
+	if h == nil || h.groupHealthService == nil || apiKey == nil || apiKey.GroupID == nil || account == nil || failoverErr == nil {
+		return
+	}
+	if failoverErr.ShouldReportAccountScheduleFailure() && !failoverErr.RequestScopedTransient {
+		h.groupHealthService.ReportRuntimeFailure(*apiKey.GroupID, account.ID, failoverErr, semanticStarted)
+	}
+}
+
+func applyDynamicGroupRequestContext(c *gin.Context, apiKey *service.APIKey, model string) {
+	if c == nil || c.Request == nil || apiKey == nil || apiKey.Group == nil {
+		return
+	}
+	platform := apiKey.Group.Platform
+	if platform == service.PlatformComposite {
+		if detected, ok := service.DetectModelPlatform(model); ok {
+			platform = detected
+		}
+	}
+	if platform != "" {
+		c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), platform))
+	}
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -169,6 +220,17 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	body = parsedReq.Body.Bytes()
 	reqModel := parsedReq.Model
 	reqStream := parsedReq.Stream
+	dynamicGroups := []service.Group(nil)
+	dynamicGroupIndex := 0
+	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
+		dynamicGroups, err = h.apiKeyService.ResolveRoutingGroups(c.Request.Context(), apiKey)
+		if err != nil {
+			h.errorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
+			return
+		}
+		apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[0])
+		applyDynamicGroupRequestContext(c, apiKey, reqModel)
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 
@@ -224,6 +286,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 	// 获取订阅信息（可能为nil）- 提前获取用于后续检查
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if len(dynamicGroups) > 0 {
+		subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+		if err != nil {
+			h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", err.Error(), streamStarted)
+			return
+		}
+	}
 
 	// 1. 首先获取用户并发槽位
 	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, reqStream, &streamStarted)
@@ -303,7 +372,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	// 判断是否真的绑定了粘性会话：有 sessionKey 且已经绑定到某个账号
 	hasBoundSession := sessionKey != "" && sessionBoundAccountID > 0
 
-	if platform == service.PlatformGemini {
+	if platform == service.PlatformGemini && len(dynamicGroups) == 0 {
 		fs := NewFailoverState(h.maxAccountSwitchesGemini, hasBoundSession)
 
 		// 单账号分组提前设置 SingleAccountRetry 标记，让 Service 层首次 503 就不设模型限流标记。
@@ -595,10 +664,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 	currentAPIKey := apiKey
 	currentSubscription := subscription
-	var fallbackGroupID *int64
-	if apiKey.Group != nil {
-		fallbackGroupID = apiKey.Group.FallbackGroupIDOnInvalidRequest
-	}
+	fallbackGroupID := routingFallbackGroupID(apiKey)
 	fallbackUsed := false
 
 	// 单账号分组提前设置 SingleAccountRetry 标记，让 Service 层首次 503 就不设模型限流标记。
@@ -629,6 +695,33 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			selection, err := h.gatewayService.SelectAccountWithLoadAwareness(c.Request.Context(), currentAPIKey.GroupID, sessionKey, reqModel, fs.FailedAccountIDs, parsedReq.MetadataUserID, subject.UserID)
 			if err != nil {
 				if len(fs.FailedAccountIDs) == 0 {
+					if dynamicGroupIndex+1 < len(dynamicGroups) {
+						dynamicGroupIndex++
+						currentAPIKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+						currentSubscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, currentAPIKey)
+						if err != nil {
+							h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", err.Error(), streamStarted)
+							return
+						}
+						applyDynamicGroupRequestContext(c, currentAPIKey, reqModel)
+						platform = effectiveAPIKeyPlatform(c, currentAPIKey)
+						sessionKey = sessionHash
+						if platform == service.PlatformGemini && sessionKey != "" {
+							sessionKey = "gemini:" + sessionKey
+						}
+						channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), currentAPIKey.GroupID, reqModel)
+						parsedReq.GroupID = currentAPIKey.GroupID
+						fallbackGroupID = routingFallbackGroupID(currentAPIKey)
+						sessionBoundAccountID = 0
+						hasBoundSession = false
+						if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), currentAPIKey.User, currentAPIKey, currentAPIKey.Group, currentSubscription, service.QuotaPlatform(c.Request.Context(), currentAPIKey)); err != nil {
+							status, code, message, _ := billingErrorDetails(err)
+							h.handleStreamingAwareError(c, status, code, message, streamStarted)
+							return
+						}
+						retryWithFallback = true
+						break
+					}
 					cls := classifyNoAccountErrorFromGin(c, h.gatewayService, currentAPIKey, reqModel, reqModel, platform)
 					if !cls.ModelNotFound {
 						markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
@@ -836,7 +929,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 			}
 			// Bedrock CC 兼容：清理 body 专有字段 + 过滤 anthropic-beta header，适用于所有转发路径
-			if err := attemptParsedReq.ReplaceBody(h.gatewayService.ApplyBedrockCCCompat(c, attemptParsedReq.Body.Bytes(), attemptParsedReq.Model, account, apiKey.GroupID)); err != nil {
+			if err := attemptParsedReq.ReplaceBody(h.gatewayService.ApplyBedrockCCCompat(c, attemptParsedReq.Body.Bytes(), attemptParsedReq.Model, account, currentAPIKey.GroupID)); err != nil {
 				h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
 				return
 			}
@@ -991,6 +1084,39 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, account.Platform, true)
 						return
+					}
+					if len(dynamicGroups) > 0 {
+						h.reportDynamicGroupFailure(currentAPIKey, account, failoverErr, false)
+						h.gatewayService.TempUnscheduleRetryableError(c.Request.Context(), account.ID, failoverErr)
+						if dynamicGroupIndex+1 >= len(dynamicGroups) {
+							h.handleFailoverExhausted(c, failoverErr, account.Platform, streamStarted)
+							return
+						}
+						dynamicGroupIndex++
+						currentAPIKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+						currentSubscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, currentAPIKey)
+						if err != nil {
+							h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", err.Error(), streamStarted)
+							return
+						}
+						applyDynamicGroupRequestContext(c, currentAPIKey, reqModel)
+						platform = effectiveAPIKeyPlatform(c, currentAPIKey)
+						sessionKey = sessionHash
+						if platform == service.PlatformGemini && sessionKey != "" {
+							sessionKey = "gemini:" + sessionKey
+						}
+						channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), currentAPIKey.GroupID, reqModel)
+						parsedReq.GroupID = currentAPIKey.GroupID
+						fallbackGroupID = routingFallbackGroupID(currentAPIKey)
+						sessionBoundAccountID = 0
+						hasBoundSession = false
+						if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), currentAPIKey.User, currentAPIKey, currentAPIKey.Group, currentSubscription, service.QuotaPlatform(c.Request.Context(), currentAPIKey)); err != nil {
+							status, code, message, _ := billingErrorDetails(err)
+							h.handleStreamingAwareError(c, status, code, message, streamStarted)
+							return
+						}
+						retryWithFallback = true
+						break
 					}
 					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
 					switch action {

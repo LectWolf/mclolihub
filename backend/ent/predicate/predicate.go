@@ -9,6 +9,9 @@ import (
 // APIKey is the predicate function for apikey builders.
 type APIKey func(*sql.Selector)
 
+// APIKeyGroupPreference is the predicate function for apikeygrouppreference builders.
+type APIKeyGroupPreference func(*sql.Selector)
+
 // Account is the predicate function for account builders.
 type Account func(*sql.Selector)
 
@@ -56,6 +59,12 @@ type ErrorPassthroughRule func(*sql.Selector)
 
 // Group is the predicate function for group builders.
 type Group func(*sql.Selector)
+
+// GroupHealthEvent is the predicate function for grouphealthevent builders.
+type GroupHealthEvent func(*sql.Selector)
+
+// GroupHealthState is the predicate function for grouphealthstate builders.
+type GroupHealthState func(*sql.Selector)
 
 // IdempotencyRecord is the predicate function for idempotencyrecord builders.
 type IdempotencyRecord func(*sql.Selector)

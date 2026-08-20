@@ -8,6 +8,10 @@ const (
 	StatusUnused   = "unused"
 	StatusUsed     = "used"
 	StatusExpired  = "expired"
+	// StatusBalanceInsufficient is an upstream account runtime state. It is
+	// intentionally distinct from a user's wallet balance and is cleared only
+	// by an administrator.
+	StatusBalanceInsufficient = "balance_insufficient"
 )
 
 // Role constants

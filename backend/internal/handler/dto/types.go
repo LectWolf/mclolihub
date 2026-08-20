@@ -51,21 +51,24 @@ type AdminUser struct {
 }
 
 type APIKey struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
-	Name        string     `json:"name"`
-	GroupID     *int64     `json:"group_id"`
-	Status      string     `json:"status"`
-	IPWhitelist []string   `json:"ip_whitelist"`
-	IPBlacklist []string   `json:"ip_blacklist"`
-	LastUsedAt  *time.Time `json:"last_used_at"`
-	LastUsedIP  *string    `json:"last_used_ip"`
-	Quota       float64    `json:"quota"`      // Quota limit in USD (0 = unlimited)
-	QuotaUsed   float64    `json:"quota_used"` // Used quota amount in USD
-	ExpiresAt   *time.Time `json:"expires_at"` // Expiration time (nil = never expires)
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID                int64                           `json:"id"`
+	UserID            int64                           `json:"user_id"`
+	Key               string                          `json:"key"`
+	Name              string                          `json:"name"`
+	GroupID           *int64                          `json:"group_id"`
+	RouteMode         string                          `json:"route_mode"`
+	MaxRateMultiplier *float64                        `json:"max_rate_multiplier,omitempty"`
+	GroupPreferences  []service.APIKeyGroupPreference `json:"group_preferences,omitempty"`
+	Status            string                          `json:"status"`
+	IPWhitelist       []string                        `json:"ip_whitelist"`
+	IPBlacklist       []string                        `json:"ip_blacklist"`
+	LastUsedAt        *time.Time                      `json:"last_used_at"`
+	LastUsedIP        *string                         `json:"last_used_ip"`
+	Quota             float64                         `json:"quota"`      // Quota limit in USD (0 = unlimited)
+	QuotaUsed         float64                         `json:"quota_used"` // Used quota amount in USD
+	ExpiresAt         *time.Time                      `json:"expires_at"` // Expiration time (nil = never expires)
+	CreatedAt         time.Time                       `json:"created_at"`
+	UpdatedAt         time.Time                       `json:"updated_at"`
 	// CurrentConcurrency is the real-time active request count for this API key.
 	CurrentConcurrency int `json:"current_concurrency"`
 
@@ -152,6 +155,9 @@ type Group struct {
 	MaxReasoningEffort string `json:"max_reasoning_effort"`
 	// ReasoningEffortMappings OpenAI/Codex 推理强度精确映射。
 	ReasoningEffortMappings []domain.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
+	ProbeEnabled            bool                            `json:"probe_enabled"`
+	ProbeModel              string                          `json:"probe_model"`
+	ProbeIntervalSeconds    int                             `json:"probe_interval_seconds"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -454,6 +460,25 @@ func (f *NullableInt64Field) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	var value int64
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	f.Value = &value
+	return nil
+}
+
+type NullableFloat64Field struct {
+	Set   bool
+	Value *float64
+}
+
+func (f *NullableFloat64Field) UnmarshalJSON(data []byte) error {
+	f.Set = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		f.Value = nil
+		return nil
+	}
+	var value float64
 	if err := json.Unmarshal(data, &value); err != nil {
 		return err
 	}

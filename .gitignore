@@ -136,6 +136,11 @@ docs/*
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
 !docs/ASYNC_IMAGE_TASKS.md
+!docs/GROUP_HEALTH_AND_API_KEY_ROUTING.md
+!docs/adr/
+!docs/adr/0001-separate-group-health-observation-from-routing-policy.md
+!docs/adr/0002-skip-same-group-after-runtime-account-failure.md
+!docs/adr/0003-preserve-stream-failover-boundary-and-throttle-probes.md
 !docs/legal/
 !docs/legal/*.md
 .serena/

@@ -465,6 +465,11 @@
         </div>
 
         <div>
+          <label class="input-label">{{ t('keys.routeModeLabel') }}</label>
+          <Select v-model="formData.route_mode" :options="routeModeOptions" />
+        </div>
+
+        <div v-if="formData.route_mode === 'fixed'">
           <label class="input-label">{{ t('keys.groupLabel') }}</label>
           <Select
             v-model="formData.group_id"
@@ -505,6 +510,35 @@
               />
             </template>
           </Select>
+        </div>
+
+        <div>
+          <label class="input-label">{{ t('keys.maxRateMultiplier') }}</label>
+          <input v-model.number="formData.max_rate_multiplier" type="number" min="0" step="0.001" class="input" :placeholder="t('keys.maxRateMultiplierPlaceholder')" />
+        </div>
+
+        <div v-if="formData.route_mode === 'cheapest' || formData.route_mode === 'fastest'" class="space-y-2">
+          <label class="input-label">{{ t('keys.disabledGroups') }}</label>
+          <label v-for="group in groups" :key="group.id" class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="formData.disabled_group_ids" type="checkbox" :value="group.id" class="checkbox" />
+            <span>{{ group.name }}</span><span class="text-gray-400">{{ effectiveGroupRate(group) }}x</span>
+          </label>
+        </div>
+
+        <div v-if="formData.route_mode === 'custom'" class="space-y-2">
+          <label class="input-label">{{ t('keys.customGroupOrder') }}</label>
+          <div class="flex flex-wrap gap-2">
+            <button v-for="group in groups.filter(g => !formData.custom_group_ids.includes(g.id))" :key="group.id" type="button" class="btn btn-secondary btn-sm" @click="formData.custom_group_ids.push(group.id)">
+              <Icon name="plus" size="sm" />{{ group.name }}
+            </button>
+          </div>
+          <VueDraggable v-model="formData.custom_group_ids" class="space-y-2" handle=".route-drag-handle">
+            <div v-for="groupId in formData.custom_group_ids" :key="groupId" class="flex h-10 items-center gap-2 rounded-md border border-gray-200 px-3 dark:border-dark-600">
+              <button type="button" class="route-drag-handle cursor-grab text-gray-400" :title="t('keys.dragToReorder')"><Icon name="menu" size="sm" /></button>
+              <span class="min-w-0 flex-1 truncate text-sm">{{ groups.find(g => g.id === groupId)?.name || `#${groupId}` }}</span>
+              <button type="button" class="btn btn-ghost btn-icon" :title="t('common.remove')" @click="formData.custom_group_ids = formData.custom_group_ids.filter(id => id !== groupId)"><Icon name="xCircle" size="sm" /></button>
+            </div>
+          </VueDraggable>
         </div>
 
         <!-- Custom Key Section (only for create) -->
@@ -1119,6 +1153,7 @@
 <script setup lang="ts">
 	import { ref, reactive, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 	import { useI18n } from 'vue-i18n'
+	import { VueDraggable } from 'vue-draggable-plus'
 	import { useAppStore } from '@/stores/app'
 	import { useOnboardingStore } from '@/stores/onboarding'
 	import { useClipboard } from '@/composables/useClipboard'
@@ -1330,6 +1365,10 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 const formData = ref({
   name: '',
   group_id: null as number | null,
+	route_mode: 'fixed' as 'fixed' | 'cheapest' | 'fastest' | 'custom',
+	max_rate_multiplier: null as number | null,
+	disabled_group_ids: [] as number[],
+	custom_group_ids: [] as number[],
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1369,6 +1408,15 @@ const statusOptions = computed(() => [
   { value: 'active', label: t('common.active') },
   { value: 'inactive', label: t('common.inactive') }
 ])
+
+const routeModeOptions = computed(() => [
+  { value: 'fixed', label: t('keys.routeModes.fixed') },
+  { value: 'cheapest', label: t('keys.routeModes.cheapest') },
+  { value: 'fastest', label: t('keys.routeModes.fastest') },
+  { value: 'custom', label: t('keys.routeModes.custom') },
+])
+
+const effectiveGroupRate = (group: Group) => userGroupRates.value[group.id] ?? group.rate_multiplier
 
 const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
   if (key.status === 'quota_exhausted' || key.status === 'expired') {
@@ -1569,6 +1617,10 @@ const editKey = (key: ApiKey) => {
     custom_key: '',
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
+		route_mode: key.route_mode || 'fixed',
+		max_rate_multiplier: key.max_rate_multiplier,
+		disabled_group_ids: (key.group_preferences || []).filter(item => item.disabled).map(item => item.group_id),
+		custom_group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
     ip_blacklist: (key.ip_blacklist || []).join('\n'),
     enable_quota: key.quota > 0,
     quota: key.quota > 0 ? key.quota : null,
@@ -1721,6 +1773,10 @@ const handleSubmit = async () => {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
         group_id: formData.value.group_id,
+		route_mode: formData.value.route_mode,
+		max_rate_multiplier: formData.value.max_rate_multiplier,
+		disabled_group_ids: formData.value.disabled_group_ids,
+		custom_group_ids: formData.value.custom_group_ids,
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1744,7 +1800,13 @@ const handleSubmit = async () => {
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+		rateLimitData,
+		{
+			route_mode: formData.value.route_mode,
+			max_rate_multiplier: formData.value.max_rate_multiplier,
+			disabled_group_ids: formData.value.disabled_group_ids,
+			custom_group_ids: formData.value.custom_group_ids
+		}
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1790,6 +1852,10 @@ const closeModals = () => {
   formData.value = {
     name: '',
     group_id: null,
+		route_mode: 'fixed',
+		max_rate_multiplier: null,
+		disabled_group_ids: [],
+		custom_group_ids: [],
     status: 'active',
     use_custom_key: false,
     custom_key: '',

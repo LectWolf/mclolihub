@@ -75,6 +75,17 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	dynamicGroups := []service.Group(nil)
+	dynamicGroupIndex := 0
+	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
+		dynamicGroups, err = h.apiKeyService.ResolveRoutingGroups(c.Request.Context(), apiKey)
+		if err != nil {
+			h.responsesErrorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
+			return
+		}
+		apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[0])
+		applyDynamicGroupRequestContext(c, apiKey, reqModel)
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !compositeTargetPlatformResolved(c, apiKey, reqModel) {
 		h.responsesErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by composite groups")
@@ -126,6 +137,13 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	}
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if len(dynamicGroups) > 0 {
+		subscription, err = h.subscriptionForRoutingGroup(requestCtx, subject.UserID, apiKey)
+		if err != nil {
+			h.responsesErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+			return
+		}
+	}
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 
@@ -174,6 +192,25 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		selection, err := h.gatewayService.SelectAccountWithLoadAwareness(requestCtx, apiKey.GroupID, sessionHash, reqModel, fs.FailedAccountIDs, "", int64(0))
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
+				if dynamicGroupIndex+1 < len(dynamicGroups) {
+					dynamicGroupIndex++
+					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+					subscription, err = h.subscriptionForRoutingGroup(requestCtx, subject.UserID, apiKey)
+					if err != nil {
+						h.responsesErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+						return
+					}
+					applyDynamicGroupRequestContext(c, apiKey, reqModel)
+					requestCtx = c.Request.Context()
+					channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(requestCtx, apiKey.GroupID, reqModel)
+					if err := h.billingCacheService.CheckBillingEligibility(requestCtx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(requestCtx, apiKey)); err != nil {
+						status, code, message, _ := billingErrorDetails(err)
+						h.responsesErrorResponse(c, status, code, message)
+						return
+					}
+					fs = NewFailoverState(h.maxAccountSwitches, false)
+					continue
+				}
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, effectiveAPIKeyPlatform(c, apiKey))
 				if !cls.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
@@ -285,6 +322,31 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleResponsesFailoverExhausted(c, failoverErr, true)
 					return
+				}
+				if len(dynamicGroups) > 0 {
+					h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
+					h.gatewayService.TempUnscheduleRetryableError(requestCtx, account.ID, failoverErr)
+					if dynamicGroupIndex+1 >= len(dynamicGroups) {
+						h.handleResponsesFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					dynamicGroupIndex++
+					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+					subscription, err = h.subscriptionForRoutingGroup(requestCtx, subject.UserID, apiKey)
+					if err != nil {
+						h.responsesErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+						return
+					}
+					applyDynamicGroupRequestContext(c, apiKey, reqModel)
+					requestCtx = c.Request.Context()
+					channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(requestCtx, apiKey.GroupID, reqModel)
+					if err := h.billingCacheService.CheckBillingEligibility(requestCtx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(requestCtx, apiKey)); err != nil {
+						status, code, message, _ := billingErrorDetails(err)
+						h.responsesErrorResponse(c, status, code, message)
+						return
+					}
+					fs = NewFailoverState(h.maxAccountSwitches, false)
+					continue
 				}
 				action := fs.HandleFailoverError(requestCtx, h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
 				switch action {

@@ -1,0 +1,284 @@
+name: Custom Release
+
+on:
+  push:
+    tags:
+      - "custom-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing custom tag to publish (for example custom-v0.1.179.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: custom-release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/lectwolf/mclolihub
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      upstream_version: ${{ steps.version.outputs.upstream_version }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Validate four-part version
+        id: version
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#custom-v}"
+          if [[ ! "$TAG" =~ ^custom-v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid custom release tag: $TAG" >&2
+            exit 1
+          fi
+
+          FILE_VERSION="$(tr -d '\r\n' < backend/cmd/server/VERSION)"
+          UPSTREAM_VERSION="$(tr -d '\r\n' < backend/cmd/server/UPSTREAM_VERSION)"
+          if [[ "$FILE_VERSION" != "$VERSION" ]]; then
+            echo "VERSION ($FILE_VERSION) does not match tag ($VERSION)" >&2
+            exit 1
+          fi
+          if [[ ! "$UPSTREAM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid UPSTREAM_VERSION: $UPSTREAM_VERSION" >&2
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "upstream_version=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+
+  build-frontend:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build embedded frontend
+        working-directory: frontend
+        run: pnpm run build
+
+      - name: Upload embedded frontend
+        uses: actions/upload-artifact@v7
+        with:
+          name: custom-frontend-dist
+          path: backend/internal/web/dist/
+          retention-days: 1
+
+  build-binaries:
+    needs: [validate, build-frontend]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            extension: tar.gz
+          - goos: linux
+            goarch: arm64
+            extension: tar.gz
+          - goos: windows
+            goarch: amd64
+            extension: zip
+          - goos: darwin
+            goarch: amd64
+            extension: tar.gz
+          - goos: darwin
+            goarch: arm64
+            extension: tar.gz
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Restore embedded frontend
+        uses: actions/download-artifact@v8
+        with:
+          name: custom-frontend-dist
+          path: backend/internal/web/dist/
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build and package binary
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          UPSTREAM_VERSION: ${{ needs.validate.outputs.upstream_version }}
+        run: |
+          mkdir -p package dist
+          BINARY=sub2api
+          if [[ "$GOOS" == "windows" ]]; then
+            BINARY=sub2api.exe
+          fi
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          CGO_ENABLED=0 go build -C backend -tags embed \
+            -ldflags "-s -w -X main.Version=$VERSION -X main.UpstreamVersion=$UPSTREAM_VERSION -X main.Commit=$GITHUB_SHA -X main.Date=$BUILD_DATE -X main.BuildType=release" \
+            -o "../package/$BINARY" ./cmd/server
+
+          ARCHIVE="sub2api_${VERSION}_${GOOS}_${GOARCH}.${{ matrix.extension }}"
+          if [[ "$GOOS" == "windows" ]]; then
+            (cd package && zip -9 "../dist/$ARCHIVE" "$BINARY")
+          else
+            tar -C package -czf "dist/$ARCHIVE" "$BINARY"
+          fi
+
+      - name: Upload packaged binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: custom-binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          retention-days: 1
+
+  build-images:
+    needs: [validate, build-frontend, build-binaries]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v8
+        with:
+          name: custom-binary-linux-${{ matrix.arch }}
+          path: dist/
+
+      - name: Prepare Docker build context
+        shell: bash
+        run: |
+          tar -xzf dist/*.tar.gz
+          chmod 0755 sub2api
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push architecture image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.goreleaser
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ needs.validate.outputs.version }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.validate.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=custom-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=custom-${{ matrix.arch }}
+
+  publish-image-manifest:
+    needs: [validate, build-images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish multi-architecture tags
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          docker buildx imagetools create \
+            --tag "$IMAGE_NAME:$VERSION" \
+            --tag "$IMAGE_NAME:custom-latest" \
+            --tag "$IMAGE_NAME:latest" \
+            "$IMAGE_NAME:$VERSION-amd64" \
+            "$IMAGE_NAME:$VERSION-arm64"
+
+  publish-release:
+    needs: [validate, build-binaries, publish-image-manifest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: custom-binary-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum sub2api_* > checksums.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: Aihub ${{ needs.validate.outputs.version }}
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            自定义版本：`${{ needs.validate.outputs.version }}`
+            Sub2API 基线：`${{ needs.validate.outputs.upstream_version }}`
+
+            Docker 镜像：
+            ```bash
+            docker pull ghcr.io/lectwolf/mclolihub:${{ needs.validate.outputs.version }}
+            ```
+          files: dist/*
+          fail_on_unmatched_files: true

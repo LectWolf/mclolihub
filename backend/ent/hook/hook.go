@@ -21,6 +21,18 @@ func (f APIKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIKeyMutation", m)
 }
 
+// The APIKeyGroupPreferenceFunc type is an adapter to allow the use of ordinary
+// function as APIKeyGroupPreference mutator.
+type APIKeyGroupPreferenceFunc func(context.Context, *ent.APIKeyGroupPreferenceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f APIKeyGroupPreferenceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.APIKeyGroupPreferenceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIKeyGroupPreferenceMutation", m)
+}
+
 // The AccountFunc type is an adapter to allow the use of ordinary
 // function as Account mutator.
 type AccountFunc func(context.Context, *ent.AccountMutation) (ent.Value, error)
@@ -211,6 +223,30 @@ func (f GroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GroupMutation", m)
+}
+
+// The GroupHealthEventFunc type is an adapter to allow the use of ordinary
+// function as GroupHealthEvent mutator.
+type GroupHealthEventFunc func(context.Context, *ent.GroupHealthEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GroupHealthEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GroupHealthEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GroupHealthEventMutation", m)
+}
+
+// The GroupHealthStateFunc type is an adapter to allow the use of ordinary
+// function as GroupHealthState mutator.
+type GroupHealthStateFunc func(context.Context, *ent.GroupHealthStateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GroupHealthStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GroupHealthStateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GroupHealthStateMutation", m)
 }
 
 // The IdempotencyRecordFunc type is an adapter to allow the use of ordinary

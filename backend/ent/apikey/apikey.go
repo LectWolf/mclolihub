@@ -29,6 +29,10 @@ const (
 	FieldName = "name"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldRouteMode holds the string denoting the route_mode field in the database.
+	FieldRouteMode = "route_mode"
+	// FieldMaxRateMultiplier holds the string denoting the max_rate_multiplier field in the database.
+	FieldMaxRateMultiplier = "max_rate_multiplier"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldLastUsedAt holds the string denoting the last_used_at field in the database.
@@ -67,6 +71,8 @@ const (
 	EdgeGroup = "group"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
+	// EdgeGroupPreferences holds the string denoting the group_preferences edge name in mutations.
+	EdgeGroupPreferences = "group_preferences"
 	// Table holds the table name of the apikey in the database.
 	Table = "api_keys"
 	// UserTable is the table that holds the user relation/edge.
@@ -90,6 +96,13 @@ const (
 	UsageLogsInverseTable = "usage_logs"
 	// UsageLogsColumn is the table column denoting the usage_logs relation/edge.
 	UsageLogsColumn = "api_key_id"
+	// GroupPreferencesTable is the table that holds the group_preferences relation/edge.
+	GroupPreferencesTable = "api_key_group_preferences"
+	// GroupPreferencesInverseTable is the table name for the APIKeyGroupPreference entity.
+	// It exists in this package in order to avoid circular dependency with the "apikeygrouppreference" package.
+	GroupPreferencesInverseTable = "api_key_group_preferences"
+	// GroupPreferencesColumn is the table column denoting the group_preferences relation/edge.
+	GroupPreferencesColumn = "api_key_id"
 )
 
 // Columns holds all SQL columns for apikey fields.
@@ -102,6 +115,8 @@ var Columns = []string{
 	FieldKey,
 	FieldName,
 	FieldGroupID,
+	FieldRouteMode,
+	FieldMaxRateMultiplier,
 	FieldStatus,
 	FieldLastUsedAt,
 	FieldIPWhitelist,
@@ -148,6 +163,10 @@ var (
 	KeyValidator func(string) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// DefaultRouteMode holds the default value on creation for the "route_mode" field.
+	DefaultRouteMode string
+	// RouteModeValidator is a validator for the "route_mode" field. It is called by the builders before save.
+	RouteModeValidator func(string) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -211,6 +230,16 @@ func ByName(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// ByRouteMode orders the results by the route_mode field.
+func ByRouteMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRouteMode, opts...).ToFunc()
+}
+
+// ByMaxRateMultiplier orders the results by the max_rate_multiplier field.
+func ByMaxRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxRateMultiplier, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.
@@ -310,6 +339,20 @@ func ByUsageLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newUsageLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByGroupPreferencesCount orders the results by group_preferences count.
+func ByGroupPreferencesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupPreferencesStep(), opts...)
+	}
+}
+
+// ByGroupPreferences orders the results by group_preferences terms.
+func ByGroupPreferences(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupPreferencesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -329,5 +372,12 @@ func newUsageLogsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageLogsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageLogsTable, UsageLogsColumn),
+	)
+}
+func newGroupPreferencesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupPreferencesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GroupPreferencesTable, GroupPreferencesColumn),
 	)
 }

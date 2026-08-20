@@ -75,6 +75,17 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	dynamicGroups := []service.Group(nil)
+	dynamicGroupIndex := 0
+	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
+		dynamicGroups, err = h.apiKeyService.ResolveRoutingGroups(c.Request.Context(), apiKey)
+		if err != nil {
+			h.chatCompletionsErrorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
+			return
+		}
+		apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[0])
+		applyDynamicGroupRequestContext(c, apiKey, reqModel)
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !compositeTargetPlatformResolved(c, apiKey, reqModel) {
 		h.chatCompletionsErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by composite groups")
@@ -117,6 +128,13 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if len(dynamicGroups) > 0 {
+		subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+		if err != nil {
+			h.chatCompletionsErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+			return
+		}
+	}
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 
@@ -172,6 +190,29 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		selection, err := h.gatewayService.SelectAccountWithLoadAwareness(c.Request.Context(), apiKey.GroupID, selectionSessionHash, reqModel, fs.FailedAccountIDs, "", int64(0))
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
+				if dynamicGroupIndex+1 < len(dynamicGroups) {
+					dynamicGroupIndex++
+					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+					subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+					if err != nil {
+						h.chatCompletionsErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+						return
+					}
+					applyDynamicGroupRequestContext(c, apiKey, reqModel)
+					groupPlatform = effectiveAPIKeyPlatform(c, apiKey)
+					selectionSessionHash = sessionHash
+					if groupPlatform == service.PlatformGemini && selectionSessionHash != "" {
+						selectionSessionHash = "gemini:" + selectionSessionHash
+					}
+					channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+					if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+						status, code, message, _ := billingErrorDetails(err)
+						h.chatCompletionsErrorResponse(c, status, code, message)
+						return
+					}
+					fs = NewFailoverState(h.maxAccountSwitches, false)
+					continue
+				}
 				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, groupPlatform)
 				if !cls.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
@@ -297,6 +338,35 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleCCFailoverExhausted(c, failoverErr, true)
 					return
+				}
+				if len(dynamicGroups) > 0 {
+					h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
+					h.gatewayService.TempUnscheduleRetryableError(c.Request.Context(), account.ID, failoverErr)
+					if dynamicGroupIndex+1 >= len(dynamicGroups) {
+						h.handleCCFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					dynamicGroupIndex++
+					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+					subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+					if err != nil {
+						h.chatCompletionsErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+						return
+					}
+					applyDynamicGroupRequestContext(c, apiKey, reqModel)
+					groupPlatform = effectiveAPIKeyPlatform(c, apiKey)
+					selectionSessionHash = sessionHash
+					if groupPlatform == service.PlatformGemini && selectionSessionHash != "" {
+						selectionSessionHash = "gemini:" + selectionSessionHash
+					}
+					channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+					if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+						status, code, message, _ := billingErrorDetails(err)
+						h.chatCompletionsErrorResponse(c, status, code, message)
+						return
+					}
+					fs = NewFailoverState(h.maxAccountSwitches, false)
+					continue
 				}
 				action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr)
 				switch action {

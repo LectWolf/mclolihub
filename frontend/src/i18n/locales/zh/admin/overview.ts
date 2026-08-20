@@ -803,6 +803,7 @@ export default {
         accounts: '账号数',
         capacity: '容量',
         usage: '用量',
+        health: '健康状态',
         status: '状态',
         actions: '操作',
         billingType: '计费类型',
@@ -818,6 +819,10 @@ export default {
       accountsRateLimited: '限流:',
       accountsTotal: '总量:',
       accountsUnit: '个账号',
+      healthMetrics: {
+        realP50: '真实 P50',
+        availability: '6 小时可用率',
+      },
       form: {
         name: '名称',
         description: '描述',

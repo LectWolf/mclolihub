@@ -102,6 +102,13 @@ export default {
     namePlaceholder: 'My API Key',
     groupLabel: 'Group',
     selectGroup: 'Select a group',
+    routeModeLabel: 'Routing mode',
+    routeModes: { fixed: 'Fixed group', cheapest: 'Cheapest first', fastest: 'Fastest first', custom: 'Custom order' },
+    maxRateMultiplier: 'Maximum multiplier',
+    maxRateMultiplierPlaceholder: 'Unlimited',
+    disabledGroups: 'Excluded groups',
+    customGroupOrder: 'Custom group order',
+    dragToReorder: 'Drag to reorder',
     statusLabel: 'Status',
     selectStatus: 'Select status',
     saving: 'Saving...',
@@ -954,6 +961,31 @@ export default {
     endDate: 'End Date',
     apply: 'Apply',
     selectDateRange: 'Select date range'
+  },
+
+  groupHealth: {
+    title: 'Group channel status',
+    window: 'Real traffic and active probes over the last 6 hours',
+    group: 'Group',
+    multiplier: 'Rate',
+    status: 'Status',
+    realTtft: 'Real TTFT',
+    probeTtft: 'Probe TTFT',
+    availability: '6h availability',
+    trend: '5-minute trend',
+    empty: 'No groups are available',
+    loadError: 'Failed to load group channel status',
+    notEnabled: 'Probing disabled',
+    noData: 'No data',
+    latencyDetail: 'Avg {avg} · P95 {p95} · {samples} samples',
+    probeAvailability: 'Probe {value}',
+    bucketDetail: '{success} successful · {failure} failed',
+    statuses: {
+      healthy: 'Available',
+      unavailable: 'Unavailable',
+      balance_insufficient: 'Insufficient balance',
+      not_enabled: 'Probing disabled'
+    }
   },
 
   // Admin
