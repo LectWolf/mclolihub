@@ -54,3 +54,8 @@ export async function listAdminGroupHealth(signal?: AbortSignal): Promise<GroupH
   const { data } = await apiClient.get<GroupHealthResponse>('/admin/groups/health', { signal })
   return data
 }
+
+export async function refreshAdminGroupHealth(groupId: number): Promise<GroupHealthResponse> {
+  const { data } = await apiClient.post<GroupHealthResponse>(`/admin/groups/${groupId}/health/refresh`)
+  return data
+}

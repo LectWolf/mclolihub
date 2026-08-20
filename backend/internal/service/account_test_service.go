@@ -43,6 +43,7 @@ import (
 var sseDataPrefix = regexp.MustCompile(`^data:\s*`)
 
 const (
+	AccountTestModeProbe = "group_health_probe"
 	testClaudeAPIURL   = "https://api.anthropic.com/v1/messages?beta=true"
 	chatgptCodexAPIURL = "https://chatgpt.com/backend-api/codex/responses"
 )
@@ -723,6 +724,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
 	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
+	if mode == AccountTestModeProbe {
+		payload = createOpenAIProbePayload(upstreamTestModelID, isOAuth)
+	}
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -2625,6 +2629,20 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 	return payload
 }
 
+// createOpenAIProbePayload is intentionally tiny: group health probes measure
+// connectivity/TTFT, not model quality, so they must not send the full account
+// test instructions or consume a long completion.
+func createOpenAIProbePayload(modelID string, isOAuth bool) map[string]any {
+	payload := map[string]any{
+		"model": modelID,
+		"input": "hi",
+		"max_output_tokens": 5,
+		"stream": true,
+	}
+	if isOAuth { payload["store"] = false }
+	return payload
+}
+
 func createOpenAIChatCompletionsTestPayload(modelID string, prompt string) map[string]any {
 	testPrompt := strings.TrimSpace(prompt)
 	if testPrompt == "" {
@@ -3117,7 +3135,7 @@ func (s *AccountTestService) RunProbeBackground(ctx context.Context, accountID i
 	capture := &accountTestTimingCapture{}
 	ginCtx.Set(accountTestTimingCaptureContextKey, capture)
 
-	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeDefault)
+	testErr := s.TestAccountConnection(ginCtx, accountID, modelID, "", AccountTestModeProbe)
 	finishedAt := time.Now()
 	_, errMsg := parseTestSSEOutput(w.Body.String())
 	if errMsg == "" && testErr != nil {

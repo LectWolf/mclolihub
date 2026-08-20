@@ -188,6 +188,24 @@ func (h *APIKeyHandler) GetByID(c *gin.Context) {
 	response.Success(c, dto.APIKeyFromService(key))
 }
 
+// RoutingPreview returns the exact current ordering used by dynamic routing.
+// GET /api/v1/keys/:id/routing-preview
+func (h *APIKeyHandler) RoutingPreview(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok { response.Unauthorized(c, "User not authenticated"); return }
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 { response.BadRequest(c, "Invalid key ID"); return }
+	key, err := h.apiKeyService.GetByID(c.Request.Context(), id)
+	if err != nil { response.ErrorFrom(c, err); return }
+	if key.UserID != subject.UserID { response.NotFound(c, "API key not found"); return }
+	items, err := h.apiKeyService.ResolveRoutingPreview(c.Request.Context(), key)
+	if err != nil { response.ErrorFrom(c, err); return }
+	type item struct { GroupID int64 `json:"group_id"`; Name string `json:"name"`; Platform string `json:"platform"`; Status string `json:"status"`; RateMultiplier float64 `json:"rate_multiplier"`; RealTTFTP50MS int `json:"real_ttft_p50_ms"`; ProbeTTFTMS int `json:"probe_ttft_ms"`; Eligible bool `json:"eligible"`; Position int `json:"position"`; ExcludedReason string `json:"excluded_reason,omitempty"` }
+	out := make([]item, 0, len(items)); for _, v := range items { out = append(out, item{v.Group.ID,v.Group.Name,v.Group.Platform,v.Status,v.RateMultiplier,v.RealTTFTP50MS,v.ProbeTTFTMS,v.Eligible,v.Position,v.ExcludedReason}) }
+	next := int64(0); if len(out)>0 && out[0].Eligible { next = out[0].GroupID }
+	response.Success(c, gin.H{"route_mode": key.RouteMode, "next_group_id": next, "groups": out})
+}
+
 // Create handles creating a new API key
 // POST /api/v1/api-keys
 func (h *APIKeyHandler) Create(c *gin.Context) {

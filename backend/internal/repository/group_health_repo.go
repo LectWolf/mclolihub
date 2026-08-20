@@ -353,14 +353,14 @@ func (r *groupHealthStore) LoadTrend(ctx context.Context, groupIDs []int64, star
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		WITH event_buckets AS (
-		 SELECT group_id,date_bin('5 minutes',observed_at,TIMESTAMPTZ '2000-01-01') AS bucket,
+		 SELECT group_id,date_bin('10 minutes',observed_at,TIMESTAMPTZ '2000-01-01') AS bucket,
 		 COUNT(*) FILTER(WHERE is_probe AND success)::int AS probe_success,
 		 COUNT(*) FILTER(WHERE is_probe AND NOT success)::int AS probe_failure,
 		 COUNT(*) FILTER(WHERE NOT is_probe AND NOT success)::int AS real_failure,
 		 COALESCE(AVG(ttft_ms) FILTER(WHERE is_probe AND success AND ttft_ms>0),0)::int AS probe_ttft
 		 FROM group_health_events WHERE group_id=ANY($1) AND observed_at >= $2 AND observed_at < $3 GROUP BY group_id,bucket
 	), usage_buckets AS (
-		 SELECT group_id,date_bin('5 minutes',created_at,TIMESTAMPTZ '2000-01-01') AS bucket,
+		 SELECT group_id,date_bin('10 minutes',created_at,TIMESTAMPTZ '2000-01-01') AS bucket,
 		 COUNT(*)::int AS real_success,COALESCE(AVG(first_token_ms),0)::int AS real_ttft
 		 FROM usage_logs WHERE group_id=ANY($1) AND first_token_ms IS NOT NULL AND created_at >= $2 AND created_at < $3 GROUP BY group_id,bucket
 	)

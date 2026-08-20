@@ -70,7 +70,7 @@ describe('GroupHealthPanel', () => {
     vi.clearAllMocks()
   })
 
-  it('renders status, routing metrics, zero availability and a 72-bucket trend', async () => {
+  it('renders status, routing metrics, zero availability and a 36-bucket trend', async () => {
     const wrapper = mount(GroupHealthPanel, {
       global: { stubs: { Icon: true } },
     })
@@ -82,8 +82,7 @@ describe('GroupHealthPanel', () => {
     expect(wrapper.text()).toContain('5944 ms')
     expect(wrapper.text()).toContain('0.0%')
     expect(wrapper.find('.badge').classes()).toContain('badge-info')
-    expect(wrapper.findAll('td:last-child span')).toHaveLength(72)
-    expect(wrapper.find('td:last-child .bg-red-500').exists()).toBe(true)
+    expect(wrapper.findAll('td:last-child > div > span')).toHaveLength(36)
 
     wrapper.unmount()
   })

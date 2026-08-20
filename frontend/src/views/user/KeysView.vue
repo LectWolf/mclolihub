@@ -135,7 +135,14 @@
 
           <template #cell-group="{ row }">
             <div class="group/dropdown relative">
+              <button v-if="row.route_mode !== 'fixed'" type="button" class="flex items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-gray-100 dark:hover:bg-dark-700" @click="openRoutingPreview(row)">
+                <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(routingPreviewFor(row)?.groups.find(g => g.group_id === routingPreviewFor(row)?.next_group_id)?.status || 'unknown')" />
+                <span class="text-sm text-gray-800 dark:text-gray-200">{{ t('keys.routeModes.' + row.route_mode) }}</span>
+                <span class="text-xs text-gray-500">{{ t('keys.nextGroup') }}: {{ nextGroupName(row) }}</span>
+                <Icon name="chevronDown" size="sm" class="text-gray-400" />
+              </button>
               <button
+                v-else
                 :ref="(el) => setGroupButtonRef(row.id, el)"
                 @click="openGroupSelector(row)"
                 class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
@@ -535,7 +542,9 @@
           <VueDraggable v-model="formData.custom_group_ids" class="space-y-2" handle=".route-drag-handle">
             <div v-for="groupId in formData.custom_group_ids" :key="groupId" class="flex h-10 items-center gap-2 rounded-md border border-gray-200 px-3 dark:border-dark-600">
               <button type="button" class="route-drag-handle cursor-grab text-gray-400" :title="t('keys.dragToReorder')"><Icon name="menu" size="sm" /></button>
+              <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="routingStatusClass(groupHealthMap[groupId]?.status || 'unknown')" :title="routingStatusLabel(groupHealthMap[groupId]?.status || 'unknown')" />
               <span class="min-w-0 flex-1 truncate text-sm">{{ groups.find(g => g.id === groupId)?.name || `#${groupId}` }}</span>
+              <span class="text-xs tabular-nums text-gray-500">{{ effectiveGroupRate(groups.find(g => g.id === groupId)!) }}x</span>
               <button type="button" class="btn btn-ghost btn-icon" :title="t('common.remove')" @click="formData.custom_group_ids = formData.custom_group_ids.filter(id => id !== groupId)"><Icon name="xCircle" size="sm" /></button>
             </div>
           </VueDraggable>
@@ -986,6 +995,20 @@
       </template>
     </BaseDialog>
 
+    <BaseDialog :show="routingPreview !== null" :title="t('keys.routingPreviewTitle')" width="normal" @close="routingPreview = null">
+      <div v-if="routingPreview" class="space-y-3">
+        <p class="text-sm text-gray-500">{{ t('keys.routingPreviewMode', { mode: t('keys.routeModes.' + routingPreview.route_mode) }) }}</p>
+        <div v-for="group in routingPreview.groups" :key="group.group_id" class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-dark-700">
+          <span class="w-6 text-center text-xs font-semibold tabular-nums text-gray-400">{{ group.position || '-' }}</span>
+          <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(group.status)" />
+          <span class="min-w-0 flex-1 truncate text-sm">{{ group.name }}</span>
+          <span class="text-xs tabular-nums text-gray-500">{{ group.rate_multiplier.toFixed(2) }}x</span>
+          <span v-if="group.position === 1" class="badge badge-primary">{{ t('keys.nextGroup') }}</span>
+          <span v-else-if="!group.eligible" class="text-xs text-gray-400">{{ group.excluded_reason }}</span>
+        </div>
+      </div>
+    </BaseDialog>
+
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       :show="showDeleteDialog"
@@ -1161,6 +1184,8 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
+import type { RoutingPreview } from '@/api/keys'
+import { listGroupHealth, type GroupHealthItem } from '@/api/groupHealth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
@@ -1179,6 +1204,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import { maskApiKey } from '@/utils/maskApiKey'
 import {
   buildCcSwitchImportDeeplink,
@@ -1312,6 +1338,9 @@ const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
+const groupHealthMap = reactive<Record<number, GroupHealthItem>>({})
+const routingPreviews = ref<Record<number, RoutingPreview>>({})
+const routingPreview = ref<RoutingPreview | null>(null)
 
 const pagination = ref({
   page: 1,
@@ -1417,6 +1446,21 @@ const routeModeOptions = computed(() => [
 ])
 
 const effectiveGroupRate = (group: Group) => userGroupRates.value[group.id] ?? group.rate_multiplier
+
+const routingPreviewFor = (key: ApiKey) => routingPreviews.value[key.id]
+const nextGroupName = (key: ApiKey) => {
+  const preview = routingPreviewFor(key)
+  return preview?.groups.find((g) => g.group_id === preview.next_group_id)?.name || t('keys.noGroup')
+}
+const routingStatusClass = (status: string) => ({ healthy: 'bg-emerald-500', unavailable: 'bg-red-500', balance_insufficient: 'bg-red-500', not_enabled: 'bg-amber-400', unknown: 'bg-gray-400' }[status] || 'bg-gray-400')
+const routingStatusLabel = (status: string) => t(`groupHealth.statuses.${status}`, status)
+const openRoutingPreview = async (key: ApiKey) => {
+  try {
+    const preview = await keysAPI.getRoutingPreview(key.id)
+    routingPreviews.value[key.id] = preview
+    routingPreview.value = preview
+  } catch (error) { appStore.showError(extractApiErrorMessage(error, t('keys.routingPreviewError'))) }
+}
 
 const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
   if (key.status === 'quota_exhausted' || key.status === 'expired') {
@@ -1527,6 +1571,15 @@ const loadApiKeys = async () => {
     apiKeys.value = response.items
     pagination.value.total = response.total
     pagination.value.pages = response.pages
+
+    try {
+      const health = await listGroupHealth(signal)
+      for (const key of Object.keys(groupHealthMap)) delete groupHealthMap[Number(key)]
+      for (const item of health.items || []) groupHealthMap[item.group_id] = item
+      await Promise.all(response.items.filter((key) => key.route_mode !== 'fixed').map(async (key) => {
+        try { routingPreviews.value[key.id] = await keysAPI.getRoutingPreview(key.id) } catch { /* list remains usable */ }
+      }))
+    } catch (e) { if (!isAbortError(e)) console.warn('Failed to load routing health', e) }
 
     // Load usage stats for all API keys in the list
     if (response.items.length > 0) {

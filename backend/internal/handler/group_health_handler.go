@@ -85,6 +85,14 @@ func (h *GroupHealthHandler) AdminGet(c *gin.Context) {
 	h.writeGroups(c, []service.Group{*group}, nil, true)
 }
 
+func (h *GroupHealthHandler) AdminRefresh(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 { response.BadRequest(c, "invalid group id"); return }
+	if err := h.health.ProbeNow(c.Request.Context(), id); err != nil { response.ErrorFrom(c, err); return }
+	group, err := h.groupService.GetByID(c.Request.Context(), id); if err != nil { response.ErrorFrom(c, err); return }
+	h.writeGroups(c, []service.Group{*group}, nil, true)
+}
+
 func (h *GroupHealthHandler) RestoreBalance(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -148,5 +156,5 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 			Trend: trends[group.ID],
 		})
 	}
-	response.Success(c, gin.H{"items": items, "window_hours": 6, "bucket_minutes": 5})
+	response.Success(c, gin.H{"items": items, "window_hours": 6, "bucket_minutes": 10})
 }

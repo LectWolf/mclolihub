@@ -404,6 +404,15 @@
           <template #cell-actions="{ row }">
             <div class="flex items-center gap-1">
               <button
+                :disabled="refreshingHealthIds.has(row.id) || !row.probe_enabled"
+                :title="t('admin.groups.refreshHealth')"
+                @click="refreshGroupHealth(row.id)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+              >
+                <Icon name="refresh" size="sm" :class="refreshingHealthIds.has(row.id) ? 'animate-spin' : ''" />
+                <span class="text-xs">{{ t('admin.groups.refreshHealth') }}</span>
+              </button>
+              <button
                 @click="handleEdit(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
@@ -4468,7 +4477,7 @@ import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
-import { listAdminGroupHealth, type GroupHealthItem } from "@/api/groupHealth";
+import { listAdminGroupHealth, refreshAdminGroupHealth, type GroupHealthItem } from "@/api/groupHealth";
 import type {
   AdminGroup,
   CompositeModelRoute,
@@ -4989,6 +4998,21 @@ const capacityMap = ref<
   >
 >(new Map());
 const healthMap = ref<Map<number, GroupHealthItem>>(new Map());
+const refreshingHealthIds = ref<Set<number>>(new Set());
+
+const refreshGroupHealth = async (groupId: number) => {
+  refreshingHealthIds.value = new Set(refreshingHealthIds.value).add(groupId);
+  try {
+    const result = await refreshAdminGroupHealth(groupId);
+    const item = result.items?.[0];
+    if (item) healthMap.value = new Map(healthMap.value).set(groupId, item);
+    appStore.showSuccess(t('admin.groups.refreshHealthSuccess'));
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('admin.groups.refreshHealthError')));
+  } finally {
+    const next = new Set(refreshingHealthIds.value); next.delete(groupId); refreshingHealthIds.value = next;
+  }
+};
 const searchQuery = ref("");
 const filters = reactive({
   platform: "",

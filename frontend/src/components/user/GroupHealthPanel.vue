@@ -19,16 +19,16 @@
         <thead>
           <tr>
             <th>{{ t('groupHealth.group') }}</th>
-            <th>{{ t('groupHealth.multiplier') }}</th>
+            <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('rate_multiplier')">{{ t('groupHealth.multiplier') }} <span v-if="sortKey === 'rate_multiplier'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th>{{ t('groupHealth.status') }}</th>
-            <th>{{ t('groupHealth.realTtft') }}</th>
-            <th>{{ t('groupHealth.probeTtft') }}</th>
-            <th>{{ t('groupHealth.availability') }}</th>
+            <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('real_ttft_p50_ms')">{{ t('groupHealth.realTtft') }} <span v-if="sortKey === 'real_ttft_p50_ms'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
+            <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('probe_ttft_ms')">{{ t('groupHealth.probeTtft') }} <span v-if="sortKey === 'probe_ttft_ms'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
+            <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('real_availability_6h')">{{ t('groupHealth.availability') }} <span v-if="sortKey === 'real_availability_6h'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th class="w-[220px]">{{ t('groupHealth.trend') }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in items" :key="item.group_id">
+          <tr v-for="item in sortedItems" :key="item.group_id" :class="loading ? 'opacity-60' : ''">
             <td>
               <strong class="block max-w-[220px] truncate text-sm text-gray-900 dark:text-white">{{ item.name }}</strong>
               <span class="text-xs text-gray-400">{{ item.platform }}</span>
@@ -53,8 +53,11 @@
               <span class="block text-[11px] text-gray-400">{{ t('groupHealth.probeAvailability', { value: formatPercent(item.probe_availability_6h) }) }}</span>
             </td>
             <td>
-              <div class="grid h-7 grid-flow-col grid-rows-1 gap-px" :style="{ gridTemplateColumns: `repeat(${trend(item).length}, minmax(2px, 1fr))` }" :aria-label="t('groupHealth.trend')">
-                <span v-for="(bucket, index) in trend(item)" :key="index" class="h-full min-w-[2px] rounded-[1px]" :class="bucketClass(bucket)" :title="bucketTitle(bucket)" />
+              <div class="grid h-9 grid-flow-col grid-rows-1 gap-px" :style="{ gridTemplateColumns: `repeat(${trend(item).length}, minmax(3px, 1fr))` }" :aria-label="t('groupHealth.trend')">
+                <span v-for="(bucket, index) in trend(item)" :key="index" class="relative h-full min-w-[3px] cursor-help rounded-[1px] bg-gray-100 dark:bg-dark-700" :title="bucketTitle(bucket)">
+                  <span v-if="bucket?.real_ttft_ms" class="absolute inset-x-0 bottom-0 rounded-[1px] bg-violet-500/80" :style="{ height: `${barHeight(bucket.real_ttft_ms)}%` }" />
+                  <span v-if="bucket?.probe_ttft_ms" class="absolute inset-x-0 bottom-0 rounded-[1px]" :class="probeBarClass(bucket.probe_ttft_ms)" :style="{ height: `${barHeight(bucket.probe_ttft_ms)}%` }" />
+                </span>
               </div>
             </td>
           </tr>
@@ -65,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { listGroupHealth, type GroupHealthItem, type GroupHealthStatus, type GroupHealthTrendBucket } from '@/api/groupHealth'
@@ -76,6 +79,8 @@ const { t, locale } = useI18n()
 const appStore = useAppStore()
 const items = ref<GroupHealthItem[]>([])
 const loading = ref(false)
+const sortKey = ref<'rate_multiplier' | 'real_ttft_p50_ms' | 'probe_ttft_ms' | 'real_availability_6h'>('rate_multiplier')
+const sortOrder = ref<'asc' | 'desc'>('asc')
 let controller: AbortController | null = null
 let timer: number | null = null
 
@@ -96,6 +101,16 @@ async function reload() {
     if (controller === next) loading.value = false
   }
 }
+
+function toggleSort(key: typeof sortKey.value) {
+  if (sortKey.value === key) sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  else { sortKey.value = key; sortOrder.value = 'asc' }
+}
+const sortedItems = computed(() => [...items.value].sort((a, b) => {
+  const av = a[sortKey.value] as number; const bv = b[sortKey.value] as number
+  const cmp = (av || 0) - (bv || 0)
+  return (sortOrder.value === 'asc' ? cmp : -cmp) || a.name.localeCompare(b.name)
+}))
 
 function formatMs(value: number) {
   return value > 0 ? `${Math.round(value)} ms` : '-'
@@ -123,25 +138,21 @@ function statusLabel(status: GroupHealthStatus) {
 
 type DisplayBucket = GroupHealthTrendBucket | null
 function trend(item: GroupHealthItem): DisplayBucket[] {
-  const result: DisplayBucket[] = Array.from({ length: 72 }, () => null)
+  const result: DisplayBucket[] = Array.from({ length: 36 }, () => null)
   const end = Date.now()
   const start = end - 6 * 60 * 60 * 1000
   for (const bucket of item.trend || []) {
-    const index = Math.floor((new Date(bucket.started_at).getTime() - start) / (5 * 60 * 1000))
+    const index = Math.floor((new Date(bucket.started_at).getTime() - start) / (10 * 60 * 1000))
     if (index >= 0 && index < result.length) result[index] = bucket
   }
   return result
 }
-function bucketClass(bucket: DisplayBucket) {
-  if (!bucket) return 'bg-gray-200 dark:bg-dark-600'
-  if (bucket.real_failure > 0 || bucket.probe_failure > 0) return 'bg-red-500'
-  const latency = bucket.real_ttft_ms || bucket.probe_ttft_ms
-  if (latency >= 8000) return 'bg-amber-400'
-  return bucket.real_success > 0 || bucket.probe_success > 0 ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-dark-600'
-}
+const maxTrendTTFT = computed(() => Math.max(1000, ...items.value.flatMap((item) => (item.trend || []).flatMap((bucket) => [bucket.probe_ttft_ms || 0, bucket.real_ttft_ms || 0]))))
+function barHeight(value: number) { return Math.max(4, Math.min(100, (value / maxTrendTTFT.value) * 100)) }
+function probeBarClass(value: number) { return value >= 8000 ? 'bg-red-500' : value >= 4000 ? 'bg-amber-400' : 'bg-amber-300' }
 function bucketTitle(bucket: DisplayBucket) {
   if (!bucket) return t('groupHealth.noData')
-  return `${formatTime(bucket.started_at)} · ${t('groupHealth.bucketDetail', { success: bucket.real_success + bucket.probe_success, failure: bucket.real_failure + bucket.probe_failure })}`
+  return `${formatTime(bucket.started_at)} · ${t('groupHealth.bucketDetail', { success: bucket.real_success + bucket.probe_success, failure: bucket.real_failure + bucket.probe_failure })} · ${t('groupHealth.probeTtft')}: ${formatMs(bucket.probe_ttft_ms)} · ${t('groupHealth.realTtft')}: ${formatMs(bucket.real_ttft_ms)}`
 }
 
 onMounted(() => {

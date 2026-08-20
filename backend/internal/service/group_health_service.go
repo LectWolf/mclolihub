@@ -200,6 +200,14 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 	return s.repo.Save(ctx, snapshot)
 }
 
+// ProbeNow executes a group probe synchronously for an administrator refresh.
+func (s *GroupHealthService) ProbeNow(ctx context.Context, groupID int64) error {
+	if s == nil || s.repo == nil || s.accountRepo == nil || s.testService == nil { return fmt.Errorf("group health service unavailable") }
+	target, err := s.findGroupProbeTarget(ctx, groupID); if err != nil { return err }
+	if !target.ProbeEnabled { return fmt.Errorf("group probe is disabled") }
+	return s.probeGroup(ctx, target, time.Now())
+}
+
 func (s *GroupHealthService) probeRecoveryAccount(ctx context.Context, target AccountProbeTarget, now time.Time) error {
 	result, run := s.runAccountProbe(ctx, target.GroupID, target.AccountID, target.Model)
 	if !run {

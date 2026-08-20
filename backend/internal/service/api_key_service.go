@@ -136,6 +136,50 @@ type groupRouteHealthReader interface {
 	GetRouteHealth(context.Context, []int64) (map[int64]GroupRouteHealth, error)
 }
 
+type RoutingGroupPreview struct {
+	Group             Group
+	Status            string
+	RateMultiplier    float64
+	RealTTFTP50MS     int
+	ProbeTTFTMS       int
+	RealAvailability6h float64
+	Eligible          bool
+	Position          int
+	ExcludedReason    string
+}
+
+// ResolveRoutingPreview mirrors gateway routing and also exposes filtered candidates for UI previews.
+func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) ([]RoutingGroupPreview, error) {
+	if key == nil { return nil, ErrAPIKeyNotFound }
+	mode := key.RouteMode; if mode == "" { mode = RouteModeFixed }
+	if mode == RouteModeFixed {
+		if key.Group == nil { return nil, ErrGroupNotFound }
+		return []RoutingGroupPreview{{Group: *key.Group, RateMultiplier: key.Group.RateMultiplier, Status: GroupHealthHealthy, Eligible: true, Position: 1}}, nil
+	}
+	groups, err := s.GetAvailableGroups(ctx, key.UserID); if err != nil { return nil, err }
+	rates, _ := s.GetUserGroupRates(ctx, key.UserID)
+	prefs := make(map[int64]APIKeyGroupPreference, len(key.GroupPreferences)); for _, p := range key.GroupPreferences { prefs[p.GroupID] = p }
+	ids := make([]int64, 0, len(groups)); byID := make(map[int64]Group, len(groups)); for _, g := range groups { ids = append(ids, g.ID); byID[g.ID] = g }
+	health := map[int64]GroupRouteHealth{}; if r, ok := s.groupRepo.(groupRouteHealthReader); ok { health, _ = r.GetRouteHealth(ctx, ids) }
+	candidates := make([]GroupRouteCandidate, 0, len(groups)); previews := make([]RoutingGroupPreview, 0, len(groups))
+	for _, g := range groups {
+		rate := g.RateMultiplier; if v, ok := rates[g.ID]; ok { rate = v }
+		h := health[g.ID]; status := GroupHealthUnknown; if h.Healthy { status = GroupHealthHealthy } else if g.ProbeEnabled { status = GroupHealthUnavailable } else { status = "not_enabled" }
+		p, configured := prefs[g.ID]; reason := ""; eligible := true
+		if mode == RouteModeCustom && !configured { eligible = false; reason = "not_in_custom_order" }
+		if p.Disabled { eligible = false; reason = "disabled_by_api_key" }
+		if key.MaxRateMultiplier != nil && rate > *key.MaxRateMultiplier { eligible = false; reason = "max_rate_exceeded" }
+		if g.ProbeEnabled && !h.Healthy { eligible = false; reason = "unavailable" }
+		previews = append(previews, RoutingGroupPreview{Group:g, Status:status, RateMultiplier:rate, RealTTFTP50MS:h.RealTTFTP50MS, ProbeTTFTMS:h.ProbeTTFTMS, Eligible:eligible, ExcludedReason:reason})
+		candidates = append(candidates, GroupRouteCandidate{GroupID:g.ID, RateMultiplier:rate, Healthy:h.Healthy, ProbeEnabled:g.ProbeEnabled, Disabled:p.Disabled, CustomPosition:p.Position, AdminSortOrder:g.SortOrder, RealTTFTP50MS:h.RealTTFTP50MS, RealTTFTSamples:h.RealTTFTSamples, ProbeTTFTMS:h.ProbeTTFTMS})
+	}
+	ranked, err := RankGroupCandidates(mode, key.MaxRateMultiplier, candidates); if err != nil { return nil, err }
+	order := make(map[int64]int, len(ranked)); for i, c := range ranked { order[c.GroupID] = i+1 }
+	for i := range previews { previews[i].Position = order[previews[i].Group.ID]; if previews[i].Position == 0 && previews[i].ExcludedReason == "" { previews[i].ExcludedReason = "filtered_by_health" }; if previews[i].Position > 0 { previews[i].Eligible = true } }
+	sort.SliceStable(previews, func(i,j int) bool { a,b:=previews[i],previews[j]; if a.Position>0 && b.Position==0{return true}; if a.Position==0&&b.Position>0{return false}; if a.Position!=b.Position{return a.Position<b.Position}; return a.Group.ID<b.Group.ID })
+	return previews, nil
+}
+
 // ResolveRoutingGroups returns the stable, filtered group order for a key. The
 // gateway consumes one account from each group in this order for dynamic modes.
 func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) ([]Group, error) {

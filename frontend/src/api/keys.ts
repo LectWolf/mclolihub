@@ -6,6 +6,20 @@
 import { apiClient } from './client'
 import type { ApiKey, CreateApiKeyRequest, UpdateApiKeyRequest, PaginatedResponse } from '@/types'
 
+export interface RoutingPreviewGroup {
+  group_id: number
+  name: string
+  platform: string
+  status: string
+  rate_multiplier: number
+  real_ttft_p50_ms: number
+  probe_ttft_ms: number
+  eligible: boolean
+  position: number
+  excluded_reason?: string
+}
+export interface RoutingPreview { route_mode: string; next_group_id: number; groups: RoutingPreviewGroup[] }
+
 /**
  * List all API keys for current user
  * @param page - Page number (default: 1)
@@ -42,6 +56,11 @@ export async function list(
  */
 export async function getById(id: number): Promise<ApiKey> {
   const { data } = await apiClient.get<ApiKey>(`/keys/${id}`)
+  return data
+}
+
+export async function getRoutingPreview(id: number): Promise<RoutingPreview> {
+  const { data } = await apiClient.get<RoutingPreview>(`/keys/${id}/routing-preview`)
   return data
 }
 
@@ -136,6 +155,7 @@ export async function toggleStatus(id: number, status: 'active' | 'inactive'): P
 export const keysAPI = {
   list,
   getById,
+  getRoutingPreview,
   create,
   update,
   delete: deleteKey,

@@ -16,6 +16,7 @@ func TestNormalizeAccountTestMode(t *testing.T) {
 		{input: "default", want: AccountTestModeDefault},
 		{input: " compact ", want: AccountTestModeCompact},
 		{input: "COMPACT", want: AccountTestModeCompact},
+		{input: "group_health_probe", want: AccountTestModeProbe},
 		{input: "unknown", want: AccountTestModeDefault},
 	}
 
@@ -24,6 +25,13 @@ func TestNormalizeAccountTestMode(t *testing.T) {
 			t.Fatalf("normalizeAccountTestMode(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
+}
+
+func TestCreateOpenAIProbePayloadIsLowTokenResponsesRequest(t *testing.T) {
+	payload := createOpenAIProbePayload("gpt-5.6-sol", false)
+	if payload["stream"] != true || payload["max_output_tokens"] != 5 { t.Fatalf("unexpected probe payload: %#v", payload) }
+	if payload["input"] != "hi" { t.Fatalf("probe input = %#v", payload["input"]) }
+	if _, ok := payload["instructions"]; ok { t.Fatal("low-token probe must not include full instructions") }
 }
 
 func TestBuildOpenAICompactProbeExtraUpdates_SuccessMarksSupported(t *testing.T) {
