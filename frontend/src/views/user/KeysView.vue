@@ -1002,9 +1002,9 @@
           <span class="w-6 text-center text-xs font-semibold tabular-nums text-gray-400">{{ group.position || '-' }}</span>
           <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(group.status)" />
           <span class="min-w-0 flex-1 truncate text-sm">{{ group.name }}</span>
-          <span class="text-xs tabular-nums text-gray-500">{{ group.rate_multiplier.toFixed(2) }}x</span>
+          <span class="text-xs tabular-nums text-gray-500">{{ formatRateMultiplier(group.rate_multiplier) }}x</span>
           <span v-if="group.position === 1" class="badge badge-primary">{{ t('keys.nextGroup') }}</span>
-          <span v-else-if="!group.eligible" class="text-xs text-gray-400">{{ group.excluded_reason }}</span>
+          <span v-else-if="!group.eligible" class="text-xs text-gray-400">{{ routingExcludedReasonLabel(group.excluded_reason) }}</span>
         </div>
       </div>
     </BaseDialog>
@@ -1204,6 +1204,7 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
+import { formatMultiplier as formatRateMultiplier } from '@/utils/formatters'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { maskApiKey } from '@/utils/maskApiKey'
 import {
@@ -1453,7 +1454,26 @@ const nextGroupName = (key: ApiKey) => {
   return preview?.groups.find((g) => g.group_id === preview.next_group_id)?.name || t('keys.noGroup')
 }
 const routingStatusClass = (status: string) => ({ healthy: 'bg-emerald-500', unavailable: 'bg-red-500', balance_insufficient: 'bg-red-500', not_enabled: 'bg-amber-400', unknown: 'bg-gray-400' }[status] || 'bg-gray-400')
-const routingStatusLabel = (status: string) => t(`groupHealth.statuses.${status}`, status)
+const routingStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    healthy: '可用',
+    unavailable: '不可用',
+    balance_insufficient: '余额不足',
+    not_enabled: '未开启探测',
+    unknown: '未知',
+  }
+  return labels[status] || t(`groupHealth.statuses.${status}`, status)
+}
+const routingExcludedReasonLabel = (reason?: string) => {
+  const labels: Record<string, string> = {
+    unavailable: '不可用',
+    disabled_by_api_key: '已被此 API 密钥禁用',
+    max_rate_exceeded: '超过倍率上限',
+    not_in_custom_order: '不在自定义顺序中',
+    filtered_by_health: '健康检查未通过',
+  }
+  return labels[reason || ''] || reason || '不可用'
+}
 const openRoutingPreview = async (key: ApiKey) => {
   try {
     const preview = await keysAPI.getRoutingPreview(key.id)

@@ -26,7 +26,7 @@ describe('GroupHealthPanel', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-20T08:00:00Z'))
     listGroupHealth.mockResolvedValue({
-      window_hours: 6,
+      window_hours: 12,
       bucket_minutes: 5,
       items: [{
         group_id: 7,
@@ -70,7 +70,7 @@ describe('GroupHealthPanel', () => {
     vi.clearAllMocks()
   })
 
-  it('renders status, routing metrics, zero availability and a 36-bucket trend', async () => {
+  it('renders status, routing metrics, zero availability and a 72-bucket trend', async () => {
     const wrapper = mount(GroupHealthPanel, {
       global: { stubs: { Icon: true } },
     })
@@ -82,7 +82,7 @@ describe('GroupHealthPanel', () => {
     expect(wrapper.text()).toContain('5944 ms')
     expect(wrapper.text()).toContain('0.0%')
     expect(wrapper.find('.badge').classes()).toContain('badge-info')
-    expect(wrapper.findAll('td:last-child > div > span')).toHaveLength(36)
+    expect(wrapper.findAll('td:last-child > div > span')).toHaveLength(72)
 
     wrapper.unmount()
   })

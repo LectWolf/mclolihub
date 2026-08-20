@@ -534,7 +534,7 @@ export default {
     },
     empty: {
       title: 'No channels available',
-      description: 'No monitored channels have been configured yet.'
+      description: ''
     }
   },
 
@@ -969,14 +969,14 @@ export default {
 
   groupHealth: {
     title: 'Group channel status',
-    window: 'Last 6 hours, 10-minute buckets; yellow/red probe TTFT and purple real-user TTFT',
+    window: 'Last 12 hours, 10-minute buckets; green/yellow/red probe TTFT and purple real-user TTFT',
     group: 'Group',
     multiplier: 'Rate',
     status: 'Status',
     realTtft: 'Real TTFT',
     probeTtft: 'Probe TTFT',
     availability: '6h availability',
-    trend: 'Last 6 hours',
+    trend: 'Last 12 hours',
     empty: 'No groups are available',
     loadError: 'Failed to load group channel status',
     notEnabled: 'Probing disabled',

@@ -54,7 +54,7 @@
             </td>
             <td>
               <div class="grid h-9 grid-flow-col grid-rows-1 gap-px" :style="{ gridTemplateColumns: `repeat(${trend(item).length}, minmax(3px, 1fr))` }" :aria-label="t('groupHealth.trend')">
-                <span v-for="(bucket, index) in trend(item)" :key="index" class="relative h-full min-w-[3px] cursor-help rounded-[1px] bg-gray-100 dark:bg-dark-700" :title="bucketTitle(bucket)">
+                <span v-for="(bucket, index) in trend(item)" :key="index" class="relative h-full min-w-[3px] cursor-help rounded-[1px]" :title="bucketTitle(bucket)">
                   <span v-if="bucket?.real_ttft_ms" class="absolute inset-x-0 bottom-0 rounded-[1px] bg-violet-500/80" :style="{ height: `${barHeight(bucket.real_ttft_ms)}%` }" />
                   <span v-if="bucket?.probe_ttft_ms" class="absolute inset-x-0 bottom-0 rounded-[1px]" :class="probeBarClass(bucket.probe_ttft_ms)" :style="{ height: `${barHeight(bucket.probe_ttft_ms)}%` }" />
                 </span>
@@ -74,6 +74,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { listGroupHealth, type GroupHealthItem, type GroupHealthStatus, type GroupHealthTrendBucket } from '@/api/groupHealth'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatMultiplier as formatRateMultiplier } from '@/utils/formatters'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -119,28 +120,26 @@ function formatPercent(value: number) {
   return Number.isFinite(value) && value >= 0 ? `${value.toFixed(value >= 99 ? 2 : 1)}%` : '-'
 }
 function formatMultiplier(value: number) {
-  return `${Number(value || 0).toFixed(2)}x`
+  return `${formatRateMultiplier(Number(value || 0))}x`
 }
 function formatTime(value: string) {
   return new Intl.DateTimeFormat(locale.value || undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 function statusClass(status: GroupHealthStatus) {
-  return {
-    healthy: 'badge-success',
-    unavailable: 'badge-danger',
-    balance_insufficient: 'badge-info',
-    not_enabled: 'badge-gray',
-  }[status]
+  if (status === 'healthy') return 'badge-success'
+  if (status === 'balance_insufficient') return 'badge-info'
+  if (status === 'not_enabled') return 'badge-gray'
+  return 'badge-danger'
 }
 function statusLabel(status: GroupHealthStatus) {
-  return t(`groupHealth.statuses.${status}`)
+  return t(`groupHealth.statuses.${status}`, status === 'unavailable' ? '不可用' : status)
 }
 
 type DisplayBucket = GroupHealthTrendBucket | null
 function trend(item: GroupHealthItem): DisplayBucket[] {
-  const result: DisplayBucket[] = Array.from({ length: 36 }, () => null)
+  const result: DisplayBucket[] = Array.from({ length: 72 }, () => null)
   const end = Date.now()
-  const start = end - 6 * 60 * 60 * 1000
+  const start = end - 12 * 60 * 60 * 1000
   for (const bucket of item.trend || []) {
     const index = Math.floor((new Date(bucket.started_at).getTime() - start) / (10 * 60 * 1000))
     if (index >= 0 && index < result.length) result[index] = bucket
@@ -149,7 +148,7 @@ function trend(item: GroupHealthItem): DisplayBucket[] {
 }
 const maxTrendTTFT = computed(() => Math.max(1000, ...items.value.flatMap((item) => (item.trend || []).flatMap((bucket) => [bucket.probe_ttft_ms || 0, bucket.real_ttft_ms || 0]))))
 function barHeight(value: number) { return Math.max(4, Math.min(100, (value / maxTrendTTFT.value) * 100)) }
-function probeBarClass(value: number) { return value >= 8000 ? 'bg-red-500' : value >= 4000 ? 'bg-amber-400' : 'bg-amber-300' }
+function probeBarClass(value: number) { return value >= 8000 ? 'bg-red-500' : value >= 3000 ? 'bg-amber-400' : 'bg-emerald-500' }
 function bucketTitle(bucket: DisplayBucket) {
   if (!bucket) return t('groupHealth.noData')
   return `${formatTime(bucket.started_at)} · ${t('groupHealth.bucketDetail', { success: bucket.real_success + bucket.probe_success, failure: bucket.real_failure + bucket.probe_failure })} · ${t('groupHealth.probeTtft')}: ${formatMs(bucket.probe_ttft_ms)} · ${t('groupHealth.realTtft')}: ${formatMs(bucket.real_ttft_ms)}`

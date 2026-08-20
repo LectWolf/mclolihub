@@ -539,7 +539,7 @@ export default {
     },
     empty: {
       title: '暂无可显示的渠道',
-      description: '管理员尚未配置可监控的渠道。'
+      description: ''
     }
   },
 
@@ -974,14 +974,14 @@ export default {
 
   groupHealth: {
     title: '分组渠道状态',
-    window: '最近 6 小时，每 10 分钟一格；黄色/红色为探测首字，紫色为用户真实首字',
+    window: '最近 12 小时，每 10 分钟一格；绿色/黄色/红色为探测首字，紫色为用户真实首字',
     group: '分组',
     multiplier: '倍率',
     status: '状态',
     realTtft: '真实首字延迟',
     probeTtft: '探测首字延迟',
     availability: '6 小时可用率',
-    trend: '最近 6 小时状态',
+    trend: '最近 12 小时状态',
     empty: '暂无可查看的分组',
     loadError: '加载分组渠道状态失败',
     notEnabled: '未开启探测',

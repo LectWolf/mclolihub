@@ -202,10 +202,24 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 
 // ProbeNow executes a group probe synchronously for an administrator refresh.
 func (s *GroupHealthService) ProbeNow(ctx context.Context, groupID int64) error {
-	if s == nil || s.repo == nil || s.accountRepo == nil || s.testService == nil { return fmt.Errorf("group health service unavailable") }
-	target, err := s.findGroupProbeTarget(ctx, groupID); if err != nil { return err }
-	if !target.ProbeEnabled { return fmt.Errorf("group probe is disabled") }
-	return s.probeGroup(ctx, target, time.Now())
+	if s == nil || s.repo == nil || s.accountRepo == nil || s.testService == nil {
+		return fmt.Errorf("group health service unavailable")
+	}
+	target, err := s.findGroupProbeTarget(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if !target.ProbeEnabled {
+		return fmt.Errorf("group probe is disabled")
+	}
+	now := time.Now()
+	if err := s.probeGroup(ctx, target, now); err != nil {
+		return err
+	}
+	// The scheduled loop refreshes rolling metrics at the end of each cycle,
+	// but an administrator's immediate refresh must update availability before
+	// returning the response; otherwise a successful probe still displays 0%.
+	return s.repo.UpdateRollingMetrics(ctx, now)
 }
 
 func (s *GroupHealthService) probeRecoveryAccount(ctx context.Context, target AccountProbeTarget, now time.Time) error {

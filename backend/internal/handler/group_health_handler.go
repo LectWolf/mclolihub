@@ -87,9 +87,19 @@ func (h *GroupHealthHandler) AdminGet(c *gin.Context) {
 
 func (h *GroupHealthHandler) AdminRefresh(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id <= 0 { response.BadRequest(c, "invalid group id"); return }
-	if err := h.health.ProbeNow(c.Request.Context(), id); err != nil { response.ErrorFrom(c, err); return }
-	group, err := h.groupService.GetByID(c.Request.Context(), id); if err != nil { response.ErrorFrom(c, err); return }
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "invalid group id")
+		return
+	}
+	if err := h.health.ProbeNow(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	group, err := h.groupService.GetByID(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	h.writeGroups(c, []service.Group{*group}, nil, true)
 }
 
@@ -119,7 +129,7 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 	trends := make(map[int64][]service.GroupHealthTrendBucket)
 	if includeTrend {
 		end := time.Now()
-		trends, err = h.health.LoadTrend(c.Request.Context(), ids, end.Add(-6*time.Hour), end)
+		trends, err = h.health.LoadTrend(c.Request.Context(), ids, end.Add(-12*time.Hour), end)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -156,5 +166,5 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 			Trend: trends[group.ID],
 		})
 	}
-	response.Success(c, gin.H{"items": items, "window_hours": 6, "bucket_minutes": 10})
+	response.Success(c, gin.H{"items": items, "window_hours": 12, "bucket_minutes": 10})
 }
