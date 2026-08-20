@@ -44,8 +44,8 @@ var sseDataPrefix = regexp.MustCompile(`^data:\s*`)
 
 const (
 	AccountTestModeProbe = "group_health_probe"
-	testClaudeAPIURL   = "https://api.anthropic.com/v1/messages?beta=true"
-	chatgptCodexAPIURL = "https://chatgpt.com/backend-api/codex/responses"
+	testClaudeAPIURL     = "https://api.anthropic.com/v1/messages?beta=true"
+	chatgptCodexAPIURL   = "https://chatgpt.com/backend-api/codex/responses"
 )
 
 // TestEvent represents a SSE event for account testing
@@ -702,7 +702,12 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
 		}
-		if !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+		// Group health probes are deliberately protocol-specific: they measure
+		// the Responses path used by the health UI and must not silently fall
+		// back to Chat Completions when an account capability flag is stale or
+		// marked unsupported. A failed /responses probe is more actionable than
+		// reporting healthy based on a different protocol.
+		if mode != AccountTestModeProbe && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 			return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 		}
 		apiURL = buildOpenAIResponsesURL(normalizedBaseURL)
@@ -2634,12 +2639,14 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 // test instructions or consume a long completion.
 func createOpenAIProbePayload(modelID string, isOAuth bool) map[string]any {
 	payload := map[string]any{
-		"model": modelID,
-		"input": "hi",
+		"model":             modelID,
+		"input":             "hi",
 		"max_output_tokens": 5,
-		"stream": true,
+		"stream":            true,
 	}
-	if isOAuth { payload["store"] = false }
+	if isOAuth {
+		payload["store"] = false
+	}
 	return payload
 }
 
