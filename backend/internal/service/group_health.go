@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// IsGroupPolicyDispatchError reports errors caused by the selected group's
+// protocol policy rather than by an upstream account.  Such errors must not
+// poison account health or trigger failover/403 circuit breakers.
+func IsGroupPolicyDispatchError(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(message, "this group does not allow /v1/messages dispatch") ||
+		strings.Contains(message, "group does not allow /v1/messages dispatch")
+}
+
 const (
 	GroupHealthUnknown             = "unknown"
 	GroupHealthHealthy             = "healthy"

@@ -137,6 +137,12 @@ func TestDeriveGroupHealth(t *testing.T) {
 	require.Equal(t, GroupHealthUnavailable, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeFailed}}))
 }
 
+func TestGroupPolicyDispatchErrorDoesNotBecomeHealthFailure(t *testing.T) {
+	require.True(t, IsGroupPolicyDispatchError("Access forbidden (403): This group does not allow /v1/messages dispatch"))
+	require.True(t, IsGroupPolicyDispatchError("this group does not allow /v1/messages dispatch"))
+	require.False(t, IsGroupPolicyDispatchError("Access forbidden (403): invalid api key"))
+}
+
 func TestRankGroupCandidates(t *testing.T) {
 	candidates := []GroupRouteCandidate{
 		{GroupID: 1, RateMultiplier: 1, Healthy: true, ProbeEnabled: true, RealTTFTP50MS: 6000, RealTTFTSamples: 2, ProbeTTFTMS: 100},

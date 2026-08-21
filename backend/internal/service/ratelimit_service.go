@@ -931,6 +931,14 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 }
 
 func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
+	// This is a gateway/group policy response, not evidence that the OpenAI
+	// credential is forbidden.  In particular, a user sending Anthropic
+	// Messages to an OpenAI group may receive this 403 while Responses works
+	// normally.  Never count it toward the account 403 circuit breaker.
+	if IsGroupPolicyDispatchError(upstreamMsg) || IsGroupPolicyDispatchError(string(responseBody)) {
+		slog.Debug("openai_403_group_policy_skips_account_penalty", "account_id", account.ID)
+		return false
+	}
 	// 上游代理 / CDN 在请求到达 OpenAI API 之前就拦下时，回的是 HTML 403 页面而不是
 	// {"error":{...}} 结构化错误。这类响应描述的是「这条链路 / 这个端点被挡了」，
 	// 不构成账号凭据或权限失效的证据——例如无效的 /v1/responses 子路径（#5334）。

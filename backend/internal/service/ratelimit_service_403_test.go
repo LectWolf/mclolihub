@@ -86,3 +86,22 @@ func TestRateLimitService_HandleUpstreamError_OpenAI403ThresholdDisables(t *test
 	require.Contains(t, repo.lastErrorMsg, "workspace forbidden by policy")
 	require.Contains(t, repo.lastErrorMsg, "consecutive_403=3/3")
 }
+
+func TestRateLimitService_HandleUpstreamError_GroupMessagesPolicyDoesNotBlockAccount(t *testing.T) {
+	repo := &rateLimitAccountRepoStub{}
+	counter := &openAI403CounterCacheStub{counts: []int64{1, 2, 3}}
+	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	service.SetOpenAI403CounterCache(counter)
+	account := &Account{ID: 303, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+
+	for i := 0; i < 3; i++ {
+		shouldDisable := service.HandleUpstreamError(
+			context.Background(), account, http.StatusForbidden, http.Header{},
+			[]byte(`{"error":{"message":"This group does not allow /v1/messages dispatch"}}`),
+		)
+		require.False(t, shouldDisable)
+	}
+	require.Equal(t, 0, repo.setErrorCalls)
+	require.Equal(t, 0, repo.tempCalls)
+	require.Equal(t, []int64{1, 2, 3}, counter.counts, "policy errors must not consume the 403 counter")
+}

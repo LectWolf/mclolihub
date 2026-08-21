@@ -295,12 +295,15 @@ func (r *groupHealthStore) UpdateRollingMetrics(ctx context.Context, now time.Ti
 		  COALESCE(percentile_cont(0.95) WITHIN GROUP(ORDER BY ttft_ms) FILTER(WHERE success AND ttft_ms>0),0)::int AS p95_ttft
 		 FROM group_health_events WHERE is_probe IS TRUE AND observed_at >= $1 - interval '6 hours' GROUP BY group_id
 	), real_success AS (
-		 SELECT group_id,COUNT(*) AS successes,
+		 SELECT COALESCE(ul.group_id, ag.group_id) AS group_id,COUNT(*) AS successes,
 		  COALESCE(percentile_cont(0.5) WITHIN GROUP(ORDER BY first_token_ms),0)::int AS p50_ttft,
 		  COALESCE(AVG(first_token_ms),0)::int AS avg_ttft,
 		  COALESCE(percentile_cont(0.95) WITHIN GROUP(ORDER BY first_token_ms),0)::int AS p95_ttft,
 		  COALESCE(AVG(duration_ms),0)::int AS avg_total
-		 FROM usage_logs WHERE group_id IS NOT NULL AND first_token_ms IS NOT NULL AND created_at >= $1 - interval '6 hours' GROUP BY group_id
+		 FROM usage_logs ul
+		 LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
+		 WHERE first_token_ms IS NOT NULL AND created_at >= $1 - interval '6 hours'
+		 GROUP BY COALESCE(ul.group_id, ag.group_id)
 	), real_failure AS (
 		 SELECT group_id,COUNT(*) AS failures FROM group_health_events
 		 WHERE is_probe IS FALSE AND success IS FALSE AND observed_at >= $1 - interval '6 hours' GROUP BY group_id
@@ -360,9 +363,12 @@ func (r *groupHealthStore) LoadTrend(ctx context.Context, groupIDs []int64, star
 		 COALESCE(AVG(ttft_ms) FILTER(WHERE is_probe AND success AND ttft_ms>0),0)::int AS probe_ttft
 		 FROM group_health_events WHERE group_id=ANY($1) AND observed_at >= $2 AND observed_at < $3 GROUP BY group_id,bucket
 	), usage_buckets AS (
-		 SELECT group_id,date_bin('10 minutes',created_at,TIMESTAMPTZ '2000-01-01') AS bucket,
+		 SELECT COALESCE(ul.group_id, ag.group_id) AS group_id,date_bin('10 minutes',ul.created_at,TIMESTAMPTZ '2000-01-01') AS bucket,
 		 COUNT(*)::int AS real_success,COALESCE(AVG(first_token_ms),0)::int AS real_ttft
-		 FROM usage_logs WHERE group_id=ANY($1) AND first_token_ms IS NOT NULL AND created_at >= $2 AND created_at < $3 GROUP BY group_id,bucket
+		 FROM usage_logs ul
+		 LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
+		 WHERE COALESCE(ul.group_id, ag.group_id)=ANY($1) AND ul.first_token_ms IS NOT NULL AND ul.created_at >= $2 AND ul.created_at < $3
+		 GROUP BY COALESCE(ul.group_id, ag.group_id),bucket
 	)
 	SELECT COALESCE(e.group_id,u.group_id),COALESCE(e.bucket,u.bucket),COALESCE(e.probe_success,0),COALESCE(e.probe_failure,0),COALESCE(u.real_success,0),COALESCE(e.real_failure,0),COALESCE(e.probe_ttft,0),COALESCE(u.real_ttft,0)
 	FROM event_buckets e FULL JOIN usage_buckets u USING(group_id,bucket) ORDER BY 1,2`, pq.Array(groupIDs), start, end)

@@ -60,6 +60,8 @@ func TestRollingMetricsIncludesEveryHealthStateForWindowReset(t *testing.T) {
 	require.Contains(t, normalized, "from group_health_states s")
 	require.Contains(t, normalized, "left join probe")
 	require.Contains(t, normalized, "left join real_success")
+	require.Contains(t, normalized, "left join account_groups ag")
+	require.Contains(t, normalized, "coalesce(ul.group_id, ag.group_id)")
 	require.NotContains(t, normalized, "full join")
 	require.NoError(t, mock.ExpectationsWereMet(), fmt.Sprintf("query: %s", query))
 }
