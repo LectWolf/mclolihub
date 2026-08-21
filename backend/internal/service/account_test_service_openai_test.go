@@ -538,10 +538,11 @@ func TestAccountTestService_OpenAIProbeUsesLowTokenResponsesDespiteCapabilityFla
 	require.Equal(t, "https://compat-upstream.example/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-test", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "gpt-5.4", gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, "hi", gjson.GetBytes(upstream.lastBody, "input").String())
+	require.Equal(t, ".", gjson.GetBytes(upstream.lastBody, "input").String())
+	require.Equal(t, "Reply with OK.", gjson.GetBytes(upstream.lastBody, "instructions").String())
 	require.Equal(t, int64(5), gjson.GetBytes(upstream.lastBody, "max_output_tokens").Int())
+	require.Equal(t, "none", gjson.GetBytes(upstream.lastBody, "reasoning.effort").String())
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "instructions").Exists())
 	require.False(t, gjson.GetBytes(upstream.lastBody, "messages").Exists())
 	require.Contains(t, recorder.Body.String(), `"success":true`)
 }

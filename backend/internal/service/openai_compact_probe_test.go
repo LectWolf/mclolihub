@@ -29,9 +29,38 @@ func TestNormalizeAccountTestMode(t *testing.T) {
 
 func TestCreateOpenAIProbePayloadIsLowTokenResponsesRequest(t *testing.T) {
 	payload := createOpenAIProbePayload("gpt-5.6-sol", false)
-	if payload["stream"] != true || payload["max_output_tokens"] != 5 { t.Fatalf("unexpected probe payload: %#v", payload) }
-	if payload["input"] != "hi" { t.Fatalf("probe input = %#v", payload["input"]) }
-	if _, ok := payload["instructions"]; ok { t.Fatal("low-token probe must not include full instructions") }
+	if payload["stream"] != true || payload["max_output_tokens"] != 5 {
+		t.Fatalf("unexpected probe payload: %#v", payload)
+	}
+	if payload["input"] != "." {
+		t.Fatalf("probe input = %#v", payload["input"])
+	}
+	if payload["instructions"] != "Reply with OK." {
+		t.Fatalf("probe instructions = %#v", payload["instructions"])
+	}
+	reasoning, ok := payload["reasoning"].(map[string]any)
+	if !ok || reasoning["effort"] != "none" {
+		t.Fatalf("probe reasoning = %#v", payload["reasoning"])
+	}
+}
+
+func TestOpenAIProbePayloadKeepsShortInstructionsThroughOAuthTransform(t *testing.T) {
+	payload := createOpenAIProbePayload("gpt-5.6-sol", true)
+	applyCodexOAuthTransform(payload, false, false)
+
+	if payload["instructions"] != "Reply with OK." {
+		t.Fatalf("OAuth transform replaced probe instructions: %#v", payload["instructions"])
+	}
+	if payload["input"] == nil {
+		t.Fatal("OAuth transform removed probe input")
+	}
+	reasoning, ok := payload["reasoning"].(map[string]any)
+	if !ok || reasoning["effort"] != "none" {
+		t.Fatalf("OAuth transform changed probe reasoning: %#v", payload["reasoning"])
+	}
+	if _, ok := payload["max_output_tokens"]; ok {
+		t.Fatal("OAuth transform must remove unsupported max_output_tokens")
+	}
 }
 
 func TestBuildOpenAICompactProbeExtraUpdates_SuccessMarksSupported(t *testing.T) {

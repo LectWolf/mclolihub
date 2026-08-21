@@ -2640,9 +2640,14 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 func createOpenAIProbePayload(modelID string, isOAuth bool) map[string]any {
 	payload := map[string]any{
 		"model":             modelID,
-		"input":             "hi",
+		"instructions":      "Reply with OK.",
+		"input":             ".",
 		"max_output_tokens": 5,
-		"stream":            true,
+		// OAuth/Codex forwarding strips max_output_tokens because the
+		// ChatGPT internal endpoint does not accept it. Explicitly disable
+		// reasoning as the portable low-cost guard for those accounts.
+		"reasoning": map[string]any{"effort": "none"},
+		"stream":    true,
 	}
 	if isOAuth {
 		payload["store"] = false
