@@ -201,7 +201,7 @@ func (r *groupHealthStore) SaveAccountHealth(ctx context.Context, state service.
 	if state.RuntimeStatus == service.AccountRuntimeActive {
 		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=NULL, temp_unschedulable_reason=NULL, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL AND temp_unschedulable_reason LIKE 'group_health_probe:%'`, state.AccountID)
 	} else if state.RuntimeStatus == service.AccountRuntimeProbing || state.RuntimeStatus == service.AccountRuntimeUnavailable || state.RuntimeStatus == service.AccountRuntimeLegacyFailed {
-		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '9999-12-31 23:59:59+00', temp_unschedulable_reason=$2, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID, "group_health_probe: "+state.Reason)
+		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '2099-12-31 23:59:59+00', temp_unschedulable_reason=$2, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID, "group_health_probe: "+state.Reason)
 	}
 	if err == nil {
 		_ = enqueueSchedulerOutbox(ctx, r.db, service.SchedulerOutboxEventAccountChanged, &state.AccountID, nil, nil)
@@ -264,7 +264,7 @@ func (r *groupHealthStore) ClaimImmediateProbe(ctx context.Context, accountID, g
 			  AND (account_health_states.last_immediate_probe_at IS NULL OR account_health_states.last_immediate_probe_at <= $3 - $4::interval)
 			RETURNING account_id
 		), updated AS (
-			UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '9999-12-31 23:59:59+00', temp_unschedulable_reason='group_health_probe: immediate verification pending', updated_at=NOW()
+			UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '2099-12-31 23:59:59+00', temp_unschedulable_reason='group_health_probe: immediate verification pending', updated_at=NOW()
 			WHERE id IN (SELECT account_id FROM claimed) AND status='active' AND deleted_at IS NULL
 			RETURNING id
 		)
@@ -302,7 +302,7 @@ func (r *groupHealthStore) UpdateRollingMetrics(ctx context.Context, now time.Ti
 		  COALESCE(100.0*COUNT(*) FILTER(WHERE success)/NULLIF(COUNT(*),0),0) AS availability,
 		  COALESCE(AVG(ttft_ms) FILTER(WHERE success AND ttft_ms>0),0)::int AS avg_ttft,
 		  COALESCE(percentile_cont(0.95) WITHIN GROUP(ORDER BY ttft_ms) FILTER(WHERE success AND ttft_ms>0),0)::int AS p95_ttft
-		 FROM group_health_events WHERE is_probe IS TRUE AND observed_at >= $1 - interval '6 hours' GROUP BY group_id
+		 FROM group_health_events WHERE is_probe IS TRUE AND observed_at >= $1::timestamptz - interval '6 hours' GROUP BY group_id
 	), real_success AS (
 		 SELECT COALESCE(ul.group_id, ag.group_id) AS group_id,COUNT(*) AS successes,
 		  COALESCE(percentile_cont(0.5) WITHIN GROUP(ORDER BY first_token_ms),0)::int AS p50_ttft,
@@ -311,11 +311,11 @@ func (r *groupHealthStore) UpdateRollingMetrics(ctx context.Context, now time.Ti
 		  COALESCE(AVG(duration_ms),0)::int AS avg_total
 		 FROM usage_logs ul
 		 LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
-		 WHERE first_token_ms IS NOT NULL AND created_at >= $1 - interval '6 hours'
+		 WHERE first_token_ms IS NOT NULL AND created_at >= $1::timestamptz - interval '6 hours'
 		 GROUP BY COALESCE(ul.group_id, ag.group_id)
 	), real_failure AS (
 		 SELECT group_id,COUNT(*) AS failures FROM group_health_events
-		 WHERE is_probe IS FALSE AND success IS FALSE AND observed_at >= $1 - interval '6 hours' GROUP BY group_id
+		 WHERE is_probe IS FALSE AND success IS FALSE AND observed_at >= $1::timestamptz - interval '6 hours' GROUP BY group_id
 	), metrics AS (
 		 SELECT s.group_id,
 		  COALESCE(p.availability,0) AS probe_availability,

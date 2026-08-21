@@ -36,6 +36,8 @@ func TestGroupHealthClaimImmediateProbePersistsTwoMinuteThrottleWithoutMarkingFa
 	require.Contains(t, strings.ToLower(query), "'probing'",
 		"the immediate verification must quarantine the account before the async probe runs")
 	require.Contains(t, strings.ToLower(query), "scheduler_outbox")
+	require.Contains(t, query, "2099-12-31")
+	require.NotContains(t, query, "9999-12-31")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -63,6 +65,7 @@ func TestRollingMetricsIncludesEveryHealthStateForWindowReset(t *testing.T) {
 	err = (&groupHealthStore{db: db}).UpdateRollingMetrics(context.Background(), now)
 	require.NoError(t, err)
 	normalized := strings.ToLower(strings.Join(strings.Fields(query), " "))
+	require.Contains(t, normalized, "$1::timestamptz - interval '6 hours'")
 	require.Contains(t, normalized, "from group_health_states s")
 	require.Contains(t, normalized, "left join probe")
 	require.Contains(t, normalized, "left join real_success")
