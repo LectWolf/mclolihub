@@ -460,6 +460,15 @@ type AdminUpdateAPIKeyGroupIDResult struct {
 	GrantedGroupName       string // the group name that was auto-granted
 }
 
+// AdminUpdateAPIKeyRoutingInput contains routing fields an administrator may change.
+type AdminUpdateAPIKeyRoutingInput struct {
+	RouteMode         *string
+	RoutePlatform     *string
+	MaxRateMultiplier *float64
+	DisabledGroupIDs  *[]int64
+	CustomGroupIDs    *[]int64
+}
+
 // ReplaceUserGroupResult 分组替换操作的结果
 type ReplaceUserGroupResult struct {
 	MigratedKeys int64 // 迁移的 Key 数量

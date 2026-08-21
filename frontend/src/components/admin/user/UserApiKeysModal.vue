@@ -44,6 +44,53 @@
             </div>
             <div class="flex items-center gap-1"><span>{{ t('admin.users.columns.created') }}: {{ formatDateTime(key.created_at) }}</span></div>
           </div>
+          <div class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700">
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="min-w-32 flex-1">
+                <span class="mb-1 block text-[11px] text-gray-400">路由方式</span>
+                <select v-model="drafts[key.id].route_mode" class="input input-sm w-full">
+                  <option value="fixed">固定分组</option>
+                  <option value="cheapest">低价优先</option>
+                  <option value="fastest">响应优先</option>
+                  <option value="custom">自定义顺序</option>
+                </select>
+              </label>
+              <label v-if="drafts[key.id].route_mode !== 'fixed'" class="min-w-32 flex-1">
+                <span class="mb-1 block text-[11px] text-gray-400">平台范围</span>
+                <select v-model="drafts[key.id].route_platform" class="input input-sm w-full">
+                  <option value="auto">自动兼容（OpenAI）</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="grok">Grok</option>
+                </select>
+              </label>
+              <label class="w-28">
+                <span class="mb-1 block text-[11px] text-gray-400">最大倍率</span>
+                <input v-model.number="drafts[key.id].max_rate_multiplier" type="number" min="0" step="0.001" class="input input-sm w-full" placeholder="不限" />
+              </label>
+              <button type="button" class="btn btn-primary btn-sm" :disabled="savingKeyIds.has(key.id)" @click="saveRouting(key)">
+                {{ savingKeyIds.has(key.id) ? '保存中…' : '保存路由' }}
+              </button>
+            </div>
+            <div v-if="drafts[key.id].route_mode === 'cheapest' || drafts[key.id].route_mode === 'fastest'" class="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              <label v-for="group in allGroups" :key="`disabled-${key.id}-${group.id}`" class="inline-flex items-center gap-1 text-xs text-gray-500">
+                <input v-model="drafts[key.id].disabled_group_ids" type="checkbox" :value="group.id" class="checkbox checkbox-xs" />
+                {{ group.name }}
+              </label>
+            </div>
+            <div v-if="drafts[key.id].route_mode === 'custom'" class="mt-2 space-y-1">
+              <div class="text-[11px] text-gray-400">自定义顺序</div>
+              <div v-for="(groupId, index) in drafts[key.id].custom_group_ids" :key="`custom-${key.id}-${groupId}`" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <span class="w-4 text-center tabular-nums text-gray-400">{{ index + 1 }}</span>
+                <span class="min-w-0 flex-1 truncate">{{ allGroups.find((group) => group.id === groupId)?.name || `#${groupId}` }}</span>
+                <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === 0" title="上移" @click="moveCustomGroup(key.id, index, -1)">↑</button>
+                <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === drafts[key.id].custom_group_ids.length - 1" title="下移" @click="moveCustomGroup(key.id, index, 1)">↓</button>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <button v-for="group in allGroups.filter((group) => !drafts[key.id].custom_group_ids.includes(group.id))" :key="`add-${key.id}-${group.id}`" type="button" class="btn btn-secondary btn-xs" @click="drafts[key.id].custom_group_ids.push(group.id)">+ {{ group.name }}</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -125,6 +172,14 @@ const apiKeys = ref<ApiKey[]>([])
 const allGroups = ref<AdminGroup[]>([])
 const loading = ref(false)
 const updatingKeyIds = ref(new Set<number>())
+const savingKeyIds = ref(new Set<number>())
+const drafts = ref<Record<number, {
+  route_mode: ApiKey['route_mode']
+  route_platform: ApiKey['route_platform']
+  max_rate_multiplier: number | null
+  disabled_group_ids: number[]
+  custom_group_ids: number[]
+}>>({})
 const groupSelectorKeyId = ref<number | null>(null)
 const dropdownPosition = ref<{ top: number; left: number } | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -160,10 +215,48 @@ const load = async () => {
   try {
     const res = await adminAPI.users.getUserApiKeys(props.user.id)
     apiKeys.value = res.items || []
+    drafts.value = Object.fromEntries(apiKeys.value.map((key) => [key.id, {
+      route_mode: key.route_mode || 'fixed',
+      route_platform: key.route_platform || 'auto',
+              max_rate_multiplier: key.max_rate_multiplier ?? null,
+      disabled_group_ids: (key.group_preferences || []).filter((item) => item.disabled).map((item) => item.group_id),
+      custom_group_ids: (key.group_preferences || []).filter((item) => !item.disabled).sort((a, b) => a.position - b.position).map((item) => item.group_id),
+    }]))
   } catch (error) {
     console.error('Failed to load API keys:', error)
   } finally {
     loading.value = false
+  }
+}
+
+const moveCustomGroup = (keyId: number, index: number, delta: number) => {
+  const ids = drafts.value[keyId]?.custom_group_ids
+  if (!ids) return
+  const next = index + delta
+  if (next < 0 || next >= ids.length) return
+  const [item] = ids.splice(index, 1)
+  ids.splice(next, 0, item)
+}
+
+const saveRouting = async (key: ApiKey) => {
+  const draft = drafts.value[key.id]
+  if (!draft) return
+  savingKeyIds.value.add(key.id)
+  try {
+    const updated = await adminAPI.apiKeys.updateApiKeyRouting(key.id, {
+      route_mode: draft.route_mode,
+      route_platform: draft.route_mode === 'fixed' ? 'auto' : draft.route_platform,
+      max_rate_multiplier: draft.max_rate_multiplier,
+      disabled_group_ids: draft.disabled_group_ids,
+      custom_group_ids: draft.custom_group_ids,
+    })
+    const index = apiKeys.value.findIndex((item) => item.id === key.id)
+    if (index >= 0) apiKeys.value[index] = updated
+    appStore.showSuccess('API 密钥路由已更新')
+  } catch (error: any) {
+    appStore.showError(error?.response?.data?.detail || error?.message || 'API 密钥路由更新失败')
+  } finally {
+    savingKeyIds.value.delete(key.id)
   }
 }
 

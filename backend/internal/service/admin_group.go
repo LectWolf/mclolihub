@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -18,6 +19,70 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
+
+// AdminUpdateAPIKeyRouting updates dynamic routing fields for a user's key.
+// It intentionally lives beside the existing admin group update so both
+// operations share cache invalidation and preference persistence semantics.
+func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID int64, input AdminUpdateAPIKeyRoutingInput) (*APIKey, error) {
+	key, err := s.apiKeyRepo.GetByID(ctx, keyID)
+	if err != nil {
+		return nil, err
+	}
+	mode := key.RouteMode
+	if mode == "" {
+		mode = RouteModeFixed
+	}
+	if input.RouteMode != nil {
+		if err := ValidateRouteMode(*input.RouteMode); err != nil {
+			return nil, infraerrors.BadRequest("API_KEY_ROUTE_MODE_INVALID", err.Error())
+		}
+		mode = *input.RouteMode
+		key.RouteMode = mode
+	}
+	if input.RoutePlatform != nil {
+		if err := ValidateRoutePlatform(*input.RoutePlatform); err != nil {
+			return nil, infraerrors.BadRequest("API_KEY_ROUTE_PLATFORM_INVALID", err.Error())
+		}
+		key.RoutePlatform = normalizeRoutePlatform(*input.RoutePlatform)
+	}
+	if mode == RouteModeFixed {
+		key.RoutePlatform = RoutePlatformAuto
+	}
+	if input.MaxRateMultiplier != nil {
+		if math.IsNaN(*input.MaxRateMultiplier) || math.IsInf(*input.MaxRateMultiplier, 0) || *input.MaxRateMultiplier < 0 {
+			return nil, infraerrors.BadRequest("API_KEY_RATE_MULTIPLIER_INVALID", "max rate multiplier must be finite and non-negative")
+		}
+		key.MaxRateMultiplier = input.MaxRateMultiplier
+	}
+	fields := APIKeyUpdateFields{
+		RouteMode: input.RouteMode != nil,
+		RoutePlatform: input.RoutePlatform != nil || mode == RouteModeFixed,
+		MaxRateMultiplier: input.MaxRateMultiplier != nil,
+	}
+	if !fields.IsEmpty() {
+		if err := s.apiKeyRepo.Update(ctx, key, fields); err != nil {
+			return nil, fmt.Errorf("update API key routing: %w", err)
+		}
+	}
+	if input.DisabledGroupIDs != nil || input.CustomGroupIDs != nil {
+		disabled, custom := []int64{}, []int64{}
+		for _, pref := range key.GroupPreferences {
+			if pref.Disabled { disabled = append(disabled, pref.GroupID) } else { custom = append(custom, pref.GroupID) }
+		}
+		if input.DisabledGroupIDs != nil { disabled = *input.DisabledGroupIDs }
+		if input.CustomGroupIDs != nil { custom = *input.CustomGroupIDs }
+		key.GroupPreferences = buildAPIKeyPreferences(disabled, custom)
+		if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok {
+			if err := repo.SyncGroupPreferences(ctx, key.ID, key.GroupPreferences); err != nil {
+				return nil, fmt.Errorf("save API key group preferences: %w", err)
+			}
+		}
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, key.Key)
+	}
+	return key, nil
+}
 
 // Group management implementations
 func (s *adminServiceImpl) ListGroups(ctx context.Context, page, pageSize int, platform, status, search string, isExclusive *bool, sortBy, sortOrder string) ([]Group, int64, error) {
