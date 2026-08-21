@@ -66,6 +66,7 @@ func TestRollingMetricsIncludesEveryHealthStateForWindowReset(t *testing.T) {
 	require.NoError(t, err)
 	normalized := strings.ToLower(strings.Join(strings.Fields(query), " "))
 	require.Contains(t, normalized, "$1::timestamptz - interval '6 hours'")
+	require.Contains(t, normalized, "ul.created_at >= $1::timestamptz - interval '6 hours'")
 	require.Contains(t, normalized, "from group_health_states s")
 	require.Contains(t, normalized, "left join probe")
 	require.Contains(t, normalized, "left join real_success")

@@ -311,7 +311,7 @@ func (r *groupHealthStore) UpdateRollingMetrics(ctx context.Context, now time.Ti
 		  COALESCE(AVG(duration_ms),0)::int AS avg_total
 		 FROM usage_logs ul
 		 LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
-		 WHERE first_token_ms IS NOT NULL AND created_at >= $1::timestamptz - interval '6 hours'
+		 WHERE ul.first_token_ms IS NOT NULL AND ul.created_at >= $1::timestamptz - interval '6 hours'
 		 GROUP BY COALESCE(ul.group_id, ag.group_id)
 	), real_failure AS (
 		 SELECT group_id,COUNT(*) AS failures FROM group_health_events
