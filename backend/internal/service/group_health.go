@@ -34,7 +34,7 @@ const (
 	RoutePlatformAnthropic         = PlatformAnthropic
 	RoutePlatformGrok              = PlatformGrok
 	DefaultGroupProbeInterval      = 10 * time.Minute
-	ImmediateProbeCooldown         = 10 * time.Minute
+	ImmediateProbeCooldown         = 2 * time.Minute
 )
 
 var accountProbeBackoff = [...]time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
@@ -61,18 +61,25 @@ type AccountHealth struct {
 	LastImmediateProbeAt *time.Time
 }
 
-func NextAccountProbeAt(now time.Time, retryStep int, normalInterval time.Duration) time.Time {
-	if retryStep >= 0 && retryStep < len(accountProbeBackoff) {
-		return now.Add(accountProbeBackoff[retryStep])
+func NextAccountProbeAt(now time.Time, retryStep int, _ time.Duration) time.Time {
+	if retryStep < 0 {
+		retryStep = 0
 	}
-	if normalInterval < 30*time.Second || normalInterval > time.Hour {
-		normalInterval = DefaultGroupProbeInterval
+	if retryStep >= len(accountProbeBackoff) {
+		retryStep = len(accountProbeBackoff) - 1
 	}
-	return now.Add(normalInterval)
+	return now.Add(accountProbeBackoff[retryStep])
 }
 
 func CanTriggerImmediateProbe(last *time.Time, now time.Time) bool {
 	return last == nil || !now.Before(last.Add(ImmediateProbeCooldown))
+}
+
+// CanRunScheduledProbe keeps the normal ten-minute probe from restarting an
+// account's dedicated 30/60/120/300-second recovery chain. Balance failures
+// are likewise recovered only by the explicit administrator path.
+func CanRunScheduledProbe(state AccountHealthState) bool {
+	return state.RuntimeStatus != AccountRuntimeFailed && state.RuntimeStatus != AccountRuntimeBalance
 }
 
 // DeriveGroupHealth keeps an account-level failure from failing a group while another account is healthy.

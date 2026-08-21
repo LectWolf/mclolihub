@@ -106,14 +106,22 @@ func (s *healthStoreStub) RecordEvent(_ context.Context, event GroupHealthEventI
 
 func TestAccountProbeScheduleAndThrottle(t *testing.T) {
 	now := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
-	wants := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
+	wants := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute, 5 * time.Minute}
 	for step, want := range wants {
 		require.Equal(t, now.Add(want), NextAccountProbeAt(now, step, 10*time.Minute))
 	}
-	last := now.Add(-9 * time.Minute)
+	last := now.Add(-119 * time.Second)
 	require.False(t, CanTriggerImmediateProbe(&last, now))
-	last = now.Add(-10 * time.Minute)
+	last = now.Add(-2 * time.Minute)
 	require.True(t, CanTriggerImmediateProbe(&last, now))
+}
+
+func TestScheduledProbeDoesNotRestartFailedAccountRecovery(t *testing.T) {
+	require.False(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeFailed}),
+		"a normal probe must not reset an account's 30/60/120/300 recovery chain")
+	require.False(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeBalance}))
+	require.True(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeActive}))
+	require.True(t, CanRunScheduledProbe(AccountHealthState{}))
 }
 
 func TestNormalizeGroupProbeConfig(t *testing.T) {

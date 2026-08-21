@@ -157,7 +157,7 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 		if !account.Schedulable {
 			continue
 		}
-		if state, ok := states[account.ID]; ok && state.RuntimeStatus == AccountRuntimeBalance {
+		if state, ok := states[account.ID]; ok && !CanRunScheduledProbe(state) {
 			continue
 		}
 		result, run := s.runAccountProbe(ctx, target.GroupID, account.ID, target.Platform, target.Model)
@@ -336,7 +336,8 @@ func (s *GroupHealthService) markProbeFailure(ctx context.Context, groupID, acco
 }
 
 // ReportRuntimeFailure records a real request failure and asynchronously runs
-// at most one immediate verification per account in each ten-minute window.
+// at most one immediate verification per account in each two-minute window.
+// The account remains schedulable until this confirmation probe also fails.
 func (s *GroupHealthService) ReportRuntimeFailure(groupID, accountID int64, failoverErr *UpstreamFailoverError, semanticStarted bool) {
 	if s == nil || s.repo == nil || accountID <= 0 || groupID <= 0 || failoverErr == nil {
 		return
@@ -371,21 +372,6 @@ func (s *GroupHealthService) ReportRuntimeFailure(groupID, accountID int64, fail
 		slog.Warn("group_health: immediate probe claim failed", "account_id", accountID, "error", err)
 		return
 	}
-	states, err := s.repo.LoadAccountHealth(ctx, []int64{accountID})
-	if err == nil {
-		state := states[accountID]
-		if state.RuntimeStatus != AccountRuntimeBalance && state.RuntimeStatus != AccountRuntimeFailed {
-			next := now.Add(DefaultGroupProbeInterval)
-			state.AccountID = accountID
-			state.ProbeGroupID = &groupID
-			state.RuntimeStatus = AccountRuntimeFailed
-			state.Reason = message
-			state.NextProbeAt = &next
-			state.LastFailureAt = &now
-			_ = s.repo.SaveAccountHealth(ctx, state)
-		}
-	}
-	_ = s.repo.RefreshDerivedGroupHealth(ctx, groupID, now)
 	if !claimed {
 		return
 	}

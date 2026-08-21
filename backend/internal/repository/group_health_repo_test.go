@@ -18,18 +18,21 @@ func captureSQLMatcher(target *string) sqlmock.QueryMatcherFunc {
 	}
 }
 
-func TestGroupHealthClaimImmediateProbePersistsTenMinuteThrottle(t *testing.T) {
-	db, mock, err := sqlmock.New()
+func TestGroupHealthClaimImmediateProbePersistsTwoMinuteThrottleWithoutMarkingFailed(t *testing.T) {
+	var query string
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(captureSQLMatcher(&query)))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	now := time.Date(2026, 8, 20, 8, 0, 0, 0, time.UTC)
-	mock.ExpectExec("INSERT INTO account_health_states").
-		WithArgs(int64(11), int64(22), now, "600.000000 seconds").
+	mock.ExpectExec("capture").
+		WithArgs(int64(11), int64(22), now, "120.000000 seconds").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	claimed, err := (&groupHealthStore{db: db}).ClaimImmediateProbe(context.Background(), 11, 22, now, 10*time.Minute)
+	claimed, err := (&groupHealthStore{db: db}).ClaimImmediateProbe(context.Background(), 11, 22, now, 2*time.Minute)
 	require.NoError(t, err)
 	require.True(t, claimed)
+	require.NotContains(t, strings.ToLower(query), "'failed'",
+		"a user request failure must stay schedulable until its confirmation probe also fails")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

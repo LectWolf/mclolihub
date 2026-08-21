@@ -256,8 +256,8 @@ func (r *groupHealthStore) RestoreAccountBalance(ctx context.Context, accountID 
 func (r *groupHealthStore) ClaimImmediateProbe(ctx context.Context, accountID, groupID int64, now time.Time, cooldown time.Duration) (bool, error) {
 	result, err := r.db.ExecContext(ctx, `
 		INSERT INTO account_health_states(account_id,probe_group_id,runtime_status,retry_step,last_failure_at,last_immediate_probe_at)
-		VALUES($1,$2,'failed',0,$3,$3)
-		ON CONFLICT(account_id) DO UPDATE SET probe_group_id=$2,runtime_status=CASE WHEN account_health_states.runtime_status='balance_insufficient' THEN account_health_states.runtime_status ELSE 'failed' END,
+		VALUES($1,$2,'active',0,$3,$3)
+		ON CONFLICT(account_id) DO UPDATE SET probe_group_id=$2,
 		last_failure_at=$3,last_immediate_probe_at=$3,updated_at=NOW()
 		WHERE account_health_states.runtime_status <> 'balance_insufficient'
 		  AND (account_health_states.last_immediate_probe_at IS NULL OR account_health_states.last_immediate_probe_at <= $3 - $4::interval)`, accountID, groupID, now, fmt.Sprintf("%f seconds", cooldown.Seconds()))
