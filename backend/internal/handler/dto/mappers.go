@@ -79,6 +79,10 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 	if k == nil {
 		return nil
 	}
+	routePlatform := k.RoutePlatform
+	if routePlatform == "" {
+		routePlatform = service.RoutePlatformAuto
+	}
 	out := &APIKey{
 		ID:                 k.ID,
 		UserID:             k.UserID,
@@ -86,7 +90,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		Name:               k.Name,
 		GroupID:            k.GroupID,
 		RouteMode:          k.RouteMode,
-		RoutePlatform:      k.RoutePlatform,
+		RoutePlatform:      routePlatform,
 		MaxRateMultiplier:  k.MaxRateMultiplier,
 		GroupPreferences:   k.GroupPreferences,
 		Status:             k.Status,
