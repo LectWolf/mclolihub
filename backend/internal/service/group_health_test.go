@@ -116,12 +116,46 @@ func TestAccountProbeScheduleAndThrottle(t *testing.T) {
 	require.True(t, CanTriggerImmediateProbe(&last, now))
 }
 
-func TestScheduledProbeDoesNotRestartFailedAccountRecovery(t *testing.T) {
-	require.False(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeFailed}),
-		"a normal probe must not reset an account's 30/60/120/300 recovery chain")
+func TestScheduledProbeCanInspectEveryRuntimeStateWithoutAdvancingRecovery(t *testing.T) {
+	require.True(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeProbing}),
+		"the ten-minute sweep may recover an account during its own probing schedule")
+	require.True(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeUnavailable}),
+		"the ten-minute sweep is the recovery path for exhausted accounts")
 	require.False(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeBalance}))
 	require.True(t, CanRunScheduledProbe(AccountHealthState{RuntimeStatus: AccountRuntimeActive}))
 	require.True(t, CanRunScheduledProbe(AccountHealthState{}))
+}
+
+func TestProbeFailureProgressionEndsInUnavailable(t *testing.T) {
+	now := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	wants := []struct {
+		step   int
+		status string
+		delay  time.Duration
+	}{
+		{step: 0, status: AccountRuntimeProbing, delay: 30 * time.Second},
+		{step: 1, status: AccountRuntimeProbing, delay: time.Minute},
+		{step: 2, status: AccountRuntimeProbing, delay: 2 * time.Minute},
+		{step: 3, status: AccountRuntimeProbing, delay: 5 * time.Minute},
+		{step: 4, status: AccountRuntimeUnavailable},
+	}
+	for _, want := range wants {
+		status, next := NextAccountProbeState(now, want.step)
+		require.Equal(t, want.status, status)
+		if want.delay == 0 {
+			require.Nil(t, next)
+		} else {
+			require.Equal(t, now.Add(want.delay), *next)
+		}
+	}
+}
+
+func TestGroupRouteHealthDefaultsAvailableUntilExplicitFailure(t *testing.T) {
+	require.True(t, IsGroupRouteHealthy(""))
+	require.True(t, IsGroupRouteHealthy(GroupHealthUnknown))
+	require.True(t, IsGroupRouteHealthy(GroupHealthHealthy))
+	require.False(t, IsGroupRouteHealthy(GroupHealthUnavailable))
+	require.False(t, IsGroupRouteHealthy(GroupHealthBalanceInsufficient))
 }
 
 func TestNormalizeGroupProbeConfig(t *testing.T) {
@@ -141,8 +175,18 @@ func TestNormalizeGroupProbeConfig(t *testing.T) {
 
 func TestDeriveGroupHealth(t *testing.T) {
 	require.Equal(t, GroupHealthHealthy, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeBalance}, {RuntimeStatus: AccountRuntimeActive, Schedulable: true}}))
-	require.Equal(t, GroupHealthBalanceInsufficient, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeFailed}, {RuntimeStatus: AccountRuntimeBalance}}))
-	require.Equal(t, GroupHealthUnavailable, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeFailed}}))
+	require.Equal(t, GroupHealthBalanceInsufficient, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeProbing}, {RuntimeStatus: AccountRuntimeBalance}}))
+	require.Equal(t, GroupHealthUnavailable, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeProbing}}))
+	require.Equal(t, GroupHealthUnavailable, DeriveGroupHealth([]AccountHealth{{RuntimeStatus: AccountRuntimeUnavailable}}))
+}
+
+func TestHealthRuntimeBlocksUserSchedulingUntilProbeSuccess(t *testing.T) {
+	account := &Account{Status: StatusActive, Schedulable: true, HealthRuntimeStatus: AccountRuntimeProbing}
+	require.False(t, account.IsSchedulable(), "reaching next_probe_at must not expose a probing account to user traffic")
+	account.HealthRuntimeStatus = AccountRuntimeUnavailable
+	require.False(t, account.IsSchedulable())
+	account.HealthRuntimeStatus = AccountRuntimeActive
+	require.True(t, account.IsSchedulable())
 }
 
 func TestGroupPolicyDispatchErrorDoesNotBecomeHealthFailure(t *testing.T) {

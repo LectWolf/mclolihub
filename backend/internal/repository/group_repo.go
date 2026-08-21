@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/group"
@@ -31,13 +30,15 @@ func (r *groupRepository) GetRouteHealth(ctx context.Context, groupIDs []int64) 
 	if len(groupIDs) == 0 {
 		return out, nil
 	}
+	for _, groupID := range groupIDs {
+		out[groupID] = service.GroupRouteHealth{Healthy: true}
+	}
 	states, err := r.client.GroupHealthState.Query().Where(grouphealthstate.GroupIDIn(groupIDs...)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, state := range states {
-		recent := state.LastSuccessAt != nil && !state.LastSuccessAt.Before(time.Now().Add(-service.ImmediateProbeCooldown))
-		out[state.GroupID] = service.GroupRouteHealth{Healthy: state.Status == service.GroupHealthHealthy && recent, ProbeTTFTMS: state.ProbeTtftMs, RealTTFTP50MS: state.RealTtftP50Ms, RealTTFTSamples: state.RealTtftSamples}
+		out[state.GroupID] = service.GroupRouteHealth{Healthy: service.IsGroupRouteHealthy(state.Status), ProbeTTFTMS: state.ProbeTtftMs, RealTTFTP50MS: state.RealTtftP50Ms, RealTTFTSamples: state.RealTtftSamples}
 	}
 	return out, nil
 }

@@ -41,8 +41,75 @@ type OpenAIGatewayHandler struct {
 	opsService                 *service.OpsService
 	concurrencyHelper          *ConcurrencyHelper
 	imageLimiter               *imageConcurrencyLimiter
+	groupHealthService         *service.GroupHealthService
+	subscriptionService        *service.SubscriptionService
 	maxAccountSwitches         int
 	cfg                        *config.Config
+}
+
+type openAIDynamicRoutingState struct {
+	groups []service.Group
+	index  int
+}
+
+func (h *OpenAIGatewayHandler) resolveDynamicRouting(c *gin.Context, apiKey *service.APIKey, model string) (*service.APIKey, *openAIDynamicRoutingState, error) {
+	if apiKey == nil || apiKey.RouteMode == "" || apiKey.RouteMode == service.RouteModeFixed {
+		return apiKey, nil, nil
+	}
+	groups, err := h.apiKeyService.ResolveRoutingGroups(c.Request.Context(), apiKey)
+	if err != nil {
+		return apiKey, nil, err
+	}
+	state := &openAIDynamicRoutingState{groups: groups}
+	selected := cloneAPIKeyWithGroup(apiKey, &state.groups[0])
+	applyDynamicGroupRequestContext(c, selected, model)
+	return selected, state, nil
+}
+
+func (s *openAIDynamicRoutingState) next(c *gin.Context, apiKey *service.APIKey, model string) (*service.APIKey, bool) {
+	if s == nil || s.index+1 >= len(s.groups) {
+		return apiKey, false
+	}
+	s.index++
+	selected := cloneAPIKeyWithGroup(apiKey, &s.groups[s.index])
+	applyDynamicGroupRequestContext(c, selected, model)
+	return selected, true
+}
+
+func (h *OpenAIGatewayHandler) advanceDynamicRoutingGroup(c *gin.Context, state *openAIDynamicRoutingState, apiKey *service.APIKey, userID int64, model string) (*service.APIKey, *service.UserSubscription, bool, error) {
+	selected, ok := state.next(c, apiKey, model)
+	if !ok {
+		return apiKey, nil, false, nil
+	}
+	subscription, err := h.subscriptionForRoutingGroup(c.Request.Context(), userID, selected)
+	if err != nil {
+		return apiKey, nil, false, err
+	}
+	return selected, subscription, true, nil
+}
+
+func (h *OpenAIGatewayHandler) reportDynamicGroupFailure(apiKey *service.APIKey, account *service.Account, failoverErr *service.UpstreamFailoverError, semanticStarted bool) {
+	if h == nil || h.groupHealthService == nil || apiKey == nil || apiKey.GroupID == nil || account == nil || failoverErr == nil {
+		return
+	}
+	if failoverErr.ShouldReportAccountScheduleFailure() && !failoverErr.RequestScopedTransient {
+		h.groupHealthService.ReportRuntimeFailure(*apiKey.GroupID, account.ID, failoverErr, semanticStarted)
+	}
+}
+
+func (h *OpenAIGatewayHandler) subscriptionForRoutingGroup(ctx context.Context, userID int64, apiKey *service.APIKey) (*service.UserSubscription, error) {
+	if apiKey == nil || apiKey.Group == nil || !apiKey.Group.IsSubscriptionType() {
+		return nil, nil
+	}
+	if h.subscriptionService == nil {
+		return nil, service.ErrSubscriptionInvalid
+	}
+	return h.subscriptionService.GetActiveSubscription(ctx, userID, apiKey.Group.ID)
+}
+
+func (h *OpenAIGatewayHandler) SetDynamicRoutingServices(groupHealth *service.GroupHealthService, subscriptions *service.SubscriptionService) {
+	h.groupHealthService = groupHealth
+	h.subscriptionService = subscriptions
 }
 
 type openAIWSTurnChannelMappingSnapshot struct {
@@ -362,6 +429,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	dynamicRouting, apiKey, err := func() (*openAIDynamicRoutingState, *service.APIKey, error) {
+		selected, state, resolveErr := h.resolveDynamicRouting(c, apiKey, reqModel)
+		return state, selected, resolveErr
+	}()
+	if err != nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -453,6 +528,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 	// Get subscription info (may be nil)
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if dynamicRouting != nil {
+		subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+		if err != nil {
+			h.errorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+			return
+		}
+	}
 	requestPlatform := openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
@@ -543,6 +625,27 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if len(failedAccountIDs) == 0 {
+				if selected, selectedSubscription, advanced, routeErr := h.advanceDynamicRoutingGroup(c, dynamicRouting, apiKey, subject.UserID, reqModel); routeErr != nil {
+					h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", routeErr.Error(), streamStarted)
+					return
+				} else if advanced {
+					apiKey, subscription = selected, selectedSubscription
+					requestPlatform = openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+					channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+					forwardBody = openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
+					if billingErr := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+						status, code, message, _ := billingErrorDetails(billingErr)
+						h.handleStreamingAwareError(c, status, code, message, streamStarted)
+						return
+					}
+					failedAccountIDs = make(map[int64]struct{})
+					sameAccountRetryCount = make(map[int64]int)
+					switchCount = 0
+					profitVetoCount = 0
+					pricingCtx, pricingAt = h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+					c.Request = c.Request.WithContext(pricingCtx)
+					continue
+				}
 				if legacyCompact && errors.Is(err, service.ErrNoAvailableCompactAccounts) {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "compact_not_supported", "No available accounts support /responses/compact", streamStarted)
@@ -708,6 +811,32 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), false, nil)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					if dynamicRouting != nil {
+						h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
+						if selected, selectedSubscription, advanced, routeErr := h.advanceDynamicRoutingGroup(c, dynamicRouting, apiKey, subject.UserID, reqModel); routeErr != nil {
+							h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", routeErr.Error(), streamStarted)
+							return
+						} else if advanced {
+							apiKey, subscription = selected, selectedSubscription
+							requestPlatform = openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+							channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+							forwardBody = openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
+							if billingErr := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+								status, code, message, _ := billingErrorDetails(billingErr)
+								h.handleStreamingAwareError(c, status, code, message, streamStarted)
+								return
+							}
+							failedAccountIDs = make(map[int64]struct{})
+							sameAccountRetryCount = make(map[int64]int)
+							switchCount = 0
+							profitVetoCount = 0
+							pricingCtx, pricingAt = h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+							c.Request = c.Request.WithContext(pricingCtx)
+							continue
+						}
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -972,9 +1101,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		zap.Int64("api_key_id", apiKey.ID),
 		zap.Any("group_id", apiKey.GroupID),
 	)
-
-	// 检查分组是否允许 /v1/messages 调度
-	if !allowOpenAICompatibleMessagesDispatch(c, apiKey) {
+	if (apiKey.RouteMode == "" || apiKey.RouteMode == service.RouteModeFixed) && !allowOpenAICompatibleMessagesDispatch(c, apiKey) {
 		h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error",
 			"This group does not allow /v1/messages dispatch")
 		return
@@ -1010,6 +1137,21 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	dynamicRouting, apiKey, err := func() (*openAIDynamicRoutingState, *service.APIKey, error) {
+		selected, state, resolveErr := h.resolveDynamicRouting(c, apiKey, reqModel)
+		return state, selected, resolveErr
+	}()
+	if err != nil {
+		h.anthropicErrorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
+		return
+	}
+	// Dynamic routing must resolve the actual group before checking this policy;
+	// the API key's retained group is only a legacy/default binding.
+	if !allowOpenAICompatibleMessagesDispatch(c, apiKey) {
+		h.anthropicErrorResponse(c, http.StatusForbidden, "permission_error",
+			"This group does not allow /v1/messages dispatch")
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.anthropicErrorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -1040,6 +1182,13 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	}
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if dynamicRouting != nil {
+		subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+		if err != nil {
+			h.anthropicErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+			return
+		}
+	}
 	requestPlatform := openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
@@ -1116,6 +1265,32 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if len(failedAccountIDs) == 0 {
+				if selected, selectedSubscription, advanced, routeErr := h.advanceDynamicRoutingGroup(c, dynamicRouting, apiKey, subject.UserID, reqModel); routeErr != nil {
+					h.anthropicStreamingAwareError(c, http.StatusForbidden, "subscription_error", routeErr.Error(), streamStarted)
+					return
+				} else if advanced {
+					apiKey, subscription = selected, selectedSubscription
+					if !allowOpenAICompatibleMessagesDispatch(c, apiKey) {
+						h.anthropicStreamingAwareError(c, http.StatusForbidden, "permission_error", "This group does not allow /v1/messages dispatch", streamStarted)
+						return
+					}
+					requestPlatform = openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+					preferredMappedModel = resolveOpenAIMessagesDispatchMappedModel(c, apiKey, reqModel)
+					effectiveMappedModel = preferredMappedModel
+					channelMappingMsg, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+					if billingErr := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+						status, code, message, _ := billingErrorDetails(billingErr)
+						h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
+						return
+					}
+					failedAccountIDs = make(map[int64]struct{})
+					sameAccountRetryCount = make(map[int64]int)
+					switchCount = 0
+					profitVetoCount = 0
+					msgPricingCtx, pricingAt = h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+					c.Request = c.Request.WithContext(msgPricingCtx)
+					continue
+				}
 				if err != nil {
 					cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, currentRoutingModel, reqModel)
 					if !cls.ModelNotFound {
@@ -1261,6 +1436,37 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(currentRoutingModel), false, nil)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					if dynamicRouting != nil {
+						h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
+						if selected, selectedSubscription, advanced, routeErr := h.advanceDynamicRoutingGroup(c, dynamicRouting, apiKey, subject.UserID, reqModel); routeErr != nil {
+							h.anthropicStreamingAwareError(c, http.StatusForbidden, "subscription_error", routeErr.Error(), streamStarted)
+							return
+						} else if advanced {
+							apiKey, subscription = selected, selectedSubscription
+							if !allowOpenAICompatibleMessagesDispatch(c, apiKey) {
+								h.anthropicStreamingAwareError(c, http.StatusForbidden, "permission_error", "This group does not allow /v1/messages dispatch", streamStarted)
+								return
+							}
+							requestPlatform = openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+							preferredMappedModel = resolveOpenAIMessagesDispatchMappedModel(c, apiKey, reqModel)
+							effectiveMappedModel = preferredMappedModel
+							channelMappingMsg, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+							if billingErr := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+								status, code, message, _ := billingErrorDetails(billingErr)
+								h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
+								return
+							}
+							failedAccountIDs = make(map[int64]struct{})
+							sameAccountRetryCount = make(map[int64]int)
+							switchCount = 0
+							profitVetoCount = 0
+							msgPricingCtx, pricingAt = h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+							c.Request = c.Request.WithContext(msgPricingCtx)
+							continue
+						}
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}

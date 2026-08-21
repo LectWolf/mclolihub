@@ -52,6 +52,10 @@ type Account struct {
 
 	TempUnschedulableUntil  *time.Time
 	TempUnschedulableReason string
+	HealthRuntimeStatus     string
+	HealthRetryStep         int
+	HealthNextProbeAt       *time.Time
+	HealthRuntimeReason     string
 
 	SessionWindowStart  *time.Time
 	SessionWindowEnd    *time.Time
@@ -180,6 +184,11 @@ func (a *Account) EffectiveLoadFactor() int {
 
 func (a *Account) IsSchedulable() bool {
 	if !a.IsActive() || !a.Schedulable {
+		return false
+	}
+	if a.HealthRuntimeStatus == AccountRuntimeProbing ||
+		a.HealthRuntimeStatus == AccountRuntimeUnavailable ||
+		a.HealthRuntimeStatus == AccountRuntimeLegacyFailed {
 		return false
 	}
 	now := time.Now()

@@ -504,13 +504,27 @@ func RegisterGatewayRoutes(
 // getGroupPlatform extracts the group platform from the API Key stored in context.
 func getGroupPlatform(c *gin.Context) string {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
-	if !ok || apiKey.Group == nil {
+	if !ok || apiKey == nil {
 		return ""
 	}
-	// Dynamic keys choose their group inside the text handler after parsing the
-	// requested model. Dispatching from a stale retained group_id would bypass
-	// cross-group routing and could apply the wrong composite model rewrite.
+	// A dynamic key's explicit platform scope determines the protocol handler.
+	// Returning an empty platform here sends OpenAI-scoped keys through the
+	// Anthropic compatibility handler, which converts /responses to /messages
+	// before the dynamic group has even been selected.
 	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
+		switch apiKey.RoutePlatform {
+		case service.RoutePlatformOpenAI, service.RoutePlatformAnthropic, service.RoutePlatformGrok:
+			return apiKey.RoutePlatform
+		}
+		// Legacy "auto" keys stay within the bound group's platform. The dynamic
+		// resolver applies the same fallback so dispatch and candidate filtering
+		// cannot disagree about the wire protocol.
+		if apiKey.Group != nil {
+			return apiKey.Group.Platform
+		}
+		return ""
+	}
+	if apiKey.Group == nil {
 		return ""
 	}
 	if apiKey.Group.Platform == service.PlatformComposite {

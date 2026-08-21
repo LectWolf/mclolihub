@@ -23,7 +23,9 @@ const (
 	GroupHealthUnavailable         = "unavailable"
 	GroupHealthBalanceInsufficient = "balance_insufficient"
 	AccountRuntimeActive           = "active"
-	AccountRuntimeFailed           = "failed"
+	AccountRuntimeProbing          = "probing"
+	AccountRuntimeUnavailable      = "unavailable"
+	AccountRuntimeLegacyFailed     = "failed"
 	AccountRuntimeBalance          = "balance_insufficient"
 	RouteModeFixed                 = "fixed"
 	RouteModeCheapest              = "cheapest"
@@ -71,15 +73,34 @@ func NextAccountProbeAt(now time.Time, retryStep int, _ time.Duration) time.Time
 	return now.Add(accountProbeBackoff[retryStep])
 }
 
+func NextAccountProbeState(now time.Time, retryStep int) (string, *time.Time) {
+	if retryStep < 0 {
+		retryStep = 0
+	}
+	if retryStep >= len(accountProbeBackoff) {
+		return AccountRuntimeUnavailable, nil
+	}
+	next := now.Add(accountProbeBackoff[retryStep])
+	return AccountRuntimeProbing, &next
+}
+
 func CanTriggerImmediateProbe(last *time.Time, now time.Time) bool {
 	return last == nil || !now.Before(last.Add(ImmediateProbeCooldown))
 }
 
-// CanRunScheduledProbe keeps the normal ten-minute probe from restarting an
-// account's dedicated 30/60/120/300-second recovery chain. Balance failures
-// are likewise recovered only by the explicit administrator path.
+// CanRunScheduledProbe allows the ten-minute sweep to recover probing and
+// unavailable accounts without advancing their dedicated recovery stage.
 func CanRunScheduledProbe(state AccountHealthState) bool {
-	return state.RuntimeStatus != AccountRuntimeFailed && state.RuntimeStatus != AccountRuntimeBalance
+	return state.RuntimeStatus != AccountRuntimeBalance
+}
+
+func IsGroupRouteHealthy(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "", GroupHealthUnknown, GroupHealthHealthy:
+		return true
+	default:
+		return false
+	}
 }
 
 // DeriveGroupHealth keeps an account-level failure from failing a group while another account is healthy.

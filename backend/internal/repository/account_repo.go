@@ -316,7 +316,6 @@ func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*servi
 	if err != nil {
 		return nil, err
 	}
-
 	outByID := make(map[int64]*service.Account, len(entAccounts))
 	for _, entAcc := range entAccounts {
 		out := accountEntityToService(entAcc)
@@ -3141,6 +3140,10 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 	if err != nil {
 		return nil, err
 	}
+	healthByAccount, err := r.loadAccountHealthRuntime(ctx, accountIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	outAccounts := make([]service.Account, 0, len(accounts))
 	for _, acc := range accounts {
@@ -3169,10 +3172,38 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 		if ags, ok := accountGroupsByAccount[acc.ID]; ok {
 			out.AccountGroups = ags
 		}
+		if health, ok := healthByAccount[acc.ID]; ok {
+			out.HealthRuntimeStatus = health.RuntimeStatus
+			out.HealthRetryStep = health.RetryStep
+			out.HealthNextProbeAt = health.NextProbeAt
+			out.HealthRuntimeReason = health.Reason
+		}
 		outAccounts = append(outAccounts, *out)
 	}
 
 	return outAccounts, nil
+}
+
+func (r *accountRepository) loadAccountHealthRuntime(ctx context.Context, accountIDs []int64) (map[int64]service.AccountHealthState, error) {
+	out := make(map[int64]service.AccountHealthState, len(accountIDs))
+	if r.sql == nil || len(accountIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT account_id, runtime_status, retry_step, next_probe_at, COALESCE(reason,'')
+		FROM account_health_states WHERE account_id = ANY($1)`, pq.Array(accountIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var state service.AccountHealthState
+		if err := rows.Scan(&state.AccountID, &state.RuntimeStatus, &state.RetryStep, &state.NextProbeAt, &state.Reason); err != nil {
+			return nil, err
+		}
+		out[state.AccountID] = state
+	}
+	return out, rows.Err()
 }
 
 func tempUnschedulablePredicate() dbpredicate.Account {

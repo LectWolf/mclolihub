@@ -58,6 +58,27 @@ func newGatewayRoutesTestRouterWithConfig(cfg *config.Config, platform ...string
 	return router
 }
 
+func TestGetGroupPlatformUsesDynamicRoutePlatform(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	groupID := int64(20)
+	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+		GroupID:       &groupID,
+		Group:         &service.Group{ID: groupID, Platform: service.PlatformAnthropic},
+		RouteMode:     service.RouteModeCheapest,
+		RoutePlatform: service.RoutePlatformOpenAI,
+	})
+
+	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c))
+
+	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+		RouteMode:     service.RouteModeCheapest,
+		RoutePlatform: service.RoutePlatformOpenAI,
+	})
+	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c), "an explicit dynamic platform must not depend on a legacy bound group")
+}
+
 func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {
 	router := newGatewayRoutesTestRouter()
 

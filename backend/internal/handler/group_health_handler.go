@@ -145,11 +145,8 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 			status = "not_enabled"
 			reason = "probe_not_enabled"
 		} else if status == "" || status == service.GroupHealthUnknown {
-			status = service.GroupHealthUnavailable
-			reason = "no_successful_probe"
-		} else if status == service.GroupHealthHealthy && (snapshot.LastSuccessAt == nil || snapshot.LastSuccessAt.Before(time.Now().Add(-service.ImmediateProbeCooldown))) {
-			status = service.GroupHealthUnavailable
-			reason = "probe_stale"
+			status = service.GroupHealthHealthy
+			reason = "default_available"
 		}
 		rate := group.RateMultiplier
 		if custom, ok := rates[group.ID]; ok {

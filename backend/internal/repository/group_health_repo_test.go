@@ -33,6 +33,9 @@ func TestGroupHealthClaimImmediateProbePersistsTwoMinuteThrottleWithoutMarkingFa
 	require.True(t, claimed)
 	require.NotContains(t, strings.ToLower(query), "'failed'",
 		"a user request failure must stay schedulable until its confirmation probe also fails")
+	require.Contains(t, strings.ToLower(query), "'probing'",
+		"the immediate verification must quarantine the account before the async probe runs")
+	require.Contains(t, strings.ToLower(query), "scheduler_outbox")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

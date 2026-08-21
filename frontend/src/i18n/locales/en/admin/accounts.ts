@@ -181,7 +181,13 @@ export default {
         creditsExhaustedUntil: 'AI Credits exhausted, expected recovery at {time}',
         overloadedUntil: 'Overloaded until {time}',
         viewTempUnschedDetails: 'View temp unschedulable details',
-        tempUnschedulableUntil: 'Resumes {time}'
+        tempUnschedulableUntil: 'Resumes {time}',
+        healthProbing: 'Probing',
+        healthUnavailable: 'Unavailable',
+        healthImmediateProbe: 'Immediate probe',
+        healthProbeStage: 'Probe in {seconds}s',
+        healthNextProbe: 'Next {time}',
+        healthUnavailableUntilSweep: 'Waiting for next scheduled probe'
       },
       columns: {
         name: 'Name',

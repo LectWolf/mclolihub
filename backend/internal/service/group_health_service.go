@@ -154,10 +154,11 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 	var successTTFT time.Duration
 	for i := range accounts {
 		account := accounts[i]
-		if !account.Schedulable {
+		state, hasState := states[account.ID]
+		if !account.Schedulable && (!hasState || (state.RuntimeStatus != AccountRuntimeProbing && state.RuntimeStatus != AccountRuntimeUnavailable && state.RuntimeStatus != AccountRuntimeLegacyFailed)) {
 			continue
 		}
-		if state, ok := states[account.ID]; ok && !CanRunScheduledProbe(state) {
+		if hasState && !CanRunScheduledProbe(state) {
 			continue
 		}
 		result, run := s.runAccountProbe(ctx, target.GroupID, account.ID, target.Platform, target.Model)
@@ -173,7 +174,7 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 			break
 		}
 		failures++
-		if err := s.markProbeFailure(ctx, target.GroupID, account.ID, target.Interval, 0, result, now); err != nil {
+		if err := s.markScheduledProbeFailure(ctx, target.GroupID, account.ID, result, now); err != nil {
 			return err
 		}
 	}
@@ -236,7 +237,10 @@ func (s *GroupHealthService) probeRecoveryAccount(ctx context.Context, target Ac
 	if result.Success {
 		return s.markProbeSuccess(ctx, target.GroupID, target.AccountID, result, now)
 	}
-	return s.markProbeFailure(ctx, target.GroupID, target.AccountID, target.Interval, target.RetryStep+1, result, now)
+	if err := s.markProbeFailure(ctx, target.GroupID, target.AccountID, target.Interval, target.RetryStep+1, result, now); err != nil {
+		return err
+	}
+	return s.repo.RefreshDerivedGroupHealth(ctx, target.GroupID, now)
 }
 
 func (s *GroupHealthService) runAccountProbe(parent context.Context, groupID, accountID int64, groupPlatform, model string) (*AccountProbeResult, bool) {
@@ -319,13 +323,13 @@ func (s *GroupHealthService) markProbeFailure(ctx context.Context, groupID, acco
 	if state.RuntimeStatus == AccountRuntimeBalance {
 		return nil
 	}
-	next := NextAccountProbeAt(now, retryStep, interval)
+	status, next := NextAccountProbeState(now, retryStep)
 	state.AccountID = accountID
 	state.ProbeGroupID = &groupID
-	state.RuntimeStatus = AccountRuntimeFailed
+	state.RuntimeStatus = status
 	state.Reason = result.ErrorMessage
 	state.RetryStep = retryStep
-	state.NextProbeAt = &next
+	state.NextProbeAt = next
 	state.LastProbeAt = &now
 	state.LastFailureAt = &now
 	if err := s.repo.SaveAccountHealth(ctx, state); err != nil {
@@ -335,9 +339,38 @@ func (s *GroupHealthService) markProbeFailure(ctx context.Context, groupID, acco
 	return nil
 }
 
+// markScheduledProbeFailure records a ten-minute sweep failure without
+// advancing an account's faster recovery schedule. Active accounts enter the
+// first probing stage; accounts already probing or unavailable retain that
+// state until their own recovery probe or a later successful sweep.
+func (s *GroupHealthService) markScheduledProbeFailure(ctx context.Context, groupID, accountID int64, result *AccountProbeResult, now time.Time) error {
+	if IsUpstreamBalanceInsufficientError(result.ErrorMessage) {
+		return s.markProbeFailure(ctx, groupID, accountID, DefaultGroupProbeInterval, 0, result, now)
+	}
+	states, err := s.repo.LoadAccountHealth(ctx, []int64{accountID})
+	if err != nil {
+		return err
+	}
+	state := states[accountID]
+	if state.RuntimeStatus == AccountRuntimeBalance || state.RuntimeStatus == AccountRuntimeUnavailable || state.RuntimeStatus == AccountRuntimeProbing || state.RuntimeStatus == AccountRuntimeLegacyFailed {
+		state.AccountID = accountID
+		state.ProbeGroupID = &groupID
+		state.LastProbeAt = &now
+		state.LastFailureAt = &now
+		state.Reason = result.ErrorMessage
+		if err := s.repo.SaveAccountHealth(ctx, state); err != nil {
+			return err
+		}
+		_ = s.repo.RecordEvent(ctx, GroupHealthEventInput{GroupID: groupID, AccountID: accountID, Kind: "probe", IsProbe: true, Success: false, ErrorCategory: "upstream_failure", ErrorMessage: result.ErrorMessage, TTFT: result.TTFT, Total: result.Total, ObservedAt: now})
+		return nil
+	}
+	return s.markProbeFailure(ctx, groupID, accountID, DefaultGroupProbeInterval, 0, result, now)
+}
+
 // ReportRuntimeFailure records a real request failure and asynchronously runs
 // at most one immediate verification per account in each two-minute window.
-// The account remains schedulable until this confirmation probe also fails.
+// The account enters probing before the confirmation task runs, so it is not
+// selected by concurrent user requests while verification is pending.
 func (s *GroupHealthService) ReportRuntimeFailure(groupID, accountID int64, failoverErr *UpstreamFailoverError, semanticStarted bool) {
 	if s == nil || s.repo == nil || accountID <= 0 || groupID <= 0 || failoverErr == nil {
 		return

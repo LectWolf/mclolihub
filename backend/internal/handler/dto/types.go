@@ -235,6 +235,10 @@ type Account struct {
 
 	TempUnschedulableUntil  *time.Time `json:"temp_unschedulable_until"`
 	TempUnschedulableReason string     `json:"temp_unschedulable_reason"`
+	HealthRuntimeStatus     string     `json:"health_runtime_status"`
+	HealthRetryStep         int        `json:"health_retry_step"`
+	HealthNextProbeAt       *time.Time `json:"health_next_probe_at"`
+	HealthRuntimeReason     string     `json:"health_runtime_reason"`
 
 	SessionWindowStart  *time.Time `json:"session_window_start"`
 	SessionWindowEnd    *time.Time `json:"session_window_end"`

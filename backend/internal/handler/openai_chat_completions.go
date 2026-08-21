@@ -75,6 +75,14 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 	reqModel := modelResult.String()
+	dynamicRouting, apiKey, err := func() (*openAIDynamicRoutingState, *service.APIKey, error) {
+		selected, state, resolveErr := h.resolveDynamicRouting(c, apiKey, reqModel)
+		return state, selected, resolveErr
+	}()
+	if err != nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
+		return
+	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
 	if !openAICompatibleTextTargetAllowed(c, apiKey, reqModel) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this OpenAI-compatible endpoint for composite groups")
@@ -114,6 +122,13 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if dynamicRouting != nil {
+		subscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, apiKey)
+		if err != nil {
+			h.errorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
+			return
+		}
+	}
 	requestPlatform := openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
 
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
@@ -181,6 +196,26 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if len(failedAccountIDs) == 0 {
+				if selected, selectedSubscription, advanced, routeErr := h.advanceDynamicRoutingGroup(c, dynamicRouting, apiKey, subject.UserID, reqModel); routeErr != nil {
+					h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", routeErr.Error(), streamStarted)
+					return
+				} else if advanced {
+					apiKey, subscription = selected, selectedSubscription
+					requestPlatform = openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+					channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+					if billingErr := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+						status, code, message, _ := billingErrorDetails(billingErr)
+						h.handleStreamingAwareError(c, status, code, message, streamStarted)
+						return
+					}
+					failedAccountIDs = make(map[int64]struct{})
+					sameAccountRetryCount = make(map[int64]int)
+					switchCount = 0
+					profitVetoCount = 0
+					ccPricingCtx, pricingAt = h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+					c.Request = c.Request.WithContext(ccPricingCtx)
+					continue
+				}
 				cls := classifyOpenAICompatibleNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel)
 				if !cls.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
@@ -322,6 +357,31 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(reqModel), false, nil)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					if dynamicRouting != nil {
+						h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
+						if selected, selectedSubscription, advanced, routeErr := h.advanceDynamicRoutingGroup(c, dynamicRouting, apiKey, subject.UserID, reqModel); routeErr != nil {
+							h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", routeErr.Error(), streamStarted)
+							return
+						} else if advanced {
+							apiKey, subscription = selected, selectedSubscription
+							requestPlatform = openAICompatibleRequestPlatform(c.Request.Context(), apiKey)
+							channelMapping, _ = h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+							if billingErr := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+								status, code, message, _ := billingErrorDetails(billingErr)
+								h.handleStreamingAwareError(c, status, code, message, streamStarted)
+								return
+							}
+							failedAccountIDs = make(map[int64]struct{})
+							sameAccountRetryCount = make(map[int64]int)
+							switchCount = 0
+							profitVetoCount = 0
+							ccPricingCtx, pricingAt = h.gatewayService.WithOpenAIRequestPricingContext(c.Request.Context(), apiKey.GroupID)
+							c.Request = c.Request.WithContext(ccPricingCtx)
+							continue
+						}
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}

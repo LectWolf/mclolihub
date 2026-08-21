@@ -119,7 +119,7 @@ func (r *groupHealthStore) ListDueAccountProbes(ctx context.Context, now time.Ti
 		FROM account_health_states s
 		JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL
 		JOIN groups g ON g.id = s.probe_group_id AND g.deleted_at IS NULL
-		WHERE s.runtime_status = 'failed' AND s.next_probe_at IS NOT NULL AND s.next_probe_at <= $1
+		WHERE s.runtime_status IN ('probing','failed') AND s.next_probe_at IS NOT NULL AND s.next_probe_at <= $1
 		  AND g.status = 'active' AND g.probe_enabled IS TRUE
 		ORDER BY s.next_probe_at, s.account_id
 		LIMIT $2`, now, limit)
@@ -199,9 +199,9 @@ func (r *groupHealthStore) SaveAccountHealth(ctx context.Context, state service.
 		return err
 	}
 	if state.RuntimeStatus == service.AccountRuntimeActive {
-		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=NULL, temp_unschedulable_reason=NULL, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID)
-	} else if state.RuntimeStatus == service.AccountRuntimeFailed && state.NextProbeAt != nil {
-		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=$2, temp_unschedulable_reason=$3, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID, *state.NextProbeAt, state.Reason)
+		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=NULL, temp_unschedulable_reason=NULL, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL AND temp_unschedulable_reason LIKE 'group_health_probe:%'`, state.AccountID)
+	} else if state.RuntimeStatus == service.AccountRuntimeProbing || state.RuntimeStatus == service.AccountRuntimeUnavailable || state.RuntimeStatus == service.AccountRuntimeLegacyFailed {
+		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '9999-12-31 23:59:59+00', temp_unschedulable_reason=$2, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID, "group_health_probe: "+state.Reason)
 	}
 	if err == nil {
 		_ = enqueueSchedulerOutbox(ctx, r.db, service.SchedulerOutboxEventAccountChanged, &state.AccountID, nil, nil)
@@ -255,12 +255,21 @@ func (r *groupHealthStore) RestoreAccountBalance(ctx context.Context, accountID 
 
 func (r *groupHealthStore) ClaimImmediateProbe(ctx context.Context, accountID, groupID int64, now time.Time, cooldown time.Duration) (bool, error) {
 	result, err := r.db.ExecContext(ctx, `
-		INSERT INTO account_health_states(account_id,probe_group_id,runtime_status,retry_step,last_failure_at,last_immediate_probe_at)
-		VALUES($1,$2,'active',0,$3,$3)
-		ON CONFLICT(account_id) DO UPDATE SET probe_group_id=$2,
-		last_failure_at=$3,last_immediate_probe_at=$3,updated_at=NOW()
-		WHERE account_health_states.runtime_status <> 'balance_insufficient'
-		  AND (account_health_states.last_immediate_probe_at IS NULL OR account_health_states.last_immediate_probe_at <= $3 - $4::interval)`, accountID, groupID, now, fmt.Sprintf("%f seconds", cooldown.Seconds()))
+		WITH claimed AS (
+			INSERT INTO account_health_states(account_id,probe_group_id,runtime_status,retry_step,next_probe_at,last_failure_at,last_immediate_probe_at,reason)
+			VALUES($1,$2,'probing',-1,NULL,$3,$3,'immediate verification pending')
+			ON CONFLICT(account_id) DO UPDATE SET probe_group_id=$2,runtime_status='probing',retry_step=-1,next_probe_at=NULL,
+			last_failure_at=$3,last_immediate_probe_at=$3,reason='immediate verification pending',updated_at=NOW()
+			WHERE account_health_states.runtime_status <> 'balance_insufficient'
+			  AND (account_health_states.last_immediate_probe_at IS NULL OR account_health_states.last_immediate_probe_at <= $3 - $4::interval)
+			RETURNING account_id
+		), updated AS (
+			UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '9999-12-31 23:59:59+00', temp_unschedulable_reason='group_health_probe: immediate verification pending', updated_at=NOW()
+			WHERE id IN (SELECT account_id FROM claimed) AND status='active' AND deleted_at IS NULL
+			RETURNING id
+		)
+		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
+		SELECT 'account_changed', id, NULL, NULL FROM updated`, accountID, groupID, now, fmt.Sprintf("%f seconds", cooldown.Seconds()))
 	if err != nil {
 		return false, err
 	}

@@ -185,8 +185,9 @@ func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) 
 	}
 	candidates := make([]GroupRouteCandidate, 0, len(groups))
 	previews := make([]RoutingGroupPreview, 0, len(groups))
+	routePlatform := effectiveRoutePlatform(key)
 	for _, g := range groups {
-		if !routePlatformMatches(key.RoutePlatform, g.Platform) {
+		if !routePlatformMatches(routePlatform, g.Platform) {
 			continue
 		}
 		rate := g.RateMultiplier
@@ -305,8 +306,9 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 		health, _ = reader.GetRouteHealth(ctx, ids)
 	}
 	candidates := make([]GroupRouteCandidate, 0, len(groups))
+	routePlatform := effectiveRoutePlatform(key)
 	for _, group := range groups {
-		if !routePlatformMatches(key.RoutePlatform, group.Platform) {
+		if !routePlatformMatches(routePlatform, group.Platform) {
 			continue
 		}
 		if key.User == nil || !s.canUserBindGroup(ctx, key.User, &group) {
@@ -335,6 +337,17 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 		return nil, infraerrors.ServiceUnavailable("NO_HEALTHY_ROUTE_GROUP", "no healthy group matches API key routing policy")
 	}
 	return out, nil
+}
+
+func effectiveRoutePlatform(key *APIKey) string {
+	if key == nil {
+		return RoutePlatformAuto
+	}
+	platform := normalizeRoutePlatform(key.RoutePlatform)
+	if platform == RoutePlatformAuto && key.Group != nil {
+		return strings.ToLower(strings.TrimSpace(key.Group.Platform))
+	}
+	return platform
 }
 
 func buildAPIKeyPreferences(disabled, custom []int64) []APIKeyGroupPreference {

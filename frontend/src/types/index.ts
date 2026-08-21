@@ -1184,6 +1184,10 @@ export interface Account {
   overload_until: string | null
   temp_unschedulable_until: string | null
   temp_unschedulable_reason: string | null
+  health_runtime_status?: 'active' | 'probing' | 'unavailable' | 'balance_insufficient' | 'failed' | string
+  health_retry_step?: number
+  health_next_probe_at?: string | null
+  health_runtime_reason?: string
 
   // Session window fields (5-hour window)
   session_window_start: string | null

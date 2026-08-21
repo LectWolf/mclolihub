@@ -384,7 +384,13 @@ export default {
         creditsExhaustedUntil: 'AI Credits 已用尽，预计 {time} 恢复',
         overloadedUntil: '负载过重，重置时间：{time}',
         viewTempUnschedDetails: '查看临时不可调度详情',
-        tempUnschedulableUntil: '预计 {time} 恢复'
+        tempUnschedulableUntil: '预计 {time} 恢复',
+        healthProbing: '探察期',
+        healthUnavailable: '不可用',
+        healthImmediateProbe: '立即探察中',
+        healthProbeStage: '{seconds} 秒后探察',
+        healthNextProbe: '下一次 {time}',
+        healthUnavailableUntilSweep: '等待下一次主动探测'
       },
       tempUnschedulable: {
         title: '临时不可调度',

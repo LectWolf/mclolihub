@@ -1402,7 +1402,7 @@ const formData = ref({
   name: '',
   group_id: null as number | null,
 	route_mode: 'fixed' as 'fixed' | 'cheapest' | 'fastest' | 'custom',
-	route_platform: 'auto' as 'auto' | 'openai' | 'anthropic' | 'grok',
+	route_platform: 'openai' as 'auto' | 'openai' | 'anthropic' | 'grok',
 	max_rate_multiplier: null as number | null,
 	disabled_group_ids: [] as number[],
 	custom_group_ids: [] as number[],
@@ -1705,7 +1705,9 @@ const editKey = (key: ApiKey) => {
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
 		route_mode: key.route_mode || 'fixed',
-		route_platform: key.route_platform || 'auto',
+		route_platform: key.route_platform && key.route_platform !== 'auto'
+			? key.route_platform
+			: ((key.group?.platform === 'anthropic' || key.group?.platform === 'grok') ? key.group.platform : 'openai'),
 		max_rate_multiplier: key.max_rate_multiplier,
 		disabled_group_ids: (key.group_preferences || []).filter(item => item.disabled).map(item => item.group_id),
 		custom_group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
@@ -1944,7 +1946,7 @@ const closeModals = () => {
     name: '',
     group_id: null,
 		route_mode: 'fixed',
-		route_platform: 'auto',
+		route_platform: 'openai',
 		max_rate_multiplier: null,
 		disabled_group_ids: [],
 		custom_group_ids: [],

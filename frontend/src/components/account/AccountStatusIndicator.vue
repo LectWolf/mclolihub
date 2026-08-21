@@ -14,7 +14,7 @@
 
     <!-- Main Status Badge (shown when not rate limited/overloaded) -->
     <template v-else>
-      <div v-if="isTempUnschedulable" class="flex flex-col items-center gap-1">
+      <div v-if="isHealthQuarantined || isTempUnschedulable" class="flex flex-col items-center gap-1">
         <button
           type="button"
           :class="['badge text-xs', statusClass, 'cursor-pointer']"
@@ -24,7 +24,7 @@
           {{ statusText }}
         </button>
         <span class="max-w-[180px] text-center text-[11px] leading-4 text-gray-500 dark:text-gray-400">
-          {{ tempUnschedRecoveryText }}
+          {{ healthRecoveryText || tempUnschedRecoveryText }}
         </span>
       </div>
       <span v-else :class="['badge text-xs', statusClass]">
@@ -276,6 +276,10 @@ const isTempUnschedulable = computed(() => {
   return new Date(props.account.temp_unschedulable_until) > new Date()
 })
 
+const isHealthProbing = computed(() => props.account.health_runtime_status === 'probing' || props.account.health_runtime_status === 'failed')
+const isHealthUnavailable = computed(() => props.account.health_runtime_status === 'unavailable')
+const isHealthQuarantined = computed(() => isHealthProbing.value || isHealthUnavailable.value)
+
 // Computed: has error status
 const hasError = computed(() => {
   return props.account.status === 'error'
@@ -313,12 +317,24 @@ const tempUnschedRecoveryText = computed(() => {
   })
 })
 
+const healthRecoveryText = computed(() => {
+  if (isHealthUnavailable.value) return t('admin.accounts.status.healthUnavailableUntilSweep')
+  if (!isHealthProbing.value) return ''
+  const step = props.account.health_retry_step ?? -1
+  const stage = step < 0 ? t('admin.accounts.status.healthImmediateProbe') : t('admin.accounts.status.healthProbeStage', { seconds: [30, 60, 120, 300][Math.min(step, 3)] })
+  if (!props.account.health_next_probe_at) return stage
+  return `${stage}，${t('admin.accounts.status.healthNextProbe', { time: formatDateTime(props.account.health_next_probe_at) })}`
+})
+
 // Computed: status badge class
 const statusClass = computed(() => {
   if (hasError.value) {
     return 'badge-danger'
   }
-  if (isTempUnschedulable.value) {
+  if (isHealthUnavailable.value) {
+    return 'badge-danger'
+  }
+  if (isHealthProbing.value || isTempUnschedulable.value) {
     return 'badge-warning'
   }
 	if (props.account.status !== 'active') {
@@ -339,6 +355,12 @@ const statusText = computed(() => {
   if (hasError.value) {
     return t('admin.accounts.status.error')
   }
+  if (isHealthUnavailable.value) {
+    return t('admin.accounts.status.healthUnavailable')
+  }
+  if (isHealthProbing.value) {
+    return t('admin.accounts.status.healthProbing')
+  }
   if (isTempUnschedulable.value) {
     return t('admin.accounts.status.tempUnschedulable')
   }
@@ -355,7 +377,7 @@ const statusText = computed(() => {
 })
 
 const handleTempUnschedClick = () => {
-  if (!isTempUnschedulable.value) return
+  if (!isHealthQuarantined.value && !isTempUnschedulable.value) return
   emit('show-temp-unsched', props.account)
 }
 </script>

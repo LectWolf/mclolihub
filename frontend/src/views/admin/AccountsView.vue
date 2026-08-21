@@ -1300,6 +1300,10 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
     current.rate_limit_reset_at !== next.rate_limit_reset_at ||
     current.overload_until !== next.overload_until ||
     current.temp_unschedulable_until !== next.temp_unschedulable_until ||
+    current.health_runtime_status !== next.health_runtime_status ||
+    current.health_retry_step !== next.health_retry_step ||
+    current.health_next_probe_at !== next.health_next_probe_at ||
+    current.health_runtime_reason !== next.health_runtime_reason ||
     buildOpenAIUsageRefreshKey(current) !== buildOpenAIUsageRefreshKey(next) ||
     buildGrokUsageRefreshKey(current) !== buildGrokUsageRefreshKey(next)
   )
