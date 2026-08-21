@@ -56,7 +56,13 @@
               <div class="grid h-9 grid-flow-col grid-rows-1 gap-px" :style="{ gridTemplateColumns: `repeat(${trend(item).length}, minmax(3px, 1fr))` }" :aria-label="t('groupHealth.trend')">
                 <span v-for="(bucket, index) in trend(item)" :key="index" class="relative h-full min-w-[3px] cursor-help rounded-[1px]" :title="bucketTitle(bucket)">
                   <span v-if="bucket?.real_ttft_ms" class="absolute inset-x-0 bottom-0 rounded-[1px] bg-violet-500/80" :style="{ height: `${barHeight(bucket.real_ttft_ms)}%` }" />
-                  <span v-if="bucket?.probe_ttft_ms" class="absolute inset-x-0 bottom-0 rounded-[1px]" :class="probeBarClass(bucket.probe_ttft_ms)" :style="{ height: `${barHeight(bucket.probe_ttft_ms)}%` }" />
+                  <span
+                    v-if="hasProbeStatus(bucket)"
+                    class="absolute inset-x-0 bottom-0 rounded-[1px]"
+                    :class="probeBarClass(bucket)"
+                    :style="{ height: `${probeBarHeight(bucket)}%` }"
+                    :data-probe-status="probeBarStatus(bucket)"
+                  />
                 </span>
               </div>
             </td>
@@ -146,9 +152,23 @@ function trend(item: GroupHealthItem): DisplayBucket[] {
   }
   return result
 }
-const maxTrendTTFT = computed(() => Math.max(1000, ...items.value.flatMap((item) => (item.trend || []).flatMap((bucket) => [bucket.probe_ttft_ms || 0, bucket.real_ttft_ms || 0]))))
-function barHeight(value: number) { return Math.max(4, Math.min(100, (value / maxTrendTTFT.value) * 100)) }
-function probeBarClass(value: number) { return value >= 8000 ? 'bg-red-500' : value >= 3000 ? 'bg-amber-400' : 'bg-emerald-500' }
+const minimumBarHeight = 100 / 15
+const maximumTrendTTFTMS = 30_000
+function barHeight(value: number) { return Math.max(minimumBarHeight, Math.min(100, (value / maximumTrendTTFTMS) * 100)) }
+function hasProbeStatus(bucket: DisplayBucket): bucket is GroupHealthTrendBucket {
+  return Boolean(bucket && (bucket.probe_success > 0 || bucket.probe_failure > 0))
+}
+function probeBarStatus(bucket: GroupHealthTrendBucket) {
+  if (bucket.probe_success <= 0) return 'unavailable'
+  return bucket.probe_ttft_ms <= 10_000 ? 'healthy' : 'slow'
+}
+function probeBarHeight(bucket: GroupHealthTrendBucket) {
+  return bucket.probe_success > 0 ? barHeight(bucket.probe_ttft_ms) : minimumBarHeight
+}
+function probeBarClass(bucket: GroupHealthTrendBucket) {
+  const status = probeBarStatus(bucket)
+  return status === 'healthy' ? 'bg-emerald-500' : status === 'slow' ? 'bg-amber-400' : 'bg-red-500'
+}
 function bucketTitle(bucket: DisplayBucket) {
   if (!bucket) return t('groupHealth.noData')
   return `${formatTime(bucket.started_at)} · ${t('groupHealth.bucketDetail', { success: bucket.real_success + bucket.probe_success, failure: bucket.real_failure + bucket.probe_failure })} · ${t('groupHealth.probeTtft')}: ${formatMs(bucket.probe_ttft_ms)} · ${t('groupHealth.realTtft')}: ${formatMs(bucket.real_ttft_ms)}`

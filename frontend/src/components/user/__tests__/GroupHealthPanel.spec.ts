@@ -52,15 +52,35 @@ describe('GroupHealthPanel', () => {
         real_ttft_samples: 4,
         real_total_avg_ms: 9000,
         real_availability_6h: 0,
-        trend: [{
-          started_at: '2026-08-20T07:55:00Z',
-          probe_success: 0,
-          probe_failure: 1,
-          real_success: 0,
-          real_failure: 1,
-          probe_ttft_ms: 0,
-          real_ttft_ms: 0,
-        }],
+        trend: [
+          {
+            started_at: '2026-08-20T07:35:00Z',
+            probe_success: 1,
+            probe_failure: 0,
+            real_success: 0,
+            real_failure: 0,
+            probe_ttft_ms: 1377,
+            real_ttft_ms: 0,
+          },
+          {
+            started_at: '2026-08-20T07:45:00Z',
+            probe_success: 1,
+            probe_failure: 1,
+            real_success: 0,
+            real_failure: 0,
+            probe_ttft_ms: 35_000,
+            real_ttft_ms: 0,
+          },
+          {
+            started_at: '2026-08-20T07:55:00Z',
+            probe_success: 0,
+            probe_failure: 1,
+            real_success: 0,
+            real_failure: 1,
+            probe_ttft_ms: 0,
+            real_ttft_ms: 0,
+          },
+        ],
       }],
     })
   })
@@ -83,6 +103,15 @@ describe('GroupHealthPanel', () => {
     expect(wrapper.text()).toContain('0.0%')
     expect(wrapper.find('.badge').classes()).toContain('badge-info')
     expect(wrapper.findAll('td:last-child > div > span')).toHaveLength(72)
+    const healthy = wrapper.get('[data-probe-status="healthy"]')
+    const slow = wrapper.get('[data-probe-status="slow"]')
+    const unavailable = wrapper.get('[data-probe-status="unavailable"]')
+    expect(healthy.classes()).toContain('bg-emerald-500')
+    expect(slow.classes()).toContain('bg-amber-400')
+    expect(unavailable.classes()).toContain('bg-red-500')
+    expect(Number.parseFloat(healthy.attributes('style').match(/height:\s*([\d.]+)%/)?.[1] || '0')).toBeGreaterThanOrEqual(100 / 15)
+    expect(Number.parseFloat(slow.attributes('style').match(/height:\s*([\d.]+)%/)?.[1] || '0')).toBe(100)
+    expect(Number.parseFloat(unavailable.attributes('style').match(/height:\s*([\d.]+)%/)?.[1] || '0')).toBeCloseTo(100 / 15, 4)
 
     wrapper.unmount()
   })

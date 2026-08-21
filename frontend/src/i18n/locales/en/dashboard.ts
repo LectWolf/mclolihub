@@ -969,7 +969,7 @@ export default {
 
   groupHealth: {
     title: 'Group channel status',
-    window: 'Last 12 hours, 10-minute buckets; green/yellow/red probe TTFT and purple real-user TTFT',
+    window: 'Last 12 hours in 10-minute buckets; successful probes are green up to 10s and yellow above 10s, unavailable probes are red, purple is real-user TTFT, and bars cap at 30s',
     group: 'Group',
     multiplier: 'Rate',
     status: 'Status',
