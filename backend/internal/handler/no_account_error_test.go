@@ -219,3 +219,36 @@ func TestClassifyNoAccountError_FromGin_NilContextStillSafe(t *testing.T) {
 	require.False(t, service.HasOpsClientBusinessLimited(nil))
 	require.Empty(t, service.OpsClientBusinessLimitedReason(nil))
 }
+
+func TestDynamicNoAccountStatePreservesCompatibleCapacityError(t *testing.T) {
+	state := dynamicNoAccountState{}
+	state.Observe(noAccountErrorClassification{
+		Status:  http.StatusServiceUnavailable,
+		ErrType: "api_error",
+		Message: "No available accounts",
+	})
+
+	got := state.Observe(noAccountErrorClassification{
+		Status:        http.StatusNotFound,
+		ErrType:       "model_not_found",
+		Message:       "Model is not supported",
+		ModelNotFound: true,
+	})
+
+	require.Equal(t, http.StatusServiceUnavailable, got.Status)
+	require.Equal(t, "api_error", got.ErrType)
+	require.False(t, got.ModelNotFound)
+	require.Contains(t, got.Message, "compatible")
+}
+
+func TestDynamicNoAccountStateKeepsModelNotFoundWhenEveryGroupIsIncompatible(t *testing.T) {
+	state := dynamicNoAccountState{}
+	want := noAccountErrorClassification{
+		Status:        http.StatusNotFound,
+		ErrType:       "model_not_found",
+		Message:       "Model is not supported",
+		ModelNotFound: true,
+	}
+
+	require.Equal(t, want, state.Observe(want))
+}

@@ -77,6 +77,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	reqModel := modelResult.String()
 	dynamicGroups := []service.Group(nil)
 	dynamicGroupIndex := 0
+	dynamicNoAccounts := dynamicNoAccountState{}
 	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
 		dynamicGroups, err = h.apiKeyService.ResolveRoutingGroups(c.Request.Context(), apiKey)
 		if err != nil {
@@ -192,6 +193,9 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		selection, err := h.gatewayService.SelectAccountWithLoadAwareness(requestCtx, apiKey.GroupID, sessionHash, reqModel, fs.FailedAccountIDs, "", int64(0))
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
+				if len(dynamicGroups) > 0 {
+					dynamicNoAccounts.Observe(classifyNoAccountError(requestCtx, h.gatewayService, apiKey, reqModel, reqModel, effectiveAPIKeyPlatform(c, apiKey)))
+				}
 				if dynamicGroupIndex+1 < len(dynamicGroups) {
 					dynamicGroupIndex++
 					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
@@ -211,12 +215,12 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					fs = NewFailoverState(h.maxAccountSwitches, false)
 					continue
 				}
-				cls := classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, effectiveAPIKeyPlatform(c, apiKey))
+				cls := classifyDynamicNoAccountErrorFromGin(c, h.gatewayService, apiKey, reqModel, reqModel, effectiveAPIKeyPlatform(c, apiKey), &dynamicNoAccounts)
 				if !cls.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 				}
 				message := cls.Message
-				if !cls.ModelNotFound {
+				if !cls.ModelNotFound && len(dynamicGroups) == 0 {
 					message = "No available accounts: " + err.Error()
 				}
 				h.responsesErrorResponse(c, cls.Status, cls.ErrType, message)
@@ -324,6 +328,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					return
 				}
 				if len(dynamicGroups) > 0 {
+					dynamicNoAccounts.MarkCompatibleUnavailable()
 					h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
 					h.gatewayService.TempUnscheduleRetryableError(requestCtx, account.ID, failoverErr)
 					if dynamicGroupIndex+1 >= len(dynamicGroups) {

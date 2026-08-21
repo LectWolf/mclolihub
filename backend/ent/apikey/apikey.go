@@ -31,6 +31,8 @@ const (
 	FieldGroupID = "group_id"
 	// FieldRouteMode holds the string denoting the route_mode field in the database.
 	FieldRouteMode = "route_mode"
+	// FieldRoutePlatform holds the string denoting the route_platform field in the database.
+	FieldRoutePlatform = "route_platform"
 	// FieldMaxRateMultiplier holds the string denoting the max_rate_multiplier field in the database.
 	FieldMaxRateMultiplier = "max_rate_multiplier"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -116,6 +118,7 @@ var Columns = []string{
 	FieldName,
 	FieldGroupID,
 	FieldRouteMode,
+	FieldRoutePlatform,
 	FieldMaxRateMultiplier,
 	FieldStatus,
 	FieldLastUsedAt,
@@ -167,6 +170,10 @@ var (
 	DefaultRouteMode string
 	// RouteModeValidator is a validator for the "route_mode" field. It is called by the builders before save.
 	RouteModeValidator func(string) error
+	// DefaultRoutePlatform holds the default value on creation for the "route_platform" field.
+	DefaultRoutePlatform string
+	// RoutePlatformValidator is a validator for the "route_platform" field. It is called by the builders before save.
+	RoutePlatformValidator func(string) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -235,6 +242,11 @@ func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 // ByRouteMode orders the results by the route_mode field.
 func ByRouteMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRouteMode, opts...).ToFunc()
+}
+
+// ByRoutePlatform orders the results by the route_platform field.
+func ByRoutePlatform(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRoutePlatform, opts...).ToFunc()
 }
 
 // ByMaxRateMultiplier orders the results by the max_rate_multiplier field.

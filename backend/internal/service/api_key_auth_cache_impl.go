@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 21 // v21: API key dynamic routing and group probe configuration
+const apiKeyAuthSnapshotVersion = 22 // v22: API key dynamic routing platform scope
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -351,6 +351,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		RateLimit1d:       apiKey.RateLimit1d,
 		RateLimit7d:       apiKey.RateLimit7d,
 		RouteMode:         apiKey.RouteMode,
+		RoutePlatform:     normalizeRoutePlatform(apiKey.RoutePlatform),
 		MaxRateMultiplier: apiKey.MaxRateMultiplier,
 		GroupPreferences:  apiKey.GroupPreferences,
 		User: APIKeyAuthUserSnapshot{
@@ -461,6 +462,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		RateLimit1d:       snapshot.RateLimit1d,
 		RateLimit7d:       snapshot.RateLimit7d,
 		RouteMode:         snapshot.RouteMode,
+		RoutePlatform:     normalizeRoutePlatform(snapshot.RoutePlatform),
 		MaxRateMultiplier: snapshot.MaxRateMultiplier,
 		GroupPreferences:  snapshot.GroupPreferences,
 		User: &User{

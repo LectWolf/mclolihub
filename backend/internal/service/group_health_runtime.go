@@ -47,6 +47,7 @@ type GroupHealthEventInput struct {
 
 type GroupProbeTarget struct {
 	GroupID      int64
+	Platform     string
 	Model        string
 	Interval     time.Duration
 	ProbeEnabled bool
@@ -55,6 +56,7 @@ type GroupProbeTarget struct {
 type AccountProbeTarget struct {
 	AccountID int64
 	GroupID   int64
+	Platform  string
 	Model     string
 	Interval  time.Duration
 	RetryStep int

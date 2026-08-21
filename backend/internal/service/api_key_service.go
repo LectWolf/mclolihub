@@ -75,8 +75,9 @@ type APIKeyUpdateFields struct {
 	RateLimitUsage bool
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
-	// RouteMode and MaxRateMultiplier control multi-group routing.
+	// RouteMode, RoutePlatform and MaxRateMultiplier control multi-group routing.
 	RouteMode         bool
+	RoutePlatform     bool
 	MaxRateMultiplier bool
 }
 
@@ -137,46 +138,122 @@ type groupRouteHealthReader interface {
 }
 
 type RoutingGroupPreview struct {
-	Group             Group
-	Status            string
-	RateMultiplier    float64
-	RealTTFTP50MS     int
-	ProbeTTFTMS       int
+	Group              Group
+	Status             string
+	RateMultiplier     float64
+	RealTTFTP50MS      int
+	ProbeTTFTMS        int
 	RealAvailability6h float64
-	Eligible          bool
-	Position          int
-	ExcludedReason    string
+	Eligible           bool
+	Position           int
+	ExcludedReason     string
 }
 
 // ResolveRoutingPreview mirrors gateway routing and also exposes filtered candidates for UI previews.
 func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) ([]RoutingGroupPreview, error) {
-	if key == nil { return nil, ErrAPIKeyNotFound }
-	mode := key.RouteMode; if mode == "" { mode = RouteModeFixed }
+	if key == nil {
+		return nil, ErrAPIKeyNotFound
+	}
+	mode := key.RouteMode
+	if mode == "" {
+		mode = RouteModeFixed
+	}
 	if mode == RouteModeFixed {
-		if key.Group == nil { return nil, ErrGroupNotFound }
+		if key.Group == nil {
+			return nil, ErrGroupNotFound
+		}
 		return []RoutingGroupPreview{{Group: *key.Group, RateMultiplier: key.Group.RateMultiplier, Status: GroupHealthHealthy, Eligible: true, Position: 1}}, nil
 	}
-	groups, err := s.GetAvailableGroups(ctx, key.UserID); if err != nil { return nil, err }
-	rates, _ := s.GetUserGroupRates(ctx, key.UserID)
-	prefs := make(map[int64]APIKeyGroupPreference, len(key.GroupPreferences)); for _, p := range key.GroupPreferences { prefs[p.GroupID] = p }
-	ids := make([]int64, 0, len(groups)); byID := make(map[int64]Group, len(groups)); for _, g := range groups { ids = append(ids, g.ID); byID[g.ID] = g }
-	health := map[int64]GroupRouteHealth{}; if r, ok := s.groupRepo.(groupRouteHealthReader); ok { health, _ = r.GetRouteHealth(ctx, ids) }
-	candidates := make([]GroupRouteCandidate, 0, len(groups)); previews := make([]RoutingGroupPreview, 0, len(groups))
-	for _, g := range groups {
-		rate := g.RateMultiplier; if v, ok := rates[g.ID]; ok { rate = v }
-		h := health[g.ID]; status := GroupHealthUnknown; if h.Healthy { status = GroupHealthHealthy } else if g.ProbeEnabled { status = GroupHealthUnavailable } else { status = "not_enabled" }
-		p, configured := prefs[g.ID]; reason := ""; eligible := true
-		if mode == RouteModeCustom && !configured { eligible = false; reason = "not_in_custom_order" }
-		if p.Disabled { eligible = false; reason = "disabled_by_api_key" }
-		if key.MaxRateMultiplier != nil && rate > *key.MaxRateMultiplier { eligible = false; reason = "max_rate_exceeded" }
-		if g.ProbeEnabled && !h.Healthy { eligible = false; reason = "unavailable" }
-		previews = append(previews, RoutingGroupPreview{Group:g, Status:status, RateMultiplier:rate, RealTTFTP50MS:h.RealTTFTP50MS, ProbeTTFTMS:h.ProbeTTFTMS, Eligible:eligible, ExcludedReason:reason})
-		candidates = append(candidates, GroupRouteCandidate{GroupID:g.ID, RateMultiplier:rate, Healthy:h.Healthy, ProbeEnabled:g.ProbeEnabled, Disabled:p.Disabled, CustomPosition:p.Position, AdminSortOrder:g.SortOrder, RealTTFTP50MS:h.RealTTFTP50MS, RealTTFTSamples:h.RealTTFTSamples, ProbeTTFTMS:h.ProbeTTFTMS})
+	groups, err := s.GetAvailableGroups(ctx, key.UserID)
+	if err != nil {
+		return nil, err
 	}
-	ranked, err := RankGroupCandidates(mode, key.MaxRateMultiplier, candidates); if err != nil { return nil, err }
-	order := make(map[int64]int, len(ranked)); for i, c := range ranked { order[c.GroupID] = i+1 }
-	for i := range previews { previews[i].Position = order[previews[i].Group.ID]; if previews[i].Position == 0 && previews[i].ExcludedReason == "" { previews[i].ExcludedReason = "filtered_by_health" }; if previews[i].Position > 0 { previews[i].Eligible = true } }
-	sort.SliceStable(previews, func(i,j int) bool { a,b:=previews[i],previews[j]; if a.Position>0 && b.Position==0{return true}; if a.Position==0&&b.Position>0{return false}; if a.Position!=b.Position{return a.Position<b.Position}; return a.Group.ID<b.Group.ID })
+	rates, _ := s.GetUserGroupRates(ctx, key.UserID)
+	prefs := make(map[int64]APIKeyGroupPreference, len(key.GroupPreferences))
+	for _, p := range key.GroupPreferences {
+		prefs[p.GroupID] = p
+	}
+	ids := make([]int64, 0, len(groups))
+	byID := make(map[int64]Group, len(groups))
+	for _, g := range groups {
+		ids = append(ids, g.ID)
+		byID[g.ID] = g
+	}
+	health := map[int64]GroupRouteHealth{}
+	if r, ok := s.groupRepo.(groupRouteHealthReader); ok {
+		health, _ = r.GetRouteHealth(ctx, ids)
+	}
+	candidates := make([]GroupRouteCandidate, 0, len(groups))
+	previews := make([]RoutingGroupPreview, 0, len(groups))
+	for _, g := range groups {
+		if !routePlatformMatches(key.RoutePlatform, g.Platform) {
+			continue
+		}
+		rate := g.RateMultiplier
+		if v, ok := rates[g.ID]; ok {
+			rate = v
+		}
+		h := health[g.ID]
+		var status string
+		if h.Healthy {
+			status = GroupHealthHealthy
+		} else if g.ProbeEnabled {
+			status = GroupHealthUnavailable
+		} else {
+			status = "not_enabled"
+		}
+		p, configured := prefs[g.ID]
+		reason := ""
+		eligible := true
+		if mode == RouteModeCustom && !configured {
+			eligible = false
+			reason = "not_in_custom_order"
+		}
+		if p.Disabled {
+			eligible = false
+			reason = "disabled_by_api_key"
+		}
+		if key.MaxRateMultiplier != nil && rate > *key.MaxRateMultiplier {
+			eligible = false
+			reason = "max_rate_exceeded"
+		}
+		if g.ProbeEnabled && !h.Healthy {
+			eligible = false
+			reason = "unavailable"
+		}
+		previews = append(previews, RoutingGroupPreview{Group: g, Status: status, RateMultiplier: rate, RealTTFTP50MS: h.RealTTFTP50MS, ProbeTTFTMS: h.ProbeTTFTMS, Eligible: eligible, ExcludedReason: reason})
+		candidates = append(candidates, GroupRouteCandidate{GroupID: g.ID, RateMultiplier: rate, Healthy: h.Healthy, ProbeEnabled: g.ProbeEnabled, Disabled: p.Disabled, CustomPosition: p.Position, AdminSortOrder: g.SortOrder, RealTTFTP50MS: h.RealTTFTP50MS, RealTTFTSamples: h.RealTTFTSamples, ProbeTTFTMS: h.ProbeTTFTMS})
+	}
+	ranked, err := RankGroupCandidates(mode, key.MaxRateMultiplier, candidates)
+	if err != nil {
+		return nil, err
+	}
+	order := make(map[int64]int, len(ranked))
+	for i, c := range ranked {
+		order[c.GroupID] = i + 1
+	}
+	for i := range previews {
+		previews[i].Position = order[previews[i].Group.ID]
+		if previews[i].Position == 0 && previews[i].ExcludedReason == "" {
+			previews[i].ExcludedReason = "filtered_by_health"
+		}
+		if previews[i].Position > 0 {
+			previews[i].Eligible = true
+		}
+	}
+	sort.SliceStable(previews, func(i, j int) bool {
+		a, b := previews[i], previews[j]
+		if a.Position > 0 && b.Position == 0 {
+			return true
+		}
+		if a.Position == 0 && b.Position > 0 {
+			return false
+		}
+		if a.Position != b.Position {
+			return a.Position < b.Position
+		}
+		return a.Group.ID < b.Group.ID
+	})
 	return previews, nil
 }
 
@@ -229,6 +306,9 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 	}
 	candidates := make([]GroupRouteCandidate, 0, len(groups))
 	for _, group := range groups {
+		if !routePlatformMatches(key.RoutePlatform, group.Platform) {
+			continue
+		}
 		if key.User == nil || !s.canUserBindGroup(ctx, key.User, &group) {
 			continue
 		}
@@ -398,6 +478,7 @@ type CreateAPIKeyRequest struct {
 	Name              string   `json:"name"`
 	GroupID           *int64   `json:"group_id"`
 	RouteMode         string   `json:"route_mode"`
+	RoutePlatform     string   `json:"route_platform"`
 	MaxRateMultiplier *float64 `json:"max_rate_multiplier"`
 	DisabledGroupIDs  []int64  `json:"disabled_group_ids"`
 	CustomGroupIDs    []int64  `json:"custom_group_ids"`
@@ -420,6 +501,7 @@ type UpdateAPIKeyRequest struct {
 	Name                 *string   `json:"name"`
 	GroupID              *int64    `json:"group_id"`
 	RouteMode            *string   `json:"route_mode"`
+	RoutePlatform        *string   `json:"route_platform"`
 	MaxRateMultiplier    *float64  `json:"max_rate_multiplier"`
 	MaxRateMultiplierSet bool      `json:"-"`
 	DisabledGroupIDs     *[]int64  `json:"disabled_group_ids"`
@@ -462,6 +544,9 @@ func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
 			return infraerrors.BadRequest("API_KEY_ROUTE_MODE_INVALID", err.Error())
 		}
 	}
+	if err := ValidateRoutePlatform(req.RoutePlatform); err != nil {
+		return infraerrors.BadRequest("API_KEY_ROUTE_PLATFORM_INVALID", err.Error())
+	}
 	if req.MaxRateMultiplier != nil {
 		if err := validateAPIKeyLimit(*req.MaxRateMultiplier); err != nil {
 			return err
@@ -481,6 +566,11 @@ func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
 	if req.RouteMode != nil {
 		if err := ValidateRouteMode(*req.RouteMode); err != nil {
 			return infraerrors.BadRequest("API_KEY_ROUTE_MODE_INVALID", err.Error())
+		}
+	}
+	if req.RoutePlatform != nil {
+		if err := ValidateRoutePlatform(*req.RoutePlatform); err != nil {
+			return infraerrors.BadRequest("API_KEY_ROUTE_PLATFORM_INVALID", err.Error())
 		}
 	}
 	if req.MaxRateMultiplier != nil {
@@ -756,6 +846,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		GroupID:           req.GroupID,
 		Status:            StatusActive,
 		RouteMode:         req.RouteMode,
+		RoutePlatform:     normalizeRoutePlatform(req.RoutePlatform),
 		MaxRateMultiplier: req.MaxRateMultiplier,
 		IPWhitelist:       req.IPWhitelist,
 		IPBlacklist:       req.IPBlacklist,
@@ -767,6 +858,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	}
 	if apiKey.RouteMode == "" {
 		apiKey.RouteMode = RouteModeFixed
+	}
+	if apiKey.RouteMode == RouteModeFixed {
+		apiKey.RoutePlatform = RoutePlatformAuto
 	}
 
 	// Set expiration time if specified
@@ -1075,6 +1169,14 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if req.RouteMode != nil {
 		apiKey.RouteMode = *req.RouteMode
 		fields.RouteMode = true
+	}
+	if req.RoutePlatform != nil {
+		apiKey.RoutePlatform = normalizeRoutePlatform(*req.RoutePlatform)
+		fields.RoutePlatform = true
+	}
+	if apiKey.RouteMode == RouteModeFixed && apiKey.RoutePlatform != RoutePlatformAuto {
+		apiKey.RoutePlatform = RoutePlatformAuto
+		fields.RoutePlatform = true
 	}
 	if req.MaxRateMultiplierSet || req.MaxRateMultiplier != nil {
 		apiKey.MaxRateMultiplier = req.MaxRateMultiplier

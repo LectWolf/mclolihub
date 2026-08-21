@@ -45,6 +45,49 @@ type balanceRestoreAccountRepo struct {
 	account *Account
 }
 
+type immediateRefreshHealthRepo struct {
+	GroupHealthRepository
+	snapshot       *GroupHealthSnapshot
+	rollingMetrics error
+}
+
+func (s *immediateRefreshHealthRepo) GetProbeGroup(context.Context, int64) (GroupProbeTarget, error) {
+	return GroupProbeTarget{GroupID: 8, Model: "gpt-5.6-sol", Interval: 10 * time.Minute, ProbeEnabled: true}, nil
+}
+func (s *immediateRefreshHealthRepo) LoadAccountHealth(context.Context, []int64) (map[int64]AccountHealthState, error) {
+	return map[int64]AccountHealthState{}, nil
+}
+func (s *immediateRefreshHealthRepo) RefreshDerivedGroupHealth(context.Context, int64, time.Time) error {
+	return nil
+}
+func (s *immediateRefreshHealthRepo) Load(context.Context, int64) (*GroupHealthSnapshot, error) {
+	return s.snapshot, nil
+}
+func (s *immediateRefreshHealthRepo) Save(_ context.Context, snapshot *GroupHealthSnapshot) error {
+	s.snapshot = snapshot
+	return nil
+}
+func (s *immediateRefreshHealthRepo) UpdateRollingMetrics(context.Context, time.Time) error {
+	return s.rollingMetrics
+}
+
+type immediateRefreshAccountRepo struct {
+	AccountRepository
+	accounts []Account
+}
+
+func (s *immediateRefreshAccountRepo) ListByGroup(context.Context, int64) ([]Account, error) {
+	return s.accounts, nil
+}
+func (s *immediateRefreshAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	for i := range s.accounts {
+		if s.accounts[i].ID == id {
+			return &s.accounts[i], nil
+		}
+	}
+	return nil, ErrAccountNotFound
+}
+
 func (s *balanceRestoreAccountRepo) GetByID(context.Context, int64) (*Account, error) {
 	return s.account, nil
 }
@@ -147,6 +190,29 @@ func TestRestoreBalanceImmediatelyRefreshesHealthyGroup(t *testing.T) {
 		ErrorCategory: "balance_restored", ErrorMessage: "admin_balance_restored",
 		ObservedAt: *healthRepo.snapshot.LastSuccessAt,
 	}}, healthRepo.events)
+}
+
+func TestProbeNowDoesNotReportInternalErrorAfterProbeCompleted(t *testing.T) {
+	healthRepo := &immediateRefreshHealthRepo{rollingMetrics: errors.New("rolling metrics unavailable")}
+	accountRepo := &immediateRefreshAccountRepo{}
+	service := NewGroupHealthService(healthRepo, accountRepo, &AccountTestService{}, nil, nil)
+
+	require.NoError(t, service.ProbeNow(context.Background(), 8))
+	require.NotNil(t, healthRepo.snapshot, "the completed probe result must still be persisted")
+}
+
+func TestOpenAIGroupProbeNeverDispatchesAnthropicAccount(t *testing.T) {
+	accountRepo := &immediateRefreshAccountRepo{accounts: []Account{{
+		ID: 41, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true,
+	}}}
+	service := NewGroupHealthService(&immediateRefreshHealthRepo{}, accountRepo, &AccountTestService{}, nil, nil)
+
+	result, ran := service.runAccountProbe(
+		context.Background(), 8, 41, PlatformOpenAI, "gpt-5.6-sol",
+	)
+
+	require.False(t, ran, "OpenAI group probes must reject non-OpenAI accounts before protocol dispatch")
+	require.Nil(t, result)
 }
 
 func TestProbeRoundStopsAtFirstSuccess(t *testing.T) {

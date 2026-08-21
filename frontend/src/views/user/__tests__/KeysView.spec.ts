@@ -7,6 +7,7 @@ import KeysView from '../KeysView.vue'
 
 const {
   listKeys,
+  createKey,
   getPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
@@ -18,6 +19,7 @@ const {
   nextStep,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
+  createKey: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
@@ -58,7 +60,7 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
-    create: vi.fn(),
+    create: createKey,
     update: vi.fn(),
     delete: vi.fn(),
     toggleStatus: vi.fn(),
@@ -218,6 +220,7 @@ const IconStub = {
 const mountView = async () => {
   const wrapper = mount(KeysView, {
     global: {
+      renderStubDefaultSlot: true,
       stubs: {
         AppLayout: AppLayoutStub,
         TablePageLayout: TablePageLayoutStub,
@@ -261,6 +264,7 @@ describe('user KeysView column settings', () => {
     localStorage.clear()
 
     listKeys.mockReset()
+    createKey.mockReset()
     getPublicSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
@@ -283,6 +287,7 @@ describe('user KeysView column settings', () => {
     getAvailableGroups.mockResolvedValue([])
     getUserGroupRates.mockResolvedValue({})
     isCurrentStep.mockReturnValue(false)
+    createKey.mockResolvedValue({ ...createApiKey(), key: 'sk-created' })
   })
 
   it('uses the default API key columns with low-frequency columns hidden', async () => {
@@ -436,6 +441,35 @@ describe('user KeysView column settings', () => {
         sort_order: 'asc',
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+  })
+
+  it('creates a response-priority key without requiring a fixed group', async () => {
+    const wrapper = await mountView()
+
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await nextTick()
+
+    const routeSelect = wrapper.findAllComponents({ name: 'Select' }).find((select) =>
+      (select.props('options') as Array<{ value?: string }> | undefined)?.some((option) => option.value === 'fastest')
+    )
+    expect(routeSelect).toBeDefined()
+    await routeSelect!.vm.$emit('update:modelValue', 'fastest')
+    await nextTick()
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+
+    expect(showError).not.toHaveBeenCalledWith('keys.groupRequired')
+    expect(createKey).toHaveBeenCalledWith(
+      '',
+      null,
+      undefined,
+      [],
+      [],
+      0,
+      undefined,
+      expect.any(Object),
+      expect.objectContaining({ route_mode: 'fastest' })
     )
   })
 })

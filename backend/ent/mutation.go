@@ -123,6 +123,7 @@ type APIKeyMutation struct {
 	key                      *string
 	name                     *string
 	route_mode               *string
+	route_platform           *string
 	max_rate_multiplier      *float64
 	addmax_rate_multiplier   *float64
 	status                   *string
@@ -577,6 +578,42 @@ func (m *APIKeyMutation) OldRouteMode(ctx context.Context) (v string, err error)
 // ResetRouteMode resets all changes to the "route_mode" field.
 func (m *APIKeyMutation) ResetRouteMode() {
 	m.route_mode = nil
+}
+
+// SetRoutePlatform sets the "route_platform" field.
+func (m *APIKeyMutation) SetRoutePlatform(s string) {
+	m.route_platform = &s
+}
+
+// RoutePlatform returns the value of the "route_platform" field in the mutation.
+func (m *APIKeyMutation) RoutePlatform() (r string, exists bool) {
+	v := m.route_platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoutePlatform returns the old "route_platform" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldRoutePlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoutePlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoutePlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoutePlatform: %w", err)
+	}
+	return oldValue.RoutePlatform, nil
+}
+
+// ResetRoutePlatform resets all changes to the "route_platform" field.
+func (m *APIKeyMutation) ResetRoutePlatform() {
+	m.route_platform = nil
 }
 
 // SetMaxRateMultiplier sets the "max_rate_multiplier" field.
@@ -1704,7 +1741,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 26)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1728,6 +1765,9 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.route_mode != nil {
 		fields = append(fields, apikey.FieldRouteMode)
+	}
+	if m.route_platform != nil {
+		fields = append(fields, apikey.FieldRoutePlatform)
 	}
 	if m.max_rate_multiplier != nil {
 		fields = append(fields, apikey.FieldMaxRateMultiplier)
@@ -1804,6 +1844,8 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.GroupID()
 	case apikey.FieldRouteMode:
 		return m.RouteMode()
+	case apikey.FieldRoutePlatform:
+		return m.RoutePlatform()
 	case apikey.FieldMaxRateMultiplier:
 		return m.MaxRateMultiplier()
 	case apikey.FieldStatus:
@@ -1863,6 +1905,8 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldGroupID(ctx)
 	case apikey.FieldRouteMode:
 		return m.OldRouteMode(ctx)
+	case apikey.FieldRoutePlatform:
+		return m.OldRoutePlatform(ctx)
 	case apikey.FieldMaxRateMultiplier:
 		return m.OldMaxRateMultiplier(ctx)
 	case apikey.FieldStatus:
@@ -1961,6 +2005,13 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRouteMode(v)
+		return nil
+	case apikey.FieldRoutePlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoutePlatform(v)
 		return nil
 	case apikey.FieldMaxRateMultiplier:
 		v, ok := value.(float64)
@@ -2327,6 +2378,9 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldRouteMode:
 		m.ResetRouteMode()
+		return nil
+	case apikey.FieldRoutePlatform:
+		m.ResetRoutePlatform()
 		return nil
 	case apikey.FieldMaxRateMultiplier:
 		m.ResetMaxRateMultiplier()

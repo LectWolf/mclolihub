@@ -34,6 +34,7 @@ type APIKey struct {
 	Name              string
 	GroupID           *int64
 	RouteMode         string
+	RoutePlatform     string
 	MaxRateMultiplier *float64
 	GroupPreferences  []APIKeyGroupPreference
 	Status            string

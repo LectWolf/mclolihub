@@ -27,6 +27,7 @@ type APIKeyAuthSnapshot struct {
 	RateLimit1d       float64                 `json:"rate_limit_1d"`
 	RateLimit7d       float64                 `json:"rate_limit_7d"`
 	RouteMode         string                  `json:"route_mode"`
+	RoutePlatform     string                  `json:"route_platform"`
 	MaxRateMultiplier *float64                `json:"max_rate_multiplier,omitempty"`
 	GroupPreferences  []APIKeyGroupPreference `json:"group_preferences,omitempty"`
 }

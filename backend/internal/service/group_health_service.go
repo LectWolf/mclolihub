@@ -160,7 +160,7 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 		if state, ok := states[account.ID]; ok && state.RuntimeStatus == AccountRuntimeBalance {
 			continue
 		}
-		result, run := s.runAccountProbe(ctx, target.GroupID, account.ID, target.Model)
+		result, run := s.runAccountProbe(ctx, target.GroupID, account.ID, target.Platform, target.Model)
 		if !run {
 			continue
 		}
@@ -219,11 +219,17 @@ func (s *GroupHealthService) ProbeNow(ctx context.Context, groupID int64) error 
 	// The scheduled loop refreshes rolling metrics at the end of each cycle,
 	// but an administrator's immediate refresh must update availability before
 	// returning the response; otherwise a successful probe still displays 0%.
-	return s.repo.UpdateRollingMetrics(ctx, now)
+	if err := s.repo.UpdateRollingMetrics(ctx, now); err != nil {
+		// The probe itself has already completed and been persisted. Rolling
+		// aggregation is derived display data, so its failure must not turn a
+		// successful administrator check into a misleading internal error.
+		slog.Warn("group_health: immediate rolling metric aggregation failed", "group_id", groupID, "error", err)
+	}
+	return nil
 }
 
 func (s *GroupHealthService) probeRecoveryAccount(ctx context.Context, target AccountProbeTarget, now time.Time) error {
-	result, run := s.runAccountProbe(ctx, target.GroupID, target.AccountID, target.Model)
+	result, run := s.runAccountProbe(ctx, target.GroupID, target.AccountID, target.Platform, target.Model)
 	if !run {
 		return nil
 	}
@@ -233,12 +239,22 @@ func (s *GroupHealthService) probeRecoveryAccount(ctx context.Context, target Ac
 	return s.markProbeFailure(ctx, target.GroupID, target.AccountID, target.Interval, target.RetryStep+1, result, now)
 }
 
-func (s *GroupHealthService) runAccountProbe(parent context.Context, groupID, accountID int64, model string) (*AccountProbeResult, bool) {
+func (s *GroupHealthService) runAccountProbe(parent context.Context, groupID, accountID int64, groupPlatform, model string) (*AccountProbeResult, bool) {
 	release, acquired := tryAcquireSingletonLeaderLock(parent, s.lockCache, s.db, fmt.Sprintf("group-health:account:%d", accountID), s.instanceID, groupHealthLockTTL)
 	if !acquired {
 		return nil, false
 	}
 	defer release()
+	// OpenAI health probes are protocol-specific Responses probes. Groups may
+	// contain legacy/misconfigured cross-platform accounts, but probing one of
+	// those would invoke its native adapter (for example Anthropic /v1/messages)
+	// and produce a false OpenAI health result. Fail closed before dispatch.
+	if strings.EqualFold(strings.TrimSpace(groupPlatform), PlatformOpenAI) {
+		account, err := s.accountRepo.GetByID(parent, accountID)
+		if err != nil || account == nil || !strings.EqualFold(strings.TrimSpace(account.Platform), PlatformOpenAI) {
+			return nil, false
+		}
+	}
 	ctx, cancel := context.WithTimeout(parent, groupHealthProbeTimeout)
 	defer cancel()
 	result, err := s.testService.RunProbeBackground(ctx, accountID, model)
@@ -370,7 +386,7 @@ func (s *GroupHealthService) ReportRuntimeFailure(groupID, accountID int64, fail
 	if !s.submitProbeTask(func() {
 		probeCtx, probeCancel := context.WithTimeout(s.ctx, groupHealthProbeTimeout)
 		defer probeCancel()
-		result, run := s.runAccountProbe(probeCtx, groupID, accountID, groupTarget.Model)
+		result, run := s.runAccountProbe(probeCtx, groupID, accountID, groupTarget.Platform, groupTarget.Model)
 		if !run {
 			return
 		}

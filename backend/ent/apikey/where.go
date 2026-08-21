@@ -95,6 +95,11 @@ func RouteMode(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldRouteMode, v))
 }
 
+// RoutePlatform applies equality check predicate on the "route_platform" field. It's identical to RoutePlatformEQ.
+func RoutePlatform(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldRoutePlatform, v))
+}
+
 // MaxRateMultiplier applies equality check predicate on the "max_rate_multiplier" field. It's identical to MaxRateMultiplierEQ.
 func MaxRateMultiplier(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldMaxRateMultiplier, v))
@@ -543,6 +548,71 @@ func RouteModeEqualFold(v string) predicate.APIKey {
 // RouteModeContainsFold applies the ContainsFold predicate on the "route_mode" field.
 func RouteModeContainsFold(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldContainsFold(FieldRouteMode, v))
+}
+
+// RoutePlatformEQ applies the EQ predicate on the "route_platform" field.
+func RoutePlatformEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldRoutePlatform, v))
+}
+
+// RoutePlatformNEQ applies the NEQ predicate on the "route_platform" field.
+func RoutePlatformNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldRoutePlatform, v))
+}
+
+// RoutePlatformIn applies the In predicate on the "route_platform" field.
+func RoutePlatformIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldRoutePlatform, vs...))
+}
+
+// RoutePlatformNotIn applies the NotIn predicate on the "route_platform" field.
+func RoutePlatformNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldRoutePlatform, vs...))
+}
+
+// RoutePlatformGT applies the GT predicate on the "route_platform" field.
+func RoutePlatformGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldRoutePlatform, v))
+}
+
+// RoutePlatformGTE applies the GTE predicate on the "route_platform" field.
+func RoutePlatformGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldRoutePlatform, v))
+}
+
+// RoutePlatformLT applies the LT predicate on the "route_platform" field.
+func RoutePlatformLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldRoutePlatform, v))
+}
+
+// RoutePlatformLTE applies the LTE predicate on the "route_platform" field.
+func RoutePlatformLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldRoutePlatform, v))
+}
+
+// RoutePlatformContains applies the Contains predicate on the "route_platform" field.
+func RoutePlatformContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldRoutePlatform, v))
+}
+
+// RoutePlatformHasPrefix applies the HasPrefix predicate on the "route_platform" field.
+func RoutePlatformHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldRoutePlatform, v))
+}
+
+// RoutePlatformHasSuffix applies the HasSuffix predicate on the "route_platform" field.
+func RoutePlatformHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldRoutePlatform, v))
+}
+
+// RoutePlatformEqualFold applies the EqualFold predicate on the "route_platform" field.
+func RoutePlatformEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldRoutePlatform, v))
+}
+
+// RoutePlatformContainsFold applies the ContainsFold predicate on the "route_platform" field.
+func RoutePlatformContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldRoutePlatform, v))
 }
 
 // MaxRateMultiplierEQ applies the EQ predicate on the "max_rate_multiplier" field.

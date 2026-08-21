@@ -35,6 +35,7 @@ type CreateAPIKeyRequest struct {
 	Name              string   `json:"name" binding:"required"`
 	GroupID           *int64   `json:"group_id"` // nullable
 	RouteMode         string   `json:"route_mode"`
+	RoutePlatform     string   `json:"route_platform"`
 	MaxRateMultiplier *float64 `json:"max_rate_multiplier"`
 	DisabledGroupIDs  []int64  `json:"disabled_group_ids"`
 	CustomGroupIDs    []int64  `json:"custom_group_ids"`
@@ -55,6 +56,7 @@ type UpdateAPIKeyRequest struct {
 	Name              string                   `json:"name"`
 	GroupID           *int64                   `json:"group_id"`
 	RouteMode         *string                  `json:"route_mode"`
+	RoutePlatform     *string                  `json:"route_platform"`
 	MaxRateMultiplier dto.NullableFloat64Field `json:"max_rate_multiplier"`
 	DisabledGroupIDs  *[]int64                 `json:"disabled_group_ids"`
 	CustomGroupIDs    *[]int64                 `json:"custom_group_ids"`
@@ -192,18 +194,61 @@ func (h *APIKeyHandler) GetByID(c *gin.Context) {
 // GET /api/v1/keys/:id/routing-preview
 func (h *APIKeyHandler) RoutingPreview(c *gin.Context) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok { response.Unauthorized(c, "User not authenticated"); return }
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id <= 0 { response.BadRequest(c, "Invalid key ID"); return }
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid key ID")
+		return
+	}
 	key, err := h.apiKeyService.GetByID(c.Request.Context(), id)
-	if err != nil { response.ErrorFrom(c, err); return }
-	if key.UserID != subject.UserID { response.NotFound(c, "API key not found"); return }
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if key.UserID != subject.UserID {
+		response.NotFound(c, "API key not found")
+		return
+	}
 	items, err := h.apiKeyService.ResolveRoutingPreview(c.Request.Context(), key)
-	if err != nil { response.ErrorFrom(c, err); return }
-	type item struct { GroupID int64 `json:"group_id"`; Name string `json:"name"`; Platform string `json:"platform"`; Status string `json:"status"`; RateMultiplier float64 `json:"rate_multiplier"`; RealTTFTP50MS int `json:"real_ttft_p50_ms"`; ProbeTTFTMS int `json:"probe_ttft_ms"`; Eligible bool `json:"eligible"`; Position int `json:"position"`; ExcludedReason string `json:"excluded_reason,omitempty"` }
-	out := make([]item, 0, len(items)); for _, v := range items { out = append(out, item{v.Group.ID,v.Group.Name,v.Group.Platform,v.Status,v.RateMultiplier,v.RealTTFTP50MS,v.ProbeTTFTMS,v.Eligible,v.Position,v.ExcludedReason}) }
-	next := int64(0); if len(out)>0 && out[0].Eligible { next = out[0].GroupID }
-	response.Success(c, gin.H{"route_mode": key.RouteMode, "next_group_id": next, "groups": out})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	type item struct {
+		GroupID        int64   `json:"group_id"`
+		Name           string  `json:"name"`
+		Platform       string  `json:"platform"`
+		Status         string  `json:"status"`
+		RateMultiplier float64 `json:"rate_multiplier"`
+		RealTTFTP50MS  int     `json:"real_ttft_p50_ms"`
+		ProbeTTFTMS    int     `json:"probe_ttft_ms"`
+		Eligible       bool    `json:"eligible"`
+		Position       int     `json:"position"`
+		ExcludedReason string  `json:"excluded_reason,omitempty"`
+	}
+	out := make([]item, 0, len(items))
+	for _, v := range items {
+		out = append(out, item{
+			GroupID:        v.Group.ID,
+			Name:           v.Group.Name,
+			Platform:       v.Group.Platform,
+			Status:         v.Status,
+			RateMultiplier: v.RateMultiplier,
+			RealTTFTP50MS:  v.RealTTFTP50MS,
+			ProbeTTFTMS:    v.ProbeTTFTMS,
+			Eligible:       v.Eligible,
+			Position:       v.Position,
+			ExcludedReason: v.ExcludedReason,
+		})
+	}
+	next := int64(0)
+	if len(out) > 0 && out[0].Eligible {
+		next = out[0].GroupID
+	}
+	response.Success(c, gin.H{"route_mode": key.RouteMode, "route_platform": key.RoutePlatform, "next_group_id": next, "groups": out})
 }
 
 // Create handles creating a new API key
@@ -229,6 +274,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		Name:              req.Name,
 		GroupID:           req.GroupID,
 		RouteMode:         req.RouteMode,
+		RoutePlatform:     req.RoutePlatform,
 		MaxRateMultiplier: req.MaxRateMultiplier,
 		DisabledGroupIDs:  req.DisabledGroupIDs,
 		CustomGroupIDs:    req.CustomGroupIDs,
@@ -299,6 +345,7 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 	}
 	svcReq.GroupID = req.GroupID
 	svcReq.RouteMode = req.RouteMode
+	svcReq.RoutePlatform = req.RoutePlatform
 	svcReq.MaxRateMultiplier = req.MaxRateMultiplier.Value
 	svcReq.MaxRateMultiplierSet = req.MaxRateMultiplier.Set
 	svcReq.DisabledGroupIDs = req.DisabledGroupIDs

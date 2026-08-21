@@ -106,8 +106,14 @@ func applyDynamicGroupRequestContext(c *gin.Context, apiKey *service.APIKey, mod
 		}
 	}
 	if platform != "" {
-		c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), platform))
+		ctx := service.WithResolvedTargetPlatform(c.Request.Context(), platform)
+		ctx = context.WithValue(ctx, ctxkey.Group, apiKey.Group)
+		c.Request = c.Request.WithContext(ctx)
 	}
+	// Authentication records the key before dynamic routing resolves its actual
+	// group. Keep the Gin value in sync so Ops/SLA attribution observes the
+	// group that handled the request rather than the key's original group.
+	c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
 }
 
 // NewGatewayHandler creates a new GatewayHandler
@@ -222,6 +228,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	reqStream := parsedReq.Stream
 	dynamicGroups := []service.Group(nil)
 	dynamicGroupIndex := 0
+	dynamicNoAccounts := dynamicNoAccountState{}
 	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
 		dynamicGroups, err = h.apiKeyService.ResolveRoutingGroups(c.Request.Context(), apiKey)
 		if err != nil {
@@ -398,7 +405,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.Error(err),
 					)
 					message := cls.Message
-					if !cls.ModelNotFound {
+					if !cls.ModelNotFound && len(dynamicGroups) == 0 {
 						message = "No available accounts: " + err.Error()
 					}
 					h.handleStreamingAwareError(c, cls.Status, cls.ErrType, message, streamStarted)
@@ -695,6 +702,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			selection, err := h.gatewayService.SelectAccountWithLoadAwareness(c.Request.Context(), currentAPIKey.GroupID, sessionKey, reqModel, fs.FailedAccountIDs, parsedReq.MetadataUserID, subject.UserID)
 			if err != nil {
 				if len(fs.FailedAccountIDs) == 0 {
+					if len(dynamicGroups) > 0 {
+						dynamicNoAccounts.Observe(classifyNoAccountError(c.Request.Context(), h.gatewayService, currentAPIKey, reqModel, reqModel, platform))
+					}
 					if dynamicGroupIndex+1 < len(dynamicGroups) {
 						dynamicGroupIndex++
 						currentAPIKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
@@ -722,7 +732,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						retryWithFallback = true
 						break
 					}
-					cls := classifyNoAccountErrorFromGin(c, h.gatewayService, currentAPIKey, reqModel, reqModel, platform)
+					cls := classifyDynamicNoAccountErrorFromGin(c, h.gatewayService, currentAPIKey, reqModel, reqModel, platform, &dynamicNoAccounts)
 					if !cls.ModelNotFound {
 						markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 					}
@@ -1086,6 +1096,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						return
 					}
 					if len(dynamicGroups) > 0 {
+						dynamicNoAccounts.MarkCompatibleUnavailable()
 						h.reportDynamicGroupFailure(currentAPIKey, account, failoverErr, false)
 						h.gatewayService.TempUnscheduleRetryableError(c.Request.Context(), account.ID, failoverErr)
 						if dynamicGroupIndex+1 >= len(dynamicGroups) {

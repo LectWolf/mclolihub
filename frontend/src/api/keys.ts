@@ -18,7 +18,7 @@ export interface RoutingPreviewGroup {
   position: number
   excluded_reason?: string
 }
-export interface RoutingPreview { route_mode: string; next_group_id: number; groups: RoutingPreviewGroup[] }
+export interface RoutingPreview { route_mode: string; route_platform: 'auto' | 'openai' | 'anthropic' | 'grok'; next_group_id: number; groups: RoutingPreviewGroup[] }
 
 /**
  * List all API keys for current user
@@ -85,7 +85,7 @@ export async function create(
   quota?: number,
   expiresInDays?: number,
   rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
-  routing?: { route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'; max_rate_multiplier?: number | null; disabled_group_ids?: number[]; custom_group_ids?: number[] }
+  routing?: { route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'; route_platform?: 'auto' | 'openai' | 'anthropic' | 'grok'; max_rate_multiplier?: number | null; disabled_group_ids?: number[]; custom_group_ids?: number[] }
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
 	Object.assign(payload, routing || {})

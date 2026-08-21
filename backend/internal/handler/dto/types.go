@@ -57,6 +57,7 @@ type APIKey struct {
 	Name              string                          `json:"name"`
 	GroupID           *int64                          `json:"group_id"`
 	RouteMode         string                          `json:"route_mode"`
+	RoutePlatform     string                          `json:"route_platform"`
 	MaxRateMultiplier *float64                        `json:"max_rate_multiplier,omitempty"`
 	GroupPreferences  []service.APIKeyGroupPreference `json:"group_preferences,omitempty"`
 	Status            string                          `json:"status"`

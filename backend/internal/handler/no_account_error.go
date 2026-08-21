@@ -32,6 +32,60 @@ type noAccountErrorClassification struct {
 	ModelNotFound bool // true when this is a 404 model_not_found classification
 }
 
+// dynamicNoAccountState remembers whether any previously visited group was
+// configured for the requested model but temporarily had no capacity. A later
+// incompatible group must not overwrite that retryable condition with a 404.
+type dynamicNoAccountState struct {
+	compatibleUnavailable bool
+}
+
+func (s *dynamicNoAccountState) MarkCompatibleUnavailable() {
+	if s != nil {
+		s.compatibleUnavailable = true
+	}
+}
+
+func (s *dynamicNoAccountState) Observe(classification noAccountErrorClassification) noAccountErrorClassification {
+	if !classification.ModelNotFound {
+		s.compatibleUnavailable = true
+		classification.Status = http.StatusServiceUnavailable
+		classification.ErrType = "api_error"
+		classification.Message = "No available compatible group or account for the requested model"
+		return classification
+	}
+	if s.compatibleUnavailable {
+		return noAccountErrorClassification{
+			Status:  http.StatusServiceUnavailable,
+			ErrType: "api_error",
+			Message: "No available compatible group or account for the requested model",
+		}
+	}
+	return classification
+}
+
+func classifyDynamicNoAccountErrorFromGin(
+	c *gin.Context,
+	diag service.ModelAvailabilityDiagnoser,
+	apiKey *service.APIKey,
+	routingModel string,
+	displayModel string,
+	platform string,
+	state *dynamicNoAccountState,
+) noAccountErrorClassification {
+	ctx := context.Background()
+	if c != nil && c.Request != nil {
+		ctx = c.Request.Context()
+	}
+	classification := classifyNoAccountError(ctx, diag, apiKey, routingModel, displayModel, platform)
+	if state != nil {
+		classification = state.Observe(classification)
+	}
+	if classification.ModelNotFound {
+		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
+	}
+	return classification
+}
+
 // classifyNoAccountError decides between 404 model_not_found and 503
 // api_error for "no available accounts" failures.
 //

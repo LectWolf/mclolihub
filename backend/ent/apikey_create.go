@@ -114,6 +114,20 @@ func (_c *APIKeyCreate) SetNillableRouteMode(v *string) *APIKeyCreate {
 	return _c
 }
 
+// SetRoutePlatform sets the "route_platform" field.
+func (_c *APIKeyCreate) SetRoutePlatform(v string) *APIKeyCreate {
+	_c.mutation.SetRoutePlatform(v)
+	return _c
+}
+
+// SetNillableRoutePlatform sets the "route_platform" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableRoutePlatform(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetRoutePlatform(*v)
+	}
+	return _c
+}
+
 // SetMaxRateMultiplier sets the "max_rate_multiplier" field.
 func (_c *APIKeyCreate) SetMaxRateMultiplier(v float64) *APIKeyCreate {
 	_c.mutation.SetMaxRateMultiplier(v)
@@ -431,6 +445,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultRouteMode
 		_c.mutation.SetRouteMode(v)
 	}
+	if _, ok := _c.mutation.RoutePlatform(); !ok {
+		v := apikey.DefaultRoutePlatform
+		_c.mutation.SetRoutePlatform(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -503,6 +521,14 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.RouteMode(); ok {
 		if err := apikey.RouteModeValidator(v); err != nil {
 			return &ValidationError{Name: "route_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_mode": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RoutePlatform(); !ok {
+		return &ValidationError{Name: "route_platform", err: errors.New(`ent: missing required field "APIKey.route_platform"`)}
+	}
+	if v, ok := _c.mutation.RoutePlatform(); ok {
+		if err := apikey.RoutePlatformValidator(v); err != nil {
+			return &ValidationError{Name: "route_platform", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_platform": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
@@ -590,6 +616,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RouteMode(); ok {
 		_spec.SetField(apikey.FieldRouteMode, field.TypeString, value)
 		_node.RouteMode = value
+	}
+	if value, ok := _c.mutation.RoutePlatform(); ok {
+		_spec.SetField(apikey.FieldRoutePlatform, field.TypeString, value)
+		_node.RoutePlatform = value
 	}
 	if value, ok := _c.mutation.MaxRateMultiplier(); ok {
 		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
@@ -870,6 +900,18 @@ func (u *APIKeyUpsert) SetRouteMode(v string) *APIKeyUpsert {
 // UpdateRouteMode sets the "route_mode" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateRouteMode() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldRouteMode)
+	return u
+}
+
+// SetRoutePlatform sets the "route_platform" field.
+func (u *APIKeyUpsert) SetRoutePlatform(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldRoutePlatform, v)
+	return u
+}
+
+// UpdateRoutePlatform sets the "route_platform" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateRoutePlatform() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldRoutePlatform)
 	return u
 }
 
@@ -1333,6 +1375,20 @@ func (u *APIKeyUpsertOne) SetRouteMode(v string) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateRouteMode() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateRouteMode()
+	})
+}
+
+// SetRoutePlatform sets the "route_platform" field.
+func (u *APIKeyUpsertOne) SetRoutePlatform(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetRoutePlatform(v)
+	})
+}
+
+// UpdateRoutePlatform sets the "route_platform" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateRoutePlatform() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateRoutePlatform()
 	})
 }
 
@@ -2013,6 +2069,20 @@ func (u *APIKeyUpsertBulk) SetRouteMode(v string) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateRouteMode() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateRouteMode()
+	})
+}
+
+// SetRoutePlatform sets the "route_platform" field.
+func (u *APIKeyUpsertBulk) SetRoutePlatform(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetRoutePlatform(v)
+	})
+}
+
+// UpdateRoutePlatform sets the "route_platform" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateRoutePlatform() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateRoutePlatform()
 	})
 }
 

@@ -104,6 +104,8 @@ export default {
     selectGroup: 'Select a group',
     routeModeLabel: 'Routing mode',
     routeModes: { fixed: 'Fixed group', cheapest: 'Cheapest first', fastest: 'Fastest first', custom: 'Custom order' },
+    routePlatformLabel: 'Routing platform scope',
+    routePlatforms: { auto: 'Auto compatible', openai: 'OpenAI', anthropic: 'Anthropic', grok: 'Grok' },
     maxRateMultiplier: 'Maximum multiplier',
     maxRateMultiplierPlaceholder: 'Unlimited',
     disabledGroups: 'Excluded groups',

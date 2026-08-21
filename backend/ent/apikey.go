@@ -36,6 +36,8 @@ type APIKey struct {
 	GroupID *int64 `json:"group_id,omitempty"`
 	// fixed/cheapest/fastest/custom
 	RouteMode string `json:"route_mode,omitempty"`
+	// dynamic routing platform scope: auto/openai/anthropic/grok
+	RoutePlatform string `json:"route_platform,omitempty"`
 	// 允许调用的最大生效倍率，NULL 表示不限制
 	MaxRateMultiplier *float64 `json:"max_rate_multiplier,omitempty"`
 	// Status holds the value of the "status" field.
@@ -142,7 +144,7 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
 			values[i] = new(sql.NullInt64)
-		case apikey.FieldKey, apikey.FieldName, apikey.FieldRouteMode, apikey.FieldStatus:
+		case apikey.FieldKey, apikey.FieldName, apikey.FieldRouteMode, apikey.FieldRoutePlatform, apikey.FieldStatus:
 			values[i] = new(sql.NullString)
 		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldDeletedAt, apikey.FieldLastUsedAt, apikey.FieldExpiresAt, apikey.FieldWindow5hStart, apikey.FieldWindow1dStart, apikey.FieldWindow7dStart:
 			values[i] = new(sql.NullTime)
@@ -216,6 +218,12 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field route_mode", values[i])
 			} else if value.Valid {
 				_m.RouteMode = value.String
+			}
+		case apikey.FieldRoutePlatform:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field route_platform", values[i])
+			} else if value.Valid {
+				_m.RoutePlatform = value.String
 			}
 		case apikey.FieldMaxRateMultiplier:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -412,6 +420,9 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("route_mode=")
 	builder.WriteString(_m.RouteMode)
+	builder.WriteString(", ")
+	builder.WriteString("route_platform=")
+	builder.WriteString(_m.RoutePlatform)
 	builder.WriteString(", ")
 	if v := _m.MaxRateMultiplier; v != nil {
 		builder.WriteString("max_rate_multiplier=")

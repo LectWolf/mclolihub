@@ -85,7 +85,7 @@ func (r *groupHealthStore) ListDueProbeGroups(ctx context.Context, now time.Time
 		limit = 100
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT g.id, g.probe_model, g.probe_interval_seconds
+		SELECT g.id, g.platform, g.probe_model, g.probe_interval_seconds
 		FROM groups g
 		LEFT JOIN group_health_states s ON s.group_id = g.id
 		WHERE g.deleted_at IS NULL AND g.status = 'active' AND g.probe_enabled IS TRUE
@@ -100,7 +100,7 @@ func (r *groupHealthStore) ListDueProbeGroups(ctx context.Context, now time.Time
 	for rows.Next() {
 		var item service.GroupProbeTarget
 		var seconds int
-		if err := rows.Scan(&item.GroupID, &item.Model, &seconds); err != nil {
+		if err := rows.Scan(&item.GroupID, &item.Platform, &item.Model, &seconds); err != nil {
 			return nil, err
 		}
 		item.Interval = normalizedProbeInterval(seconds)
@@ -115,7 +115,7 @@ func (r *groupHealthStore) ListDueAccountProbes(ctx context.Context, now time.Ti
 		limit = 200
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT s.account_id, s.probe_group_id, g.probe_model, g.probe_interval_seconds, s.retry_step
+		SELECT s.account_id, s.probe_group_id, g.platform, g.probe_model, g.probe_interval_seconds, s.retry_step
 		FROM account_health_states s
 		JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL
 		JOIN groups g ON g.id = s.probe_group_id AND g.deleted_at IS NULL
@@ -131,7 +131,7 @@ func (r *groupHealthStore) ListDueAccountProbes(ctx context.Context, now time.Ti
 	for rows.Next() {
 		var item service.AccountProbeTarget
 		var seconds int
-		if err := rows.Scan(&item.AccountID, &item.GroupID, &item.Model, &seconds, &item.RetryStep); err != nil {
+		if err := rows.Scan(&item.AccountID, &item.GroupID, &item.Platform, &item.Model, &seconds, &item.RetryStep); err != nil {
 			return nil, err
 		}
 		item.Interval = normalizedProbeInterval(seconds)
@@ -150,8 +150,8 @@ func normalizedProbeInterval(seconds int) time.Duration {
 func (r *groupHealthStore) GetProbeGroup(ctx context.Context, groupID int64) (service.GroupProbeTarget, error) {
 	var target service.GroupProbeTarget
 	var seconds int
-	err := r.db.QueryRowContext(ctx, `SELECT id,probe_model,probe_interval_seconds,probe_enabled FROM groups WHERE id=$1 AND deleted_at IS NULL`, groupID).
-		Scan(&target.GroupID, &target.Model, &seconds, &target.ProbeEnabled)
+	err := r.db.QueryRowContext(ctx, `SELECT id,platform,probe_model,probe_interval_seconds,probe_enabled FROM groups WHERE id=$1 AND deleted_at IS NULL`, groupID).
+		Scan(&target.GroupID, &target.Platform, &target.Model, &seconds, &target.ProbeEnabled)
 	if err != nil {
 		return target, err
 	}

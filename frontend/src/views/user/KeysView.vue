@@ -138,6 +138,7 @@
               <button v-if="row.route_mode !== 'fixed'" type="button" class="flex items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-gray-100 dark:hover:bg-dark-700" @click="openRoutingPreview(row)">
                 <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(routingPreviewFor(row)?.groups.find(g => g.group_id === routingPreviewFor(row)?.next_group_id)?.status || 'unknown')" />
                 <span class="text-sm text-gray-800 dark:text-gray-200">{{ t('keys.routeModes.' + row.route_mode) }}</span>
+                <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ t('keys.routePlatforms.' + (row.route_platform || 'auto')) }}</span>
                 <span class="text-xs text-gray-500">{{ t('keys.nextGroup') }}: {{ nextGroupName(row) }}</span>
                 <Icon name="chevronDown" size="sm" class="text-gray-400" />
               </button>
@@ -474,6 +475,11 @@
         <div>
           <label class="input-label">{{ t('keys.routeModeLabel') }}</label>
           <Select v-model="formData.route_mode" :options="routeModeOptions" />
+        </div>
+
+        <div v-if="formData.route_mode !== 'fixed'">
+          <label class="input-label">{{ t('keys.routePlatformLabel') }}</label>
+          <Select v-model="formData.route_platform" :options="routePlatformOptions" />
         </div>
 
         <div v-if="formData.route_mode === 'fixed'">
@@ -1396,6 +1402,7 @@ const formData = ref({
   name: '',
   group_id: null as number | null,
 	route_mode: 'fixed' as 'fixed' | 'cheapest' | 'fastest' | 'custom',
+	route_platform: 'auto' as 'auto' | 'openai' | 'anthropic' | 'grok',
 	max_rate_multiplier: null as number | null,
 	disabled_group_ids: [] as number[],
 	custom_group_ids: [] as number[],
@@ -1444,6 +1451,13 @@ const routeModeOptions = computed(() => [
   { value: 'cheapest', label: t('keys.routeModes.cheapest') },
   { value: 'fastest', label: t('keys.routeModes.fastest') },
   { value: 'custom', label: t('keys.routeModes.custom') },
+])
+
+const routePlatformOptions = computed(() => [
+  { value: 'auto', label: t('keys.routePlatforms.auto') },
+  { value: 'openai', label: t('keys.routePlatforms.openai') },
+  { value: 'anthropic', label: t('keys.routePlatforms.anthropic') },
+  { value: 'grok', label: t('keys.routePlatforms.grok') },
 ])
 
 const effectiveGroupRate = (group: Group) => userGroupRates.value[group.id] ?? group.rate_multiplier
@@ -1691,6 +1705,7 @@ const editKey = (key: ApiKey) => {
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
 		route_mode: key.route_mode || 'fixed',
+		route_platform: key.route_platform || 'auto',
 		max_rate_multiplier: key.max_rate_multiplier,
 		disabled_group_ids: (key.group_preferences || []).filter(item => item.disabled).map(item => item.group_id),
 		custom_group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
@@ -1787,8 +1802,9 @@ const confirmDelete = (key: ApiKey) => {
 }
 
 const handleSubmit = async () => {
-  // Validate group_id is required
-  if (formData.value.group_id === null) {
+  // Only fixed routing binds the key to one mandatory group. Dynamic modes
+  // resolve their candidate groups at request time.
+  if (formData.value.route_mode === 'fixed' && formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
     return
   }
@@ -1847,6 +1863,7 @@ const handleSubmit = async () => {
         name: formData.value.name,
         group_id: formData.value.group_id,
 		route_mode: formData.value.route_mode,
+		route_platform: formData.value.route_mode === 'fixed' ? 'auto' : formData.value.route_platform,
 		max_rate_multiplier: formData.value.max_rate_multiplier,
 		disabled_group_ids: formData.value.disabled_group_ids,
 		custom_group_ids: formData.value.custom_group_ids,
@@ -1876,6 +1893,7 @@ const handleSubmit = async () => {
 		rateLimitData,
 		{
 			route_mode: formData.value.route_mode,
+			route_platform: formData.value.route_mode === 'fixed' ? 'auto' : formData.value.route_platform,
 			max_rate_multiplier: formData.value.max_rate_multiplier,
 			disabled_group_ids: formData.value.disabled_group_ids,
 			custom_group_ids: formData.value.custom_group_ids
@@ -1926,6 +1944,7 @@ const closeModals = () => {
     name: '',
     group_id: null,
 		route_mode: 'fixed',
+		route_platform: 'auto',
 		max_rate_multiplier: null,
 		disabled_group_ids: [],
 		custom_group_ids: [],

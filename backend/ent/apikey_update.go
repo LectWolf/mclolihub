@@ -135,6 +135,20 @@ func (_u *APIKeyUpdate) SetNillableRouteMode(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetRoutePlatform sets the "route_platform" field.
+func (_u *APIKeyUpdate) SetRoutePlatform(v string) *APIKeyUpdate {
+	_u.mutation.SetRoutePlatform(v)
+	return _u
+}
+
+// SetNillableRoutePlatform sets the "route_platform" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableRoutePlatform(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetRoutePlatform(*v)
+	}
+	return _u
+}
+
 // SetMaxRateMultiplier sets the "max_rate_multiplier" field.
 func (_u *APIKeyUpdate) SetMaxRateMultiplier(v float64) *APIKeyUpdate {
 	_u.mutation.ResetMaxRateMultiplier()
@@ -638,6 +652,11 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "route_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RoutePlatform(); ok {
+		if err := apikey.RoutePlatformValidator(v); err != nil {
+			return &ValidationError{Name: "route_platform", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_platform": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -678,6 +697,9 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.RouteMode(); ok {
 		_spec.SetField(apikey.FieldRouteMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RoutePlatform(); ok {
+		_spec.SetField(apikey.FieldRoutePlatform, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MaxRateMultiplier(); ok {
 		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
@@ -1057,6 +1079,20 @@ func (_u *APIKeyUpdateOne) SetRouteMode(v string) *APIKeyUpdateOne {
 func (_u *APIKeyUpdateOne) SetNillableRouteMode(v *string) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetRouteMode(*v)
+	}
+	return _u
+}
+
+// SetRoutePlatform sets the "route_platform" field.
+func (_u *APIKeyUpdateOne) SetRoutePlatform(v string) *APIKeyUpdateOne {
+	_u.mutation.SetRoutePlatform(v)
+	return _u
+}
+
+// SetNillableRoutePlatform sets the "route_platform" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableRoutePlatform(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetRoutePlatform(*v)
 	}
 	return _u
 }
@@ -1577,6 +1613,11 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "route_mode", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.RoutePlatform(); ok {
+		if err := apikey.RoutePlatformValidator(v); err != nil {
+			return &ValidationError{Name: "route_platform", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_platform": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
@@ -1634,6 +1675,9 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.RouteMode(); ok {
 		_spec.SetField(apikey.FieldRouteMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.RoutePlatform(); ok {
+		_spec.SetField(apikey.FieldRoutePlatform, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.MaxRateMultiplier(); ok {
 		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)

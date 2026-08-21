@@ -1,7 +1,6 @@
 package schema
 
 import (
-	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
@@ -9,10 +8,11 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 )
 
 // GroupHealthState is the durable health snapshot used by dynamic routing.
-type GroupHealthState struct { ent.Schema }
+type GroupHealthState struct{ ent.Schema }
 
 func (GroupHealthState) Annotations() []schema.Annotation {
 	return []schema.Annotation{entsql.Annotation{Table: "group_health_states"}}
@@ -43,4 +43,6 @@ func (GroupHealthState) Fields() []ent.Field {
 func (GroupHealthState) Edges() []ent.Edge {
 	return []ent.Edge{edge.From("group", Group.Type).Ref("health_state").Field("group_id").Unique().Required()}
 }
-func (GroupHealthState) Indexes() []ent.Index { return []ent.Index{index.Fields("group_id").Unique(), index.Fields("status"), index.Fields("next_probe_at")} }
+func (GroupHealthState) Indexes() []ent.Index {
+	return []ent.Index{index.Fields("group_id").Unique(), index.Fields("status"), index.Fields("next_probe_at")}
+}

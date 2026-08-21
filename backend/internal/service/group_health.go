@@ -20,6 +20,10 @@ const (
 	RouteModeCheapest              = "cheapest"
 	RouteModeFastest               = "fastest"
 	RouteModeCustom                = "custom"
+	RoutePlatformAuto              = "auto"
+	RoutePlatformOpenAI            = PlatformOpenAI
+	RoutePlatformAnthropic         = PlatformAnthropic
+	RoutePlatformGrok              = PlatformGrok
 	DefaultGroupProbeInterval      = 10 * time.Minute
 	ImmediateProbeCooldown         = 10 * time.Minute
 )
@@ -106,6 +110,28 @@ func ValidateRouteMode(mode string) error {
 	default:
 		return errors.New("invalid API key route mode")
 	}
+}
+
+func normalizeRoutePlatform(platform string) string {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	if platform == "" {
+		return RoutePlatformAuto
+	}
+	return platform
+}
+
+func ValidateRoutePlatform(platform string) error {
+	switch normalizeRoutePlatform(platform) {
+	case RoutePlatformAuto, RoutePlatformOpenAI, RoutePlatformAnthropic, RoutePlatformGrok:
+		return nil
+	default:
+		return errors.New("invalid API key route platform")
+	}
+}
+
+func routePlatformMatches(scope, platform string) bool {
+	scope = normalizeRoutePlatform(scope)
+	return scope == RoutePlatformAuto || strings.EqualFold(scope, strings.TrimSpace(platform))
 }
 
 // RankGroupCandidates applies health, disabled and max-rate gates, then deterministically sorts candidates.
