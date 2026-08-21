@@ -437,7 +437,7 @@
           </div>
 
           <div v-if="tabLoading" class="empty-state py-10 text-sm text-gray-400">{{ t('common.loading') }}</div>
-          <div v-else-if="activeRowsEmpty" class="empty-state py-10">
+          <div v-else-if="activeRowsEmpty && !hasChannelData" class="empty-state py-10">
             <p class="empty-state-title text-base">
               {{
                 bootstrapActive
@@ -642,6 +642,25 @@ const activeRowsEmpty = computed(() =>
       ? errorRows.value.length === 0
       : userRows.value.length === 0
 )
+// A tab may be empty while the monitor still has configured or observed
+// channels. Show the global empty state only when the monitor is truly empty.
+const hasChannelData = computed(() => {
+  const configuredPlatforms = (snapshot.value?.config?.platforms || []).some(
+    (platform) => platform.enabled && platform.models.length > 0,
+  )
+  const configuredGroups = (snapshot.value?.config?.group_ids || []).length > 0
+  return Boolean(
+    configuredPlatforms ||
+      configuredGroups ||
+      dimensions.value.platforms.length > 0 ||
+      dimensions.value.groups.length > 0 ||
+      dimensions.value.models.length > 0 ||
+      matrix.value?.items?.length ||
+      modelRows.value.length ||
+      errorRows.value.length ||
+      userRows.value.length,
+  )
+})
 /** First-upgrade backfill toward 90m/24h/7d/30d; banner hides when backend omits bootstrap. */
 const bootstrapActive = computed(() => Boolean(snapshot.value?.coverage?.bootstrap?.active))
 const bootstrapPercent = computed(() => {
