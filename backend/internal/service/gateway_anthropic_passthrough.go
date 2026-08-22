@@ -679,9 +679,11 @@ func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 
 	if usage.CacheReadInputTokens == 0 {
 		if cached := parsed.Get("message.usage.cached_tokens").Int(); cached > 0 {
+			usage.InputTokens = max(usage.InputTokens-int(cached), 0)
 			usage.CacheReadInputTokens = int(cached)
 		}
 		if cached := parsed.Get("usage.cached_tokens").Int(); usage.CacheReadInputTokens == 0 && cached > 0 {
+			usage.InputTokens = max(usage.InputTokens-int(cached), 0)
 			usage.CacheReadInputTokens = int(cached)
 		}
 	}
@@ -727,6 +729,7 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 	}
 	if usage.CacheReadInputTokens == 0 {
 		if cached := usageNode.Get("cached_tokens").Int(); cached > 0 {
+			usage.InputTokens = max(usage.InputTokens-int(cached), 0)
 			usage.CacheReadInputTokens = int(cached)
 		}
 	}

@@ -35,7 +35,19 @@ func TestReconcileCachedTokens_KimiStyle(t *testing.T) {
 		"cached_tokens":               float64(23),
 	}
 	assert.True(t, reconcileCachedTokens(usage))
+	assert.Equal(t, float64(0), usage["input_tokens"])
 	assert.Equal(t, float64(23), usage["cache_read_input_tokens"])
+}
+
+func TestReconcileCachedTokens_DoesNotDoubleCountCachedInput(t *testing.T) {
+	usage := map[string]any{
+		"input_tokens":  float64(22000),
+		"cached_tokens": float64(20000),
+	}
+
+	assert.True(t, reconcileCachedTokens(usage))
+	assert.Equal(t, float64(2000), usage["input_tokens"])
+	assert.Equal(t, float64(20000), usage["cache_read_input_tokens"])
 }
 
 func TestReconcileCachedTokens_NoCachedTokens(t *testing.T) {
@@ -219,7 +231,11 @@ func TestNonStreamingReconcile_KimiResponse(t *testing.T) {
 	if response.Usage.CacheReadInputTokens == 0 {
 		cachedTokens := gjson.GetBytes(body, "usage.cached_tokens").Int()
 		if cachedTokens > 0 {
+			response.Usage.InputTokens = max(response.Usage.InputTokens-int(cachedTokens), 0)
 			response.Usage.CacheReadInputTokens = int(cachedTokens)
+			if newBody, err := sjson.SetBytes(body, "usage.input_tokens", response.Usage.InputTokens); err == nil {
+				body = newBody
+			}
 			if newBody, err := sjson.SetBytes(body, "usage.cache_read_input_tokens", cachedTokens); err == nil {
 				body = newBody
 			}
@@ -228,11 +244,12 @@ func TestNonStreamingReconcile_KimiResponse(t *testing.T) {
 
 	// 验证内部 usage（计费用）
 	assert.Equal(t, 23, response.Usage.CacheReadInputTokens)
-	assert.Equal(t, 23, response.Usage.InputTokens)
+	assert.Equal(t, 0, response.Usage.InputTokens)
 	assert.Equal(t, 7, response.Usage.OutputTokens)
 
 	// 验证返回给客户端的 JSON body
 	assert.Equal(t, int64(23), gjson.GetBytes(body, "usage.cache_read_input_tokens").Int())
+	assert.Equal(t, int64(0), gjson.GetBytes(body, "usage.input_tokens").Int())
 }
 
 func TestNonStreamingReconcile_NativeClaude(t *testing.T) {

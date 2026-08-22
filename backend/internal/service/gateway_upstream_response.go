@@ -1412,7 +1412,11 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	if response.Usage.CacheReadInputTokens == 0 {
 		cachedTokens := gjson.GetBytes(body, "usage.cached_tokens").Int()
 		if cachedTokens > 0 {
+			response.Usage.InputTokens = max(response.Usage.InputTokens-int(cachedTokens), 0)
 			response.Usage.CacheReadInputTokens = int(cachedTokens)
+			if newBody, err := sjson.SetBytes(body, "usage.input_tokens", response.Usage.InputTokens); err == nil {
+				body = newBody
+			}
 			if newBody, err := sjson.SetBytes(body, "usage.cache_read_input_tokens", cachedTokens); err == nil {
 				body = newBody
 			}
@@ -1469,7 +1473,8 @@ func (s *GatewayService) replaceModelInResponseBody(body []byte, fromModel, toMo
 }
 
 // reconcileCachedTokens 兼容 Kimi 等上游：
-// 将 OpenAI 风格的 cached_tokens 映射到 Claude 标准的 cache_read_input_tokens
+// OpenAI 风格的 input_tokens 包含 cached_tokens，而 Claude 的三个输入桶互斥。
+// 映射缓存读取桶时同步扣除普通输入，避免缓存 token 重复计费。
 func reconcileCachedTokens(usage map[string]any) bool {
 	if usage == nil {
 		return false
@@ -1482,6 +1487,12 @@ func reconcileCachedTokens(usage map[string]any) bool {
 	if cached <= 0 {
 		return false
 	}
+	input, _ := usage["input_tokens"].(float64)
+	input -= cached
+	if input < 0 {
+		input = 0
+	}
+	usage["input_tokens"] = input
 	usage["cache_read_input_tokens"] = cached
 	return true
 }
