@@ -50,8 +50,8 @@ func (APIKey) Fields() []ent.Field {
 			Comment("fixed/cheapest/fastest/custom"),
 		field.String("route_platform").
 			MaxLen(20).
-			Default("auto").
-			Comment("dynamic routing platform scope: auto/openai/anthropic/grok"),
+			Default("openai").
+			Comment("dynamic routing platform scope: openai/anthropic/grok"),
 		field.Float("max_rate_multiplier").
 			Optional().
 			Nillable().

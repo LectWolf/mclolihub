@@ -248,7 +248,7 @@ func (h *APIKeyHandler) RoutingPreview(c *gin.Context) {
 	if len(out) > 0 && out[0].Eligible {
 		next = out[0].GroupID
 	}
-	response.Success(c, gin.H{"route_mode": key.RouteMode, "route_platform": key.RoutePlatform, "next_group_id": next, "groups": out})
+	response.Success(c, gin.H{"route_mode": key.RouteMode, "route_platform": service.NormalizeRoutePlatform(key.RoutePlatform), "next_group_id": next, "groups": out})
 }
 
 // Create handles creating a new API key

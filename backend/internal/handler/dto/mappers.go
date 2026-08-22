@@ -80,9 +80,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		return nil
 	}
 	routePlatform := k.RoutePlatform
-	if routePlatform == "" {
-		routePlatform = service.RoutePlatformAuto
-	}
+	routePlatform = service.NormalizeRoutePlatform(routePlatform)
 	out := &APIKey{
 		ID:                 k.ID,
 		UserID:             k.UserID,

@@ -77,6 +77,14 @@ func TestGetGroupPlatformUsesDynamicRoutePlatform(t *testing.T) {
 		RoutePlatform: service.RoutePlatformOpenAI,
 	})
 	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c), "an explicit dynamic platform must not depend on a legacy bound group")
+
+	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+		GroupID:       &groupID,
+		Group:         &service.Group{ID: groupID, Platform: service.PlatformAnthropic},
+		RouteMode:     service.RouteModeCheapest,
+		RoutePlatform: service.RoutePlatformAuto,
+	})
+	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c), "legacy auto scope must migrate to the OpenAI protocol")
 }
 
 func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {

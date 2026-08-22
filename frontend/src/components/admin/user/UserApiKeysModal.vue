@@ -58,7 +58,6 @@
               <label v-if="drafts[key.id].route_mode !== 'fixed'" class="min-w-32 flex-1">
                 <span class="mb-1 block text-[11px] text-gray-400">平台范围</span>
                 <select v-model="drafts[key.id].route_platform" class="input input-sm w-full">
-                  <option value="auto">自动兼容（OpenAI）</option>
                   <option value="openai">OpenAI</option>
                   <option value="anthropic">Anthropic</option>
                   <option value="grok">Grok</option>
@@ -191,6 +190,11 @@ const selectedKeyForGroup = computed(() => {
   return apiKeys.value.find((k) => k.id === groupSelectorKeyId.value) || null
 })
 
+const normalizeRoutePlatform = (platform?: string): ApiKey['route_platform'] => {
+  if (platform === 'anthropic' || platform === 'grok') return platform
+  return 'openai'
+}
+
 const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance | null) => {
   if (el instanceof HTMLElement) {
     groupButtonRefs.value.set(keyId, el)
@@ -217,7 +221,7 @@ const load = async () => {
     apiKeys.value = res.items || []
     drafts.value = Object.fromEntries(apiKeys.value.map((key) => [key.id, {
       route_mode: key.route_mode || 'fixed',
-      route_platform: key.route_platform || 'auto',
+      route_platform: normalizeRoutePlatform(key.route_platform),
               max_rate_multiplier: key.max_rate_multiplier ?? null,
       disabled_group_ids: (key.group_preferences || []).filter((item) => item.disabled).map((item) => item.group_id),
       custom_group_ids: (key.group_preferences || []).filter((item) => !item.disabled).sort((a, b) => a.position - b.position).map((item) => item.group_id),
@@ -245,7 +249,7 @@ const saveRouting = async (key: ApiKey) => {
   try {
     const updated = await adminAPI.apiKeys.updateApiKeyRouting(key.id, {
       route_mode: draft.route_mode,
-      route_platform: draft.route_mode === 'fixed' ? 'auto' : draft.route_platform,
+      route_platform: draft.route_mode === 'fixed' ? 'openai' : draft.route_platform,
       max_rate_multiplier: draft.max_rate_multiplier,
       disabled_group_ids: draft.disabled_group_ids,
       custom_group_ids: draft.custom_group_ids,

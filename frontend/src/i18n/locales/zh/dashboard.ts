@@ -105,7 +105,7 @@ export default {
     routeModeLabel: '路由方式',
     routeModes: { fixed: '固定分组', cheapest: '低价优先', fastest: '响应优先', custom: '自定义顺序' },
     routePlatformLabel: '路由平台范围',
-    routePlatforms: { auto: '自动兼容', openai: 'OpenAI', anthropic: 'Anthropic', grok: 'Grok' },
+    routePlatforms: { openai: 'OpenAI', anthropic: 'Anthropic', grok: 'Grok' },
     maxRateMultiplier: '最大倍率',
     maxRateMultiplierPlaceholder: '不限制',
     disabledGroups: '禁用分组',

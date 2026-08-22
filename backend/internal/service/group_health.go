@@ -31,7 +31,7 @@ const (
 	RouteModeCheapest              = "cheapest"
 	RouteModeFastest               = "fastest"
 	RouteModeCustom                = "custom"
-	RoutePlatformAuto              = "auto"
+	RoutePlatformAuto              = "auto" // Legacy stored value; normalized to OpenAI.
 	RoutePlatformOpenAI            = PlatformOpenAI
 	RoutePlatformAnthropic         = PlatformAnthropic
 	RoutePlatformGrok              = PlatformGrok
@@ -149,17 +149,18 @@ func ValidateRouteMode(mode string) error {
 	}
 }
 
-func normalizeRoutePlatform(platform string) string {
+// NormalizeRoutePlatform maps legacy or omitted scopes to the OpenAI protocol.
+func NormalizeRoutePlatform(platform string) string {
 	platform = strings.ToLower(strings.TrimSpace(platform))
-	if platform == "" {
-		return RoutePlatformAuto
+	if platform == "" || platform == RoutePlatformAuto {
+		return RoutePlatformOpenAI
 	}
 	return platform
 }
 
 func ValidateRoutePlatform(platform string) error {
-	switch normalizeRoutePlatform(platform) {
-	case RoutePlatformAuto, RoutePlatformOpenAI, RoutePlatformAnthropic, RoutePlatformGrok:
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case "", RoutePlatformOpenAI, RoutePlatformAnthropic, RoutePlatformGrok:
 		return nil
 	default:
 		return errors.New("invalid API key route platform")
@@ -167,8 +168,8 @@ func ValidateRoutePlatform(platform string) error {
 }
 
 func routePlatformMatches(scope, platform string) bool {
-	scope = normalizeRoutePlatform(scope)
-	return scope == RoutePlatformAuto || strings.EqualFold(scope, strings.TrimSpace(platform))
+	scope = NormalizeRoutePlatform(scope)
+	return strings.EqualFold(scope, strings.TrimSpace(platform))
 }
 
 // RankGroupCandidates applies health, disabled and max-rate gates, then deterministically sorts candidates.

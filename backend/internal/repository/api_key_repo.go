@@ -59,9 +59,9 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		}()).
 		SetRoutePlatform(func() string {
 			if key.RoutePlatform == "" {
-				return service.RoutePlatformAuto
+				return service.RoutePlatformOpenAI
 			}
-			return key.RoutePlatform
+			return service.NormalizeRoutePlatform(key.RoutePlatform)
 		}()).
 		SetNillableMaxRateMultiplier(key.MaxRateMultiplier).
 		SetNillableLastUsedAt(key.LastUsedAt).

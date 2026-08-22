@@ -351,7 +351,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		RateLimit1d:       apiKey.RateLimit1d,
 		RateLimit7d:       apiKey.RateLimit7d,
 		RouteMode:         apiKey.RouteMode,
-		RoutePlatform:     normalizeRoutePlatform(apiKey.RoutePlatform),
+		RoutePlatform:     NormalizeRoutePlatform(apiKey.RoutePlatform),
 		MaxRateMultiplier: apiKey.MaxRateMultiplier,
 		GroupPreferences:  apiKey.GroupPreferences,
 		User: APIKeyAuthUserSnapshot{
@@ -462,7 +462,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		RateLimit1d:       snapshot.RateLimit1d,
 		RateLimit7d:       snapshot.RateLimit7d,
 		RouteMode:         snapshot.RouteMode,
-		RoutePlatform:     normalizeRoutePlatform(snapshot.RoutePlatform),
+		RoutePlatform:     NormalizeRoutePlatform(snapshot.RoutePlatform),
 		MaxRateMultiplier: snapshot.MaxRateMultiplier,
 		GroupPreferences:  snapshot.GroupPreferences,
 		User: &User{

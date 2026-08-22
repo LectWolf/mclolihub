@@ -512,15 +512,10 @@ func getGroupPlatform(c *gin.Context) string {
 	// Anthropic compatibility handler, which converts /responses to /messages
 	// before the dynamic group has even been selected.
 	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
-		switch apiKey.RoutePlatform {
+		platform := service.NormalizeRoutePlatform(apiKey.RoutePlatform)
+		switch platform {
 		case service.RoutePlatformOpenAI, service.RoutePlatformAnthropic, service.RoutePlatformGrok:
-			return apiKey.RoutePlatform
-		}
-		// Legacy "auto" keys stay within the bound group's platform. The dynamic
-		// resolver applies the same fallback so dispatch and candidate filtering
-		// cannot disagree about the wire protocol.
-		if apiKey.Group != nil {
-			return apiKey.Group.Platform
+			return platform
 		}
 		return ""
 	}

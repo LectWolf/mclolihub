@@ -138,7 +138,7 @@
               <button v-if="row.route_mode !== 'fixed'" type="button" class="flex items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-gray-100 dark:hover:bg-dark-700" @click="openRoutingPreview(row)">
                 <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(routingPreviewFor(row)?.groups.find(g => g.group_id === routingPreviewFor(row)?.next_group_id)?.status || 'unknown')" />
                 <span class="text-sm text-gray-800 dark:text-gray-200">{{ t('keys.routeModes.' + row.route_mode) }}</span>
-                <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ t('keys.routePlatforms.' + (row.route_platform || 'auto')) }}</span>
+                <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ t('keys.routePlatforms.' + normalizeRoutePlatform(row.route_platform)) }}</span>
                 <span class="text-xs text-gray-500">{{ t('keys.nextGroup') }}: {{ nextGroupName(row) }}</span>
                 <Icon name="chevronDown" size="sm" class="text-gray-400" />
               </button>
@@ -1402,7 +1402,7 @@ const formData = ref({
   name: '',
   group_id: null as number | null,
 	route_mode: 'fixed' as 'fixed' | 'cheapest' | 'fastest' | 'custom',
-	route_platform: 'openai' as 'auto' | 'openai' | 'anthropic' | 'grok',
+	route_platform: 'openai' as 'openai' | 'anthropic' | 'grok',
 	max_rate_multiplier: null as number | null,
 	disabled_group_ids: [] as number[],
 	custom_group_ids: [] as number[],
@@ -1454,11 +1454,15 @@ const routeModeOptions = computed(() => [
 ])
 
 const routePlatformOptions = computed(() => [
-  { value: 'auto', label: t('keys.routePlatforms.auto') },
   { value: 'openai', label: t('keys.routePlatforms.openai') },
   { value: 'anthropic', label: t('keys.routePlatforms.anthropic') },
   { value: 'grok', label: t('keys.routePlatforms.grok') },
 ])
+
+const normalizeRoutePlatform = (platform?: string): 'openai' | 'anthropic' | 'grok' => {
+  if (platform === 'anthropic' || platform === 'grok') return platform
+  return 'openai'
+}
 
 const effectiveGroupRate = (group: Group) => userGroupRates.value[group.id] ?? group.rate_multiplier
 
@@ -1705,9 +1709,7 @@ const editKey = (key: ApiKey) => {
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
 		route_mode: key.route_mode || 'fixed',
-		route_platform: key.route_platform && key.route_platform !== 'auto'
-			? key.route_platform
-			: ((key.group?.platform === 'anthropic' || key.group?.platform === 'grok') ? key.group.platform : 'openai'),
+		route_platform: normalizeRoutePlatform(key.route_platform),
 		max_rate_multiplier: key.max_rate_multiplier,
 		disabled_group_ids: (key.group_preferences || []).filter(item => item.disabled).map(item => item.group_id),
 		custom_group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
@@ -1865,7 +1867,7 @@ const handleSubmit = async () => {
         name: formData.value.name,
         group_id: formData.value.group_id,
 		route_mode: formData.value.route_mode,
-		route_platform: formData.value.route_mode === 'fixed' ? 'auto' : formData.value.route_platform,
+		route_platform: formData.value.route_mode === 'fixed' ? 'openai' : formData.value.route_platform,
 		max_rate_multiplier: formData.value.max_rate_multiplier,
 		disabled_group_ids: formData.value.disabled_group_ids,
 		custom_group_ids: formData.value.custom_group_ids,
@@ -1895,7 +1897,7 @@ const handleSubmit = async () => {
 		rateLimitData,
 		{
 			route_mode: formData.value.route_mode,
-			route_platform: formData.value.route_mode === 'fixed' ? 'auto' : formData.value.route_platform,
+			route_platform: formData.value.route_mode === 'fixed' ? 'openai' : formData.value.route_platform,
 			max_rate_multiplier: formData.value.max_rate_multiplier,
 			disabled_group_ids: formData.value.disabled_group_ids,
 			custom_group_ids: formData.value.custom_group_ids

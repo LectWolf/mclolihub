@@ -36,7 +36,7 @@ type APIKey struct {
 	GroupID *int64 `json:"group_id,omitempty"`
 	// fixed/cheapest/fastest/custom
 	RouteMode string `json:"route_mode,omitempty"`
-	// dynamic routing platform scope: auto/openai/anthropic/grok
+	// dynamic routing platform scope: openai/anthropic/grok
 	RoutePlatform string `json:"route_platform,omitempty"`
 	// 允许调用的最大生效倍率，NULL 表示不限制
 	MaxRateMultiplier *float64 `json:"max_rate_multiplier,omitempty"`

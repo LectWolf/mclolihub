@@ -18,7 +18,7 @@ var (
 		{Name: "key", Type: field.TypeString, Unique: true, Size: 128},
 		{Name: "name", Type: field.TypeString, Size: 100},
 		{Name: "route_mode", Type: field.TypeString, Size: 20, Default: "fixed"},
-		{Name: "route_platform", Type: field.TypeString, Size: 20, Default: "auto"},
+		{Name: "route_platform", Type: field.TypeString, Size: 20, Default: "openai"},
 		{Name: "max_rate_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true},

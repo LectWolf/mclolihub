@@ -46,20 +46,25 @@ func TestResolveRoutingGroupsReadsNewCheapestGroupWithoutKeyUpdate(t *testing.T)
 	require.Equal(t, int64(1), groups[0].ID)
 }
 
-func TestResolveRoutingGroupsAutoStaysOnBoundGroupPlatform(t *testing.T) {
+func TestResolveRoutingGroupsLegacyAutoUsesOpenAI(t *testing.T) {
 	repo := &routingGroupRepo{groups: []Group{
 		{ID: 1, Platform: PlatformOpenAI, RateMultiplier: 0.1, Status: StatusActive},
 		{ID: 2, Platform: PlatformAnthropic, RateMultiplier: 0.2, Status: StatusActive},
 	}}
 	svc := &APIKeyService{groupRepo: repo}
 	key := &APIKey{
-		UserID:    42,
-		RouteMode: RouteModeCheapest,
-		User:      &User{ID: 42, Status: StatusActive},
-		Group:     &Group{ID: 2, Platform: PlatformAnthropic},
+		UserID:        42,
+		RouteMode:     RouteModeCheapest,
+		RoutePlatform: RoutePlatformAuto,
+		User:          &User{ID: 42, Status: StatusActive},
+		Group:         &Group{ID: 2, Platform: PlatformAnthropic},
 	}
 
 	groups, err := svc.ResolveRoutingGroups(context.Background(), key)
 	require.NoError(t, err)
-	require.Equal(t, []int64{2}, []int64{groups[0].ID})
+	require.Equal(t, []int64{1}, []int64{groups[0].ID})
+	require.Equal(t, RoutePlatformOpenAI, NormalizeRoutePlatform(RoutePlatformAuto))
+	require.Equal(t, RoutePlatformOpenAI, NormalizeRoutePlatform(""))
+	require.Error(t, ValidateRoutePlatform(RoutePlatformAuto))
+	require.NoError(t, ValidateRoutePlatform(""))
 }

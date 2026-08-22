@@ -341,13 +341,9 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 
 func effectiveRoutePlatform(key *APIKey) string {
 	if key == nil {
-		return RoutePlatformAuto
+		return RoutePlatformOpenAI
 	}
-	platform := normalizeRoutePlatform(key.RoutePlatform)
-	if platform == RoutePlatformAuto && key.Group != nil {
-		return strings.ToLower(strings.TrimSpace(key.Group.Platform))
-	}
-	return platform
+	return NormalizeRoutePlatform(key.RoutePlatform)
 }
 
 func buildAPIKeyPreferences(disabled, custom []int64) []APIKeyGroupPreference {
@@ -859,7 +855,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		GroupID:           req.GroupID,
 		Status:            StatusActive,
 		RouteMode:         req.RouteMode,
-		RoutePlatform:     normalizeRoutePlatform(req.RoutePlatform),
+		RoutePlatform:     NormalizeRoutePlatform(req.RoutePlatform),
 		MaxRateMultiplier: req.MaxRateMultiplier,
 		IPWhitelist:       req.IPWhitelist,
 		IPBlacklist:       req.IPBlacklist,
@@ -873,7 +869,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		apiKey.RouteMode = RouteModeFixed
 	}
 	if apiKey.RouteMode == RouteModeFixed {
-		apiKey.RoutePlatform = RoutePlatformAuto
+		apiKey.RoutePlatform = RoutePlatformOpenAI
 	}
 
 	// Set expiration time if specified
@@ -1184,11 +1180,11 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		fields.RouteMode = true
 	}
 	if req.RoutePlatform != nil {
-		apiKey.RoutePlatform = normalizeRoutePlatform(*req.RoutePlatform)
+		apiKey.RoutePlatform = NormalizeRoutePlatform(*req.RoutePlatform)
 		fields.RoutePlatform = true
 	}
-	if apiKey.RouteMode == RouteModeFixed && apiKey.RoutePlatform != RoutePlatformAuto {
-		apiKey.RoutePlatform = RoutePlatformAuto
+	if apiKey.RouteMode == RouteModeFixed && apiKey.RoutePlatform != RoutePlatformOpenAI {
+		apiKey.RoutePlatform = RoutePlatformOpenAI
 		fields.RoutePlatform = true
 	}
 	if req.MaxRateMultiplierSet || req.MaxRateMultiplier != nil {

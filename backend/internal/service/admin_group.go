@@ -43,10 +43,10 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID i
 		if err := ValidateRoutePlatform(*input.RoutePlatform); err != nil {
 			return nil, infraerrors.BadRequest("API_KEY_ROUTE_PLATFORM_INVALID", err.Error())
 		}
-		key.RoutePlatform = normalizeRoutePlatform(*input.RoutePlatform)
+		key.RoutePlatform = NormalizeRoutePlatform(*input.RoutePlatform)
 	}
 	if mode == RouteModeFixed {
-		key.RoutePlatform = RoutePlatformAuto
+		key.RoutePlatform = RoutePlatformOpenAI
 	}
 	if input.MaxRateMultiplier != nil {
 		if math.IsNaN(*input.MaxRateMultiplier) || math.IsInf(*input.MaxRateMultiplier, 0) || *input.MaxRateMultiplier < 0 {
