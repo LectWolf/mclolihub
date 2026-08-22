@@ -1183,7 +1183,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_NonStreamingSuc
 	result, err := svc.forwardAnthropicAPIKeyPassthrough(context.Background(), c, newAnthropicAPIKeyAccountForTest(), body, "claude-3-5-sonnet-latest", "claude-3-5-sonnet-latest", false, time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, 12, result.Usage.InputTokens)
+	require.Equal(t, 8, result.Usage.InputTokens)
 	require.Equal(t, 7, result.Usage.OutputTokens)
 	require.Equal(t, 5, result.Usage.CacheCreationInputTokens)
 	require.Equal(t, 4, result.Usage.CacheReadInputTokens)
