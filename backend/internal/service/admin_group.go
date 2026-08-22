@@ -55,8 +55,8 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID i
 		key.MaxRateMultiplier = input.MaxRateMultiplier
 	}
 	fields := APIKeyUpdateFields{
-		RouteMode: input.RouteMode != nil,
-		RoutePlatform: input.RoutePlatform != nil || mode == RouteModeFixed,
+		RouteMode:         input.RouteMode != nil,
+		RoutePlatform:     input.RoutePlatform != nil || mode == RouteModeFixed,
 		MaxRateMultiplier: input.MaxRateMultiplier != nil,
 	}
 	if !fields.IsEmpty() {
@@ -67,10 +67,18 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID i
 	if input.DisabledGroupIDs != nil || input.CustomGroupIDs != nil {
 		disabled, custom := []int64{}, []int64{}
 		for _, pref := range key.GroupPreferences {
-			if pref.Disabled { disabled = append(disabled, pref.GroupID) } else { custom = append(custom, pref.GroupID) }
+			if pref.Disabled {
+				disabled = append(disabled, pref.GroupID)
+			} else {
+				custom = append(custom, pref.GroupID)
+			}
 		}
-		if input.DisabledGroupIDs != nil { disabled = *input.DisabledGroupIDs }
-		if input.CustomGroupIDs != nil { custom = *input.CustomGroupIDs }
+		if input.DisabledGroupIDs != nil {
+			disabled = *input.DisabledGroupIDs
+		}
+		if input.CustomGroupIDs != nil {
+			custom = *input.CustomGroupIDs
+		}
 		key.GroupPreferences = buildAPIKeyPreferences(disabled, custom)
 		if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok {
 			if err := repo.SyncGroupPreferences(ctx, key.ID, key.GroupPreferences); err != nil {

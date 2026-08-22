@@ -198,9 +198,10 @@ func (r *groupHealthStore) SaveAccountHealth(ctx context.Context, state service.
 	if err != nil {
 		return err
 	}
-	if state.RuntimeStatus == service.AccountRuntimeActive {
+	switch state.RuntimeStatus {
+	case service.AccountRuntimeActive:
 		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=NULL, temp_unschedulable_reason=NULL, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL AND temp_unschedulable_reason LIKE 'group_health_probe:%'`, state.AccountID)
-	} else if state.RuntimeStatus == service.AccountRuntimeProbing || state.RuntimeStatus == service.AccountRuntimeUnavailable || state.RuntimeStatus == service.AccountRuntimeLegacyFailed {
+	case service.AccountRuntimeProbing, service.AccountRuntimeUnavailable, service.AccountRuntimeLegacyFailed:
 		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '2099-12-31 23:59:59+00', temp_unschedulable_reason=$2, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID, "group_health_probe: "+state.Reason)
 	}
 	if err == nil {
