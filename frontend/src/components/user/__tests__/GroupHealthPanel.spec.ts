@@ -115,4 +115,42 @@ describe('GroupHealthPanel', () => {
 
     wrapper.unmount()
   })
+
+  it('sorts available groups first and then by ascending multiplier by default', async () => {
+    const item = (group_id: number, name: string, status: string, rate_multiplier: number) => ({
+      group_id,
+      name,
+      status,
+      rate_multiplier,
+      platform: 'openai',
+      probe_enabled: status !== 'not_enabled',
+      trend: [],
+    })
+    listGroupHealth.mockResolvedValue({
+      window_hours: 12,
+      bucket_minutes: 10,
+      items: [
+        item(1, 'Unavailable Cheap', 'unavailable', 0.01),
+        item(2, 'Healthy Expensive', 'healthy', 0.5),
+        item(3, 'Healthy Cheap', 'healthy', 0.1),
+        item(4, 'Probe Disabled', 'not_enabled', 0.05),
+        item(5, 'No Balance', 'balance_insufficient', 0.001),
+      ],
+    })
+
+    const wrapper = mount(GroupHealthPanel, {
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('tbody tr strong').map(node => node.text())).toEqual([
+      'Probe Disabled',
+      'Healthy Cheap',
+      'Healthy Expensive',
+      'No Balance',
+      'Unavailable Cheap',
+    ])
+
+    wrapper.unmount()
+  })
 })

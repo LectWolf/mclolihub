@@ -20,7 +20,7 @@
           <tr>
             <th>{{ t('groupHealth.group') }}</th>
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('rate_multiplier')">{{ t('groupHealth.multiplier') }} <span v-if="sortKey === 'rate_multiplier'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
-            <th>{{ t('groupHealth.status') }}</th>
+            <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('status')">{{ t('groupHealth.status') }} <span v-if="sortKey === 'status'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('real_ttft_p50_ms')">{{ t('groupHealth.realTtft') }} <span v-if="sortKey === 'real_ttft_p50_ms'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('probe_ttft_ms')">{{ t('groupHealth.probeTtft') }} <span v-if="sortKey === 'probe_ttft_ms'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('real_availability_6h')">{{ t('groupHealth.availability') }} <span v-if="sortKey === 'real_availability_6h'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
@@ -86,7 +86,9 @@ const { t, locale } = useI18n()
 const appStore = useAppStore()
 const items = ref<GroupHealthItem[]>([])
 const loading = ref(false)
-const sortKey = ref<'rate_multiplier' | 'real_ttft_p50_ms' | 'probe_ttft_ms' | 'real_availability_6h'>('rate_multiplier')
+type SortKey = 'status' | 'rate_multiplier' | 'real_ttft_p50_ms' | 'probe_ttft_ms' | 'real_availability_6h'
+
+const sortKey = ref<SortKey>('status')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 let controller: AbortController | null = null
 let timer: number | null = null
@@ -113,7 +115,15 @@ function toggleSort(key: typeof sortKey.value) {
   if (sortKey.value === key) sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
   else { sortKey.value = key; sortOrder.value = 'asc' }
 }
+function statusSortRank(status: GroupHealthStatus) {
+  return status === 'healthy' || status === 'not_enabled' ? 0 : 1
+}
 const sortedItems = computed(() => [...items.value].sort((a, b) => {
+  if (sortKey.value === 'status') {
+    const statusCmp = statusSortRank(a.status) - statusSortRank(b.status)
+    const orderedStatusCmp = sortOrder.value === 'asc' ? statusCmp : -statusCmp
+    return orderedStatusCmp || a.rate_multiplier - b.rate_multiplier || a.name.localeCompare(b.name)
+  }
   const av = a[sortKey.value] as number; const bv = b[sortKey.value] as number
   const cmp = (av || 0) - (bv || 0)
   return (sortOrder.value === 'asc' ? cmp : -cmp) || a.name.localeCompare(b.name)
