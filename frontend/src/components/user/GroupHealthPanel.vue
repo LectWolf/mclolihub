@@ -15,7 +15,7 @@
     </div>
     <div v-else-if="items.length === 0" class="px-5 py-8 text-center text-sm text-gray-400">{{ t('groupHealth.empty') }}</div>
     <div v-else class="overflow-x-auto">
-      <table class="table min-w-[980px]">
+      <table class="table min-w-[1080px]">
         <thead>
           <tr>
             <th>{{ t('groupHealth.group') }}</th>
@@ -24,6 +24,7 @@
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('real_ttft_p50_ms')">{{ t('groupHealth.realTtft') }} <span v-if="sortKey === 'real_ttft_p50_ms'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('probe_ttft_ms')">{{ t('groupHealth.probeTtft') }} <span v-if="sortKey === 'probe_ttft_ms'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
             <th><button type="button" class="inline-flex items-center gap-1" @click="toggleSort('real_availability_6h')">{{ t('groupHealth.availability') }} <span v-if="sortKey === 'real_availability_6h'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></button></th>
+            <th>{{ t('groupHealth.cacheRate') }}</th>
             <th class="w-[220px]">{{ t('groupHealth.trend') }}</th>
           </tr>
         </thead>
@@ -51,6 +52,16 @@
             <td>
               <span class="block font-medium tabular-nums">{{ formatPercent(item.real_availability_6h) }}</span>
               <span class="block text-[11px] text-gray-400">{{ t('groupHealth.probeAvailability', { value: formatPercent(item.probe_availability_6h) }) }}</span>
+            </td>
+            <td>
+              <div class="relative flex h-12 w-12 items-center justify-center rounded-full" :style="cacheOuterRingStyle(item)" :aria-label="cacheRingLabel(item)" :title="cacheRingLabel(item)">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full" :style="cacheInnerRingStyle(item)">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[10px] font-semibold tabular-nums text-gray-700 dark:bg-dark-800 dark:text-gray-200">
+                    {{ formatPercent(item.cache_rate_6h * 100) }}
+                  </div>
+                </div>
+              </div>
+              <div class="mt-1 text-[10px] text-gray-400">{{ t('groupHealth.cacheRateOverallShort', { value: formatPercent(item.cache_rate_overall * 100) }) }}</div>
             </td>
             <td>
               <div class="grid h-9 grid-flow-col grid-rows-1 gap-px" :style="{ gridTemplateColumns: `repeat(${trend(item).length}, minmax(3px, 1fr))` }" :aria-label="t('groupHealth.trend')">
@@ -134,6 +145,20 @@ function formatMs(value: number) {
 }
 function formatPercent(value: number) {
   return Number.isFinite(value) && value >= 0 ? `${value.toFixed(value >= 99 ? 2 : 1)}%` : '-'
+}
+function cachePercent(value: number) {
+  return Math.max(0, Math.min(100, Number(value || 0) * 100))
+}
+function cacheOuterRingStyle(item: GroupHealthItem) {
+  const value = cachePercent(item.cache_rate_overall)
+  return { background: `conic-gradient(#64748b 0 ${value}%, #e2e8f0 ${value}% 100%)` }
+}
+function cacheInnerRingStyle(item: GroupHealthItem) {
+  const value = cachePercent(item.cache_rate_6h)
+  return { background: `conic-gradient(#8b5cf6 0 ${value}%, #cbd5e1 ${value}% 100%)` }
+}
+function cacheRingLabel(item: GroupHealthItem) {
+  return `${t('groupHealth.cacheRateOverall', { value: formatPercent(cachePercent(item.cache_rate_overall)) })} · ${t('groupHealth.cacheRate6h', { value: formatPercent(cachePercent(item.cache_rate_6h)) })}`
 }
 function formatMultiplier(value: number) {
   return `${formatRateMultiplier(Number(value || 0))}x`

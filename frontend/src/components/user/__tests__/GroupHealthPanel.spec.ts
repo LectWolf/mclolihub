@@ -52,6 +52,8 @@ describe('GroupHealthPanel', () => {
         real_ttft_samples: 4,
         real_total_avg_ms: 9000,
         real_availability_6h: 0,
+        cache_rate_overall: 0.62,
+        cache_rate_6h: 0.75,
         trend: [
           {
             started_at: '2026-08-20T07:35:00Z',
@@ -101,6 +103,9 @@ describe('GroupHealthPanel', () => {
     expect(wrapper.text()).toContain('groupHealth.statuses.balance_insufficient')
     expect(wrapper.text()).toContain('5944 ms')
     expect(wrapper.text()).toContain('0.0%')
+    expect(wrapper.text()).toContain('groupHealth.cacheRateOverallShort:{"value":"62.0%"}')
+    expect(wrapper.find('[aria-label]').attributes('aria-label')).toContain('62.0%')
+    expect(wrapper.find('[aria-label]').attributes('aria-label')).toContain('75.0%')
     expect(wrapper.find('.badge').classes()).toContain('badge-info')
     expect(wrapper.findAll('td:last-child > div > span')).toHaveLength(72)
     const healthy = wrapper.get('[data-probe-status="healthy"]')

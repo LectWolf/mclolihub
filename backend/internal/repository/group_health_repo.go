@@ -356,6 +356,41 @@ func (r *groupHealthStore) LoadMetrics(ctx context.Context, groupIDs []int64) (m
 	for _, state := range states {
 		out[state.GroupID] = groupHealthEntityToSnapshot(state)
 	}
+	// Cache hit rate is derived from usage logs rather than the probe snapshot:
+	// the overall value is historical, while the second ring is a rolling
+	// six-hour view. Keep the same denominator as channel-monitor-v2.
+	rows, err := r.db.QueryContext(ctx, `
+		WITH grouped_usage AS (
+			SELECT COALESCE(ul.group_id, ag.group_id) AS group_id,
+			       ul.created_at, ul.input_tokens, ul.cache_creation_tokens, ul.cache_read_tokens
+			FROM usage_logs ul
+			LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
+			WHERE COALESCE(ul.group_id, ag.group_id) = ANY($1)
+		)
+		SELECT group_id,
+		       COALESCE(SUM(cache_read_tokens)::float8 / NULLIF(SUM(input_tokens + cache_creation_tokens + cache_read_tokens), 0), 0),
+		       COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours')::float8 /
+		                NULLIF(SUM(input_tokens + cache_creation_tokens + cache_read_tokens) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours'), 0), 0)
+		FROM grouped_usage
+		GROUP BY group_id`, pq.Array(groupIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID int64
+		var overall, recent float64
+		if err := rows.Scan(&groupID, &overall, &recent); err != nil {
+			return nil, err
+		}
+		item := out[groupID]
+		item.CacheRateOverall = overall
+		item.CacheRate6h = recent
+		out[groupID] = item
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 

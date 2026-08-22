@@ -36,6 +36,8 @@ export interface GroupHealthItem {
   real_ttft_samples: number
   real_total_avg_ms: number
   real_availability_6h: number
+  cache_rate_overall: number
+  cache_rate_6h: number
   trend: GroupHealthTrendBucket[]
 }
 

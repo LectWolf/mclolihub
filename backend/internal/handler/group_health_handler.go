@@ -44,6 +44,8 @@ type groupHealthResponse struct {
 	RealTTFTSamples      int                              `json:"real_ttft_samples"`
 	RealTotalAvgMS       int                              `json:"real_total_avg_ms"`
 	RealAvailability6h   float64                          `json:"real_availability_6h"`
+	CacheRateOverall     float64                          `json:"cache_rate_overall"`
+	CacheRate6h          float64                          `json:"cache_rate_6h"`
 	Trend                []service.GroupHealthTrendBucket `json:"trend"`
 }
 
@@ -160,6 +162,7 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 			ProbeSamples: snapshot.ProbeSamples, ProbeAvailability6h: snapshot.ProbeAvailability6h,
 			RealTTFTP50MS: snapshot.RealTTFTP50MS, RealTTFTAvgMS: snapshot.RealTTFTAvgMS, RealTTFTP95MS: snapshot.RealTTFTP95MS,
 			RealTTFTSamples: snapshot.RealTTFTSamples, RealTotalAvgMS: snapshot.RealTotalAvgMS, RealAvailability6h: snapshot.RealAvailability6h,
+			CacheRateOverall: snapshot.CacheRateOverall, CacheRate6h: snapshot.CacheRate6h,
 			Trend: trends[group.ID],
 		})
 	}

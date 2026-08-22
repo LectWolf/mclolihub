@@ -29,6 +29,8 @@ type GroupHealthSnapshot struct {
 	RealTTFTSamples     int
 	RealAvailability6h  float64
 	RealTotalAvgMS      int
+	CacheRateOverall    float64
+	CacheRate6h         float64
 }
 
 type GroupHealthStore interface {
