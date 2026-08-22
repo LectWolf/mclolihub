@@ -182,7 +182,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	groupHealthRepository := repository.NewGroupHealthStore(client, db)
 	accountTestService := service.ProvideAccountTestService(accountRepository, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, configConfig, tlsFingerprintProfileService, openAIGatewayService, settingService)
 	leaderLockCache := repository.NewLeaderLockCache(redisClient)
-	groupHealthService := service.ProvideGroupHealthService(groupHealthRepository, accountRepository, accountTestService, leaderLockCache, db)
+	groupHealthService := service.ProvideGroupHealthService(groupHealthRepository, accountRepository, accountTestService, leaderLockCache, db, rateLimitService)
 	groupService := service.NewGroupService(groupRepository, apiKeyAuthCacheInvalidator)
 	groupHealthHandler := handler.NewGroupHealthHandler(groupHealthService, apiKeyService, groupService)
 	dashboardAggregationRepository := repository.NewDashboardAggregationRepository(db)

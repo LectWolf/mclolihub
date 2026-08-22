@@ -616,7 +616,11 @@ func ProvideGroupHealthService(
 	accountTestSvc *AccountTestService,
 	lockCache LeaderLockCache,
 	db *sql.DB,
+	rateLimitSvc *RateLimitService,
 ) *GroupHealthService {
+	if rateLimitSvc != nil {
+		rateLimitSvc.SetGroupHealthRepository(repo)
+	}
 	svc := NewGroupHealthService(repo, accountRepo, accountTestSvc, lockCache, db)
 	svc.Start()
 	return svc

@@ -27,6 +27,9 @@ type rateLimitClearRepoStub struct {
 	clearAntigravityErr       error
 	clearModelRateLimitErr    error
 	clearTempUnschedulableErr error
+	healthStates              map[int64]AccountHealthState
+	healthSaveCalls           int
+	healthRefreshGroupIDs     []int64
 }
 
 func (r *rateLimitClearRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
@@ -60,6 +63,30 @@ func (r *rateLimitClearRepoStub) ClearModelRateLimits(ctx context.Context, id in
 func (r *rateLimitClearRepoStub) ClearTempUnschedulable(ctx context.Context, id int64) error {
 	r.clearTempUnschedCalls++
 	return r.clearTempUnschedulableErr
+}
+
+func (r *rateLimitClearRepoStub) LoadAccountHealth(_ context.Context, ids []int64) (map[int64]AccountHealthState, error) {
+	out := make(map[int64]AccountHealthState)
+	for _, id := range ids {
+		if state, ok := r.healthStates[id]; ok {
+			out[id] = state
+		}
+	}
+	return out, nil
+}
+
+func (r *rateLimitClearRepoStub) SaveAccountHealth(_ context.Context, state AccountHealthState) error {
+	if r.healthStates == nil {
+		r.healthStates = make(map[int64]AccountHealthState)
+	}
+	r.healthStates[state.AccountID] = state
+	r.healthSaveCalls++
+	return nil
+}
+
+func (r *rateLimitClearRepoStub) RefreshDerivedGroupHealth(_ context.Context, groupID int64, _ time.Time) error {
+	r.healthRefreshGroupIDs = append(r.healthRefreshGroupIDs, groupID)
+	return nil
 }
 
 type tempUnschedCacheRecorder struct {
@@ -306,4 +333,48 @@ func TestRateLimitService_RecoverAccountState_InvalidatesOAuthTokenOnErrorRecove
 	require.Equal(t, 1, repo.clearErrorCalls)
 	require.Len(t, invalidator.accounts, 1)
 	require.Equal(t, int64(21), invalidator.accounts[0].ID)
+}
+
+func TestRateLimitService_RecoverAccountState_ClearsGroupHealthUnavailable(t *testing.T) {
+	accountID := int64(31)
+	groupID := int64(9)
+	repo := &rateLimitClearRepoStub{
+		getByIDAccount: &Account{ID: accountID, Status: StatusActive, Schedulable: true},
+		healthStates: map[int64]AccountHealthState{
+			accountID: {
+				AccountID: accountID, ProbeGroupID: &groupID,
+				RuntimeStatus: AccountRuntimeUnavailable, RetryStep: 4,
+				Reason: "503", NextProbeAt: func() *time.Time { t := time.Now().Add(time.Hour); return &t }(),
+			},
+		},
+	}
+	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc.SetGroupHealthRepository(repo)
+
+	result, err := svc.RecoverAccountState(context.Background(), accountID, AccountRecoveryOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, AccountRuntimeActive, repo.healthStates[accountID].RuntimeStatus)
+	require.Zero(t, repo.healthStates[accountID].RetryStep)
+	require.Nil(t, repo.healthStates[accountID].NextProbeAt)
+	require.Empty(t, repo.healthStates[accountID].Reason)
+	require.Equal(t, 1, repo.healthSaveCalls)
+	require.Equal(t, []int64{groupID}, repo.healthRefreshGroupIDs)
+}
+
+func TestRateLimitService_RecoverAccountState_DoesNotClearGroupHealthBalance(t *testing.T) {
+	accountID := int64(32)
+	repo := &rateLimitClearRepoStub{
+		getByIDAccount: &Account{ID: accountID, Status: StatusBalanceInsufficient},
+		healthStates: map[int64]AccountHealthState{
+			accountID: {AccountID: accountID, RuntimeStatus: AccountRuntimeBalance},
+		},
+	}
+	svc := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	svc.SetGroupHealthRepository(repo)
+
+	_, err := svc.RecoverAccountState(context.Background(), accountID, AccountRecoveryOptions{})
+	require.NoError(t, err)
+	require.Equal(t, 0, repo.healthSaveCalls)
+	require.Equal(t, AccountRuntimeBalance, repo.healthStates[accountID].RuntimeStatus)
 }

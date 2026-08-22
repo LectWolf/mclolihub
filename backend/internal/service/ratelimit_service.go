@@ -30,12 +30,22 @@ type RateLimitService struct {
 	settingService        *SettingService
 	tokenCacheInvalidator TokenCacheInvalidator
 	runtimeBlocker        AccountRuntimeBlocker
+	groupHealthRepo       AccountHealthRecoveryRepository
 	usageCacheMu          sync.RWMutex
 	usageCache            map[int64]*geminiUsageCacheEntry
 
 	// OpenAI Team 联动熔断的进程内去重：teamID → 去重窗口截止时间
 	openaiTeamLinkedMu     sync.Mutex
 	openaiTeamLinkedRecent map[string]time.Time
+}
+
+// AccountHealthRecoveryRepository exposes the health-state operations needed
+// by the administrator's unified account recovery action.  Keep this narrow
+// so RateLimitService does not depend on the full group-health runner port.
+type AccountHealthRecoveryRepository interface {
+	LoadAccountHealth(context.Context, []int64) (map[int64]AccountHealthState, error)
+	SaveAccountHealth(context.Context, AccountHealthState) error
+	RefreshDerivedGroupHealth(context.Context, int64, time.Time) error
 }
 
 type AccountRuntimeBlocker interface {
@@ -118,6 +128,14 @@ func (s *RateLimitService) SetTokenCacheInvalidator(invalidator TokenCacheInvali
 
 func (s *RateLimitService) SetAccountRuntimeBlocker(blocker AccountRuntimeBlocker) {
 	s.runtimeBlocker = blocker
+}
+
+// SetGroupHealthRepository wires the health-state store used by the unified
+// administrator recovery action. It is optional for narrow/unit deployments.
+func (s *RateLimitService) SetGroupHealthRepository(repo AccountHealthRecoveryRepository) {
+	if s != nil {
+		s.groupHealthRepo = repo
+	}
 }
 
 func (s *RateLimitService) IsOpenAIAdvancedSchedulerStickyWeightedEnabled(ctx context.Context) bool {
@@ -1939,6 +1957,33 @@ func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID in
 		s.ResetOpenAI403Counter(ctx, accountID)
 		if result.ClearedError && !result.ClearedRateLimit {
 			s.notifyAccountSchedulingBlockCleared(accountID)
+		}
+	}
+
+	// Group-health quarantine is persisted separately from accounts.status and
+	// temp_unschedulable fields. The unified recovery action must clear it too;
+	// otherwise the UI immediately renders "waiting for next active probe" again.
+	if s.groupHealthRepo != nil {
+		states, loadErr := s.groupHealthRepo.LoadAccountHealth(ctx, []int64{accountID})
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if state, ok := states[accountID]; ok && state.RuntimeStatus != AccountRuntimeActive && state.RuntimeStatus != AccountRuntimeBalance {
+			now := time.Now()
+			groupID := state.ProbeGroupID
+			state.RuntimeStatus = AccountRuntimeActive
+			state.Reason = ""
+			state.RetryStep = 0
+			state.NextProbeAt = nil
+			state.LastSuccessAt = &now
+			if err := s.groupHealthRepo.SaveAccountHealth(ctx, state); err != nil {
+				return nil, err
+			}
+			if groupID != nil && *groupID > 0 {
+				if err := s.groupHealthRepo.RefreshDerivedGroupHealth(ctx, *groupID, now); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 
