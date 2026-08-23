@@ -437,6 +437,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			ProbeEnabled:                    apiKey.Group.ProbeEnabled,
 			ProbeModel:                      apiKey.Group.ProbeModel,
 			ProbeIntervalSeconds:            apiKey.Group.ProbeIntervalSeconds,
+			RetryWithinGroupOnFailover:      apiKey.Group.RetryWithinGroupOnFailover,
 		}
 	}
 	return snapshot
@@ -541,6 +542,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			ProbeEnabled:                    snapshot.Group.ProbeEnabled,
 			ProbeModel:                      snapshot.Group.ProbeModel,
 			ProbeIntervalSeconds:            snapshot.Group.ProbeIntervalSeconds,
+			RetryWithinGroupOnFailover:      snapshot.Group.RetryWithinGroupOnFailover,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)

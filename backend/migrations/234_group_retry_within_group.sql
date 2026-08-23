@@ -1,0 +1,2 @@
+ALTER TABLE groups
+    ADD COLUMN IF NOT EXISTS retry_within_group_on_failover BOOLEAN NOT NULL DEFAULT FALSE;

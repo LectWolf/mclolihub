@@ -146,6 +146,8 @@ const (
 	FieldProbeModel = "probe_model"
 	// FieldProbeIntervalSeconds holds the string denoting the probe_interval_seconds field in the database.
 	FieldProbeIntervalSeconds = "probe_interval_seconds"
+	// FieldRetryWithinGroupOnFailover holds the string denoting the retry_within_group_on_failover field in the database.
+	FieldRetryWithinGroupOnFailover = "retry_within_group_on_failover"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -313,6 +315,7 @@ var Columns = []string{
 	FieldProbeEnabled,
 	FieldProbeModel,
 	FieldProbeIntervalSeconds,
+	FieldRetryWithinGroupOnFailover,
 }
 
 var (
@@ -456,6 +459,8 @@ var (
 	ProbeModelValidator func(string) error
 	// DefaultProbeIntervalSeconds holds the default value on creation for the "probe_interval_seconds" field.
 	DefaultProbeIntervalSeconds int
+	// DefaultRetryWithinGroupOnFailover holds the default value on creation for the "retry_within_group_on_failover" field.
+	DefaultRetryWithinGroupOnFailover bool
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -754,6 +759,11 @@ func ByProbeModel(opts ...sql.OrderTermOption) OrderOption {
 // ByProbeIntervalSeconds orders the results by the probe_interval_seconds field.
 func ByProbeIntervalSeconds(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProbeIntervalSeconds, opts...).ToFunc()
+}
+
+// ByRetryWithinGroupOnFailover orders the results by the retry_within_group_on_failover field.
+func ByRetryWithinGroupOnFailover(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetryWithinGroupOnFailover, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

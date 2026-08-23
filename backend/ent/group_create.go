@@ -895,6 +895,20 @@ func (_c *GroupCreate) SetNillableProbeIntervalSeconds(v *int) *GroupCreate {
 	return _c
 }
 
+// SetRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field.
+func (_c *GroupCreate) SetRetryWithinGroupOnFailover(v bool) *GroupCreate {
+	_c.mutation.SetRetryWithinGroupOnFailover(v)
+	return _c
+}
+
+// SetNillableRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableRetryWithinGroupOnFailover(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetRetryWithinGroupOnFailover(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -1241,6 +1255,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultProbeIntervalSeconds
 		_c.mutation.SetProbeIntervalSeconds(v)
 	}
+	if _, ok := _c.mutation.RetryWithinGroupOnFailover(); !ok {
+		v := group.DefaultRetryWithinGroupOnFailover
+		_c.mutation.SetRetryWithinGroupOnFailover(v)
+	}
 	return nil
 }
 
@@ -1444,6 +1462,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ProbeIntervalSeconds(); !ok {
 		return &ValidationError{Name: "probe_interval_seconds", err: errors.New(`ent: missing required field "Group.probe_interval_seconds"`)}
+	}
+	if _, ok := _c.mutation.RetryWithinGroupOnFailover(); !ok {
+		return &ValidationError{Name: "retry_within_group_on_failover", err: errors.New(`ent: missing required field "Group.retry_within_group_on_failover"`)}
 	}
 	return nil
 }
@@ -1731,6 +1752,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ProbeIntervalSeconds(); ok {
 		_spec.SetField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
 		_node.ProbeIntervalSeconds = value
+	}
+	if value, ok := _c.mutation.RetryWithinGroupOnFailover(); ok {
+		_spec.SetField(group.FieldRetryWithinGroupOnFailover, field.TypeBool, value)
+		_node.RetryWithinGroupOnFailover = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -2983,6 +3008,18 @@ func (u *GroupUpsert) UpdateProbeIntervalSeconds() *GroupUpsert {
 // AddProbeIntervalSeconds adds v to the "probe_interval_seconds" field.
 func (u *GroupUpsert) AddProbeIntervalSeconds(v int) *GroupUpsert {
 	u.Add(group.FieldProbeIntervalSeconds, v)
+	return u
+}
+
+// SetRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field.
+func (u *GroupUpsert) SetRetryWithinGroupOnFailover(v bool) *GroupUpsert {
+	u.Set(group.FieldRetryWithinGroupOnFailover, v)
+	return u
+}
+
+// UpdateRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateRetryWithinGroupOnFailover() *GroupUpsert {
+	u.SetExcluded(group.FieldRetryWithinGroupOnFailover)
 	return u
 }
 
@@ -4256,6 +4293,20 @@ func (u *GroupUpsertOne) AddProbeIntervalSeconds(v int) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateProbeIntervalSeconds() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProbeIntervalSeconds()
+	})
+}
+
+// SetRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field.
+func (u *GroupUpsertOne) SetRetryWithinGroupOnFailover(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRetryWithinGroupOnFailover(v)
+	})
+}
+
+// UpdateRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateRetryWithinGroupOnFailover() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRetryWithinGroupOnFailover()
 	})
 }
 
@@ -5695,6 +5746,20 @@ func (u *GroupUpsertBulk) AddProbeIntervalSeconds(v int) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateProbeIntervalSeconds() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProbeIntervalSeconds()
+	})
+}
+
+// SetRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field.
+func (u *GroupUpsertBulk) SetRetryWithinGroupOnFailover(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetRetryWithinGroupOnFailover(v)
+	})
+}
+
+// UpdateRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateRetryWithinGroupOnFailover() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateRetryWithinGroupOnFailover()
 	})
 }
 

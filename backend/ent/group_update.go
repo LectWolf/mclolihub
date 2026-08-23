@@ -1214,6 +1214,20 @@ func (_u *GroupUpdate) AddProbeIntervalSeconds(v int) *GroupUpdate {
 	return _u
 }
 
+// SetRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field.
+func (_u *GroupUpdate) SetRetryWithinGroupOnFailover(v bool) *GroupUpdate {
+	_u.mutation.SetRetryWithinGroupOnFailover(v)
+	return _u
+}
+
+// SetNillableRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableRetryWithinGroupOnFailover(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetRetryWithinGroupOnFailover(*v)
+	}
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -2020,6 +2034,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedProbeIntervalSeconds(); ok {
 		_spec.AddField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RetryWithinGroupOnFailover(); ok {
+		_spec.SetField(group.FieldRetryWithinGroupOnFailover, field.TypeBool, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -3644,6 +3661,20 @@ func (_u *GroupUpdateOne) AddProbeIntervalSeconds(v int) *GroupUpdateOne {
 	return _u
 }
 
+// SetRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field.
+func (_u *GroupUpdateOne) SetRetryWithinGroupOnFailover(v bool) *GroupUpdateOne {
+	_u.mutation.SetRetryWithinGroupOnFailover(v)
+	return _u
+}
+
+// SetNillableRetryWithinGroupOnFailover sets the "retry_within_group_on_failover" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableRetryWithinGroupOnFailover(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetRetryWithinGroupOnFailover(*v)
+	}
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -4480,6 +4511,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedProbeIntervalSeconds(); ok {
 		_spec.AddField(group.FieldProbeIntervalSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.RetryWithinGroupOnFailover(); ok {
+		_spec.SetField(group.FieldRetryWithinGroupOnFailover, field.TypeBool, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

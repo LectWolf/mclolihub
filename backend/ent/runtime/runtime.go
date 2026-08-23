@@ -1257,6 +1257,10 @@ func init() {
 	groupDescProbeIntervalSeconds := groupFields[61].Descriptor()
 	// group.DefaultProbeIntervalSeconds holds the default value on creation for the probe_interval_seconds field.
 	group.DefaultProbeIntervalSeconds = groupDescProbeIntervalSeconds.Default.(int)
+	// groupDescRetryWithinGroupOnFailover is the schema descriptor for retry_within_group_on_failover field.
+	groupDescRetryWithinGroupOnFailover := groupFields[62].Descriptor()
+	// group.DefaultRetryWithinGroupOnFailover holds the default value on creation for the retry_within_group_on_failover field.
+	group.DefaultRetryWithinGroupOnFailover = groupDescRetryWithinGroupOnFailover.Default.(bool)
 	grouphealtheventMixin := schema.GroupHealthEvent{}.Mixin()
 	grouphealtheventMixinFields0 := grouphealtheventMixin[0].Fields()
 	_ = grouphealtheventMixinFields0

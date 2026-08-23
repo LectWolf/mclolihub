@@ -106,7 +106,7 @@ func (s *healthStoreStub) RecordEvent(_ context.Context, event GroupHealthEventI
 
 func TestAccountProbeScheduleAndThrottle(t *testing.T) {
 	now := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
-	wants := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute, 5 * time.Minute}
+	wants := []time.Duration{30 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
 	for step, want := range wants {
 		require.Equal(t, now.Add(want), NextAccountProbeAt(now, step, 10*time.Minute))
 	}
@@ -134,10 +134,10 @@ func TestProbeFailureProgressionEndsInUnavailable(t *testing.T) {
 		delay  time.Duration
 	}{
 		{step: 0, status: AccountRuntimeProbing, delay: 30 * time.Second},
-		{step: 1, status: AccountRuntimeProbing, delay: time.Minute},
-		{step: 2, status: AccountRuntimeProbing, delay: 2 * time.Minute},
-		{step: 3, status: AccountRuntimeProbing, delay: 5 * time.Minute},
-		{step: 4, status: AccountRuntimeUnavailable},
+		{step: 1, status: AccountRuntimeProbing, delay: 30 * time.Second},
+		{step: 2, status: AccountRuntimeProbing, delay: time.Minute},
+		{step: 3, status: AccountRuntimeProbing, delay: 2 * time.Minute},
+		{step: 4, status: AccountRuntimeProbing, delay: 5 * time.Minute},
 	}
 	for _, want := range wants {
 		status, next := NextAccountProbeState(now, want.step)

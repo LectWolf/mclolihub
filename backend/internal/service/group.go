@@ -120,12 +120,13 @@ type Group struct {
 	// 调度准入条件：账号倍率 U 满足 U <= D*(1-margin-buffer)，
 	// D 为请求用户当刻有效下游倍率（用户覆盖 ?? 分组默认，再乘高峰因子）。
 	// 只过滤候选账号，不改变既有排序/评分/粘性/熔断。
-	ProfitControlEnabled bool
-	ProfitMinMargin      float64 // 最低毛利率，小数存储（0.30=30%）
-	ProfitSafetyBuffer   float64 // 安全缓冲，小数，与 margin 相加后从 D 中扣除
-	ProbeEnabled         bool
-	ProbeModel           string
-	ProbeIntervalSeconds int
+	ProfitControlEnabled       bool
+	ProfitMinMargin            float64 // 最低毛利率，小数存储（0.30=30%）
+	ProfitSafetyBuffer         float64 // 安全缓冲，小数，与 margin 相加后从 D 中扣除
+	ProbeEnabled               bool
+	ProbeModel                 string
+	ProbeIntervalSeconds       int
+	RetryWithinGroupOnFailover bool
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

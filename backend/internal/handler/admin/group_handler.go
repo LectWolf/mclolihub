@@ -126,6 +126,7 @@ type CreateGroupRequest struct {
 	ProbeEnabled                    bool                          `json:"probe_enabled"`
 	ProbeModel                      string                        `json:"probe_model"`
 	ProbeIntervalSeconds            int                           `json:"probe_interval_seconds"`
+	RetryWithinGroupOnFailover      bool                          `json:"retry_within_group_on_failover"`
 	ImagePrice1K                    *float64                      `json:"image_price_1k"`
 	ImagePrice2K                    *float64                      `json:"image_price_2k"`
 	ImagePrice4K                    *float64                      `json:"image_price_4k"`
@@ -198,6 +199,7 @@ type UpdateGroupRequest struct {
 	ProbeEnabled                    *bool                         `json:"probe_enabled"`
 	ProbeModel                      *string                       `json:"probe_model"`
 	ProbeIntervalSeconds            *int                          `json:"probe_interval_seconds"`
+	RetryWithinGroupOnFailover      *bool                         `json:"retry_within_group_on_failover"`
 	ImagePrice1K                    *float64                      `json:"image_price_1k"`
 	ImagePrice2K                    *float64                      `json:"image_price_2k"`
 	ImagePrice4K                    *float64                      `json:"image_price_4k"`
@@ -538,6 +540,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		ProbeEnabled:                    req.ProbeEnabled,
 		ProbeModel:                      req.ProbeModel,
 		ProbeIntervalSeconds:            req.ProbeIntervalSeconds,
+		RetryWithinGroupOnFailover:      req.RetryWithinGroupOnFailover,
 		ImagePrice1K:                    req.ImagePrice1K,
 		ImagePrice2K:                    req.ImagePrice2K,
 		ImagePrice4K:                    req.ImagePrice4K,
@@ -670,6 +673,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		ProbeEnabled:                    req.ProbeEnabled,
 		ProbeModel:                      req.ProbeModel,
 		ProbeIntervalSeconds:            req.ProbeIntervalSeconds,
+		RetryWithinGroupOnFailover:      req.RetryWithinGroupOnFailover,
 		ImagePrice1K:                    req.ImagePrice1K,
 		ImagePrice2K:                    req.ImagePrice2K,
 		ImagePrice4K:                    req.ImagePrice4K,

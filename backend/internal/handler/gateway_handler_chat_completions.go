@@ -190,6 +190,9 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 		selection, err := h.gatewayService.SelectAccountWithLoadAwareness(c.Request.Context(), apiKey.GroupID, selectionSessionHash, reqModel, fs.FailedAccountIDs, "", int64(0))
 		if err != nil {
+			if len(dynamicGroups) > 0 && apiKey.Group != nil && apiKey.Group.RetryWithinGroupOnFailover && len(fs.FailedAccountIDs) > 0 {
+				fs.FailedAccountIDs = make(map[int64]struct{})
+			}
 			if len(fs.FailedAccountIDs) == 0 {
 				if len(dynamicGroups) > 0 {
 					dynamicNoAccounts.Observe(classifyNoAccountError(c.Request.Context(), h.gatewayService, apiKey, reqModel, reqModel, groupPlatform))
@@ -342,6 +345,15 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleCCFailoverExhausted(c, failoverErr, true)
 					return
+				}
+				if len(dynamicGroups) > 0 && apiKey.Group != nil && apiKey.Group.RetryWithinGroupOnFailover {
+					switch action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, account.GetPoolModeRetryCount(), failoverErr); action {
+					case FailoverContinue:
+						continue
+					case FailoverCanceled:
+						failoverClientGone(c)
+						return
+					}
 				}
 				if len(dynamicGroups) > 0 {
 					dynamicNoAccounts.MarkCompatibleUnavailable()

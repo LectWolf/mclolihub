@@ -155,10 +155,11 @@ type Group struct {
 	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
 	MaxReasoningEffort string `json:"max_reasoning_effort"`
 	// ReasoningEffortMappings OpenAI/Codex 推理强度精确映射。
-	ReasoningEffortMappings []domain.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
-	ProbeEnabled            bool                            `json:"probe_enabled"`
-	ProbeModel              string                          `json:"probe_model"`
-	ProbeIntervalSeconds    int                             `json:"probe_interval_seconds"`
+	ReasoningEffortMappings    []domain.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
+	ProbeEnabled               bool                            `json:"probe_enabled"`
+	ProbeModel                 string                          `json:"probe_model"`
+	ProbeIntervalSeconds       int                             `json:"probe_interval_seconds"`
+	RetryWithinGroupOnFailover bool                            `json:"retry_within_group_on_failover"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

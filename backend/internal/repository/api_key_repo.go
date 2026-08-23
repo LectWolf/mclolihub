@@ -248,6 +248,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldProbeEnabled,
 				group.FieldProbeModel,
 				group.FieldProbeIntervalSeconds,
+				group.FieldRetryWithinGroupOnFailover,
 			)
 		}).WithGroupPreferences().
 		Only(ctx)
@@ -1088,6 +1089,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		ProbeEnabled:                    g.ProbeEnabled,
 		ProbeModel:                      g.ProbeModel,
 		ProbeIntervalSeconds:            g.ProbeIntervalSeconds,
+		RetryWithinGroupOnFailover:      g.RetryWithinGroupOnFailover,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

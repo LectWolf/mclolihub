@@ -557,6 +557,7 @@ export interface Group {
   is_exclusive: boolean
   status: 'active' | 'inactive'
 	probe_enabled: boolean
+	retry_within_group_on_failover: boolean
 	probe_model: string
 	probe_interval_seconds: number
   subscription_type: SubscriptionType

@@ -301,6 +301,9 @@ func (Group) Fields() []ent.Field {
 		field.Int("probe_interval_seconds").
 			Default(600).
 			Comment("正常探测间隔，范围 30 秒到 1 小时"),
+		field.Bool("retry_within_group_on_failover").
+			Default(false).
+			Comment("动态路由发生可切换错误时，是否先尝试当前分组的其他账号"),
 	}
 }
 

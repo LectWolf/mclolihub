@@ -1013,6 +1013,7 @@ var (
 		{Name: "probe_enabled", Type: field.TypeBool, Default: false},
 		{Name: "probe_model", Type: field.TypeString, Size: 100, Default: "gpt-5.6-sol"},
 		{Name: "probe_interval_seconds", Type: field.TypeInt, Default: 600},
+		{Name: "retry_within_group_on_failover", Type: field.TypeBool, Default: false},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{

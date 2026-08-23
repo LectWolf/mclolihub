@@ -229,6 +229,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		ProbeEnabled:                    g.ProbeEnabled,
 		ProbeModel:                      g.ProbeModel,
 		ProbeIntervalSeconds:            g.ProbeIntervalSeconds,
+		RetryWithinGroupOnFailover:      g.RetryWithinGroupOnFailover,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

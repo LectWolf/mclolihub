@@ -676,6 +676,10 @@
             <input v-model.number="createForm.probe_interval_seconds" type="number" min="30" max="3600" step="30" class="input" :disabled="!createForm.probe_enabled" />
           </div>
         </div>
+        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          <input v-model="createForm.retry_within_group_on_failover" type="checkbox" class="checkbox" />
+          发生故障时先在当前分组内切换账号
+        </label>
         <ReasoningEffortPolicyFields
           v-if="supportsReasoningEffortPolicyPlatform(createForm.platform)"
           ref="createReasoningEffortPolicyRef"
@@ -2414,6 +2418,10 @@
             <input v-model.number="editForm.probe_interval_seconds" type="number" min="30" max="3600" step="30" class="input" :disabled="!editForm.probe_enabled" />
           </div>
         </div>
+        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+          <input v-model="editForm.retry_within_group_on_failover" type="checkbox" class="checkbox" />
+          发生故障时先在当前分组内切换账号
+        </label>
         <ReasoningEffortPolicyFields
           v-if="supportsReasoningEffortPolicyPlatform(editForm.platform)"
           ref="editReasoningEffortPolicyRef"
@@ -5115,6 +5123,7 @@ const createForm = reactive({
 	probe_enabled: false,
 	probe_model: "gpt-5.6-sol",
 	probe_interval_seconds: 600,
+	retry_within_group_on_failover: false,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5478,6 +5487,7 @@ const editForm = reactive({
 	probe_enabled: false,
 	probe_model: "gpt-5.6-sol",
 	probe_interval_seconds: 600,
+	retry_within_group_on_failover: false,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
@@ -5956,6 +5966,7 @@ const closeCreateModal = () => {
 	createForm.probe_enabled = false;
 	createForm.probe_model = "gpt-5.6-sol";
 	createForm.probe_interval_seconds = 600;
+	createForm.retry_within_group_on_failover = false;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
@@ -6200,6 +6211,7 @@ const handleEdit = async (group: AdminGroup) => {
 	editForm.probe_enabled = group.probe_enabled ?? false;
 	editForm.probe_model = group.probe_model || "gpt-5.6-sol";
 	editForm.probe_interval_seconds = group.probe_interval_seconds || 600;
+	editForm.retry_within_group_on_failover = group.retry_within_group_on_failover ?? false;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";

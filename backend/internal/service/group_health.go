@@ -39,7 +39,7 @@ const (
 	ImmediateProbeCooldown         = 2 * time.Minute
 )
 
-var accountProbeBackoff = [...]time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
+var accountProbeBackoff = [...]time.Duration{30 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
 
 func NormalizeGroupProbeConfig(model string, intervalSeconds int) (string, int, error) {
 	model = strings.TrimSpace(model)

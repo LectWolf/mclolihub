@@ -91,6 +91,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetProbeEnabled(groupIn.ProbeEnabled).
 		SetProbeModel(groupIn.ProbeModel).
 		SetProbeIntervalSeconds(groupIn.ProbeIntervalSeconds).
+		SetRetryWithinGroupOnFailover(groupIn.RetryWithinGroupOnFailover).
 		SetSubscriptionType(groupIn.SubscriptionType).
 		SetNillableDailyLimitUsd(groupIn.DailyLimitUSD).
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).
@@ -277,6 +278,7 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetProbeEnabled(groupIn.ProbeEnabled).
 		SetProbeModel(groupIn.ProbeModel).
 		SetProbeIntervalSeconds(groupIn.ProbeIntervalSeconds).
+		SetRetryWithinGroupOnFailover(groupIn.RetryWithinGroupOnFailover).
 		SetSubscriptionType(groupIn.SubscriptionType).
 		SetNillableDailyLimitUsd(groupIn.DailyLimitUSD).
 		SetNillableWeeklyLimitUsd(groupIn.WeeklyLimitUSD).

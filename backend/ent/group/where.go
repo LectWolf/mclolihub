@@ -345,6 +345,11 @@ func ProbeIntervalSeconds(v int) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldProbeIntervalSeconds, v))
 }
 
+// RetryWithinGroupOnFailover applies equality check predicate on the "retry_within_group_on_failover" field. It's identical to RetryWithinGroupOnFailoverEQ.
+func RetryWithinGroupOnFailover(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRetryWithinGroupOnFailover, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -2678,6 +2683,16 @@ func ProbeIntervalSecondsLT(v int) predicate.Group {
 // ProbeIntervalSecondsLTE applies the LTE predicate on the "probe_interval_seconds" field.
 func ProbeIntervalSecondsLTE(v int) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldProbeIntervalSeconds, v))
+}
+
+// RetryWithinGroupOnFailoverEQ applies the EQ predicate on the "retry_within_group_on_failover" field.
+func RetryWithinGroupOnFailoverEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldRetryWithinGroupOnFailover, v))
+}
+
+// RetryWithinGroupOnFailoverNEQ applies the NEQ predicate on the "retry_within_group_on_failover" field.
+func RetryWithinGroupOnFailoverNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldRetryWithinGroupOnFailover, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.
