@@ -38,6 +38,8 @@ type APIKey struct {
 	RouteMode string `json:"route_mode,omitempty"`
 	// dynamic routing platform scope: openai/anthropic/grok
 	RoutePlatform string `json:"route_platform,omitempty"`
+	// keep a short-lived fallback route to preserve cache locality before returning to the preferred group
+	NaturalRevertEnabled bool `json:"natural_revert_enabled,omitempty"`
 	// 允许调用的最大生效倍率，NULL 表示不限制
 	MaxRateMultiplier *float64 `json:"max_rate_multiplier,omitempty"`
 	// Status holds the value of the "status" field.
@@ -140,6 +142,8 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case apikey.FieldIPWhitelist, apikey.FieldIPBlacklist:
 			values[i] = new([]byte)
+		case apikey.FieldNaturalRevertEnabled:
+			values[i] = new(sql.NullBool)
 		case apikey.FieldMaxRateMultiplier, apikey.FieldQuota, apikey.FieldQuotaUsed, apikey.FieldRateLimit5h, apikey.FieldRateLimit1d, apikey.FieldRateLimit7d, apikey.FieldUsage5h, apikey.FieldUsage1d, apikey.FieldUsage7d:
 			values[i] = new(sql.NullFloat64)
 		case apikey.FieldID, apikey.FieldUserID, apikey.FieldGroupID:
@@ -224,6 +228,12 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field route_platform", values[i])
 			} else if value.Valid {
 				_m.RoutePlatform = value.String
+			}
+		case apikey.FieldNaturalRevertEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field natural_revert_enabled", values[i])
+			} else if value.Valid {
+				_m.NaturalRevertEnabled = value.Bool
 			}
 		case apikey.FieldMaxRateMultiplier:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -423,6 +433,9 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("route_platform=")
 	builder.WriteString(_m.RoutePlatform)
+	builder.WriteString(", ")
+	builder.WriteString("natural_revert_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.NaturalRevertEnabled))
 	builder.WriteString(", ")
 	if v := _m.MaxRateMultiplier; v != nil {
 		builder.WriteString("max_rate_multiplier=")

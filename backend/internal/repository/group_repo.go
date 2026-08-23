@@ -43,6 +43,45 @@ func (r *groupRepository) GetRouteHealth(ctx context.Context, groupIDs []int64) 
 	return out, nil
 }
 
+// GetUserRouteUsageStats reads the passive one-minute facts rather than raw
+// usage_logs. It is called only while an API key is temporarily held on a
+// fallback group, and lets routing estimate the value of its warm cache.
+func (r *groupRepository) GetUserRouteUsageStats(ctx context.Context, userID int64, model string, groupIDs []int64) (map[int64]service.GroupRouteUsageStats, error) {
+	out := make(map[int64]service.GroupRouteUsageStats, len(groupIDs))
+	if userID <= 0 || strings.TrimSpace(model) == "" || len(groupIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+SELECT group_id,
+       COALESCE(SUM(success_requests), 0),
+       COALESCE(SUM(input_tokens), 0),
+       COALESCE(SUM(output_tokens), 0),
+       COALESCE(SUM(cache_creation_tokens), 0),
+       COALESCE(SUM(cache_read_tokens), 0)
+FROM channel_monitor_v2_user_metrics_1m
+WHERE user_id = $1
+  AND lower(model) = lower($2)
+  AND group_id = ANY($3)
+  AND bucket_start >= NOW() - INTERVAL '6 hours'
+GROUP BY group_id`, userID, model, pq.Array(groupIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var groupID int64
+		var stats service.GroupRouteUsageStats
+		if err := rows.Scan(&groupID, &stats.SuccessfulRequests, &stats.InputTokens, &stats.OutputTokens, &stats.CacheCreationTokens, &stats.CacheReadTokens); err != nil {
+			return nil, err
+		}
+		out[groupID] = stats
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 type groupRepository struct {
 	client *dbent.Client
 	sql    sqlExecutor

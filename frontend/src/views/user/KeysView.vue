@@ -136,10 +136,10 @@
           <template #cell-group="{ row }">
             <div class="group/dropdown relative">
               <button v-if="row.route_mode !== 'fixed'" type="button" class="flex items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-gray-100 dark:hover:bg-dark-700" @click="openRoutingPreview(row)">
-                <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(routingPreviewFor(row)?.groups.find(g => g.group_id === routingPreviewFor(row)?.next_group_id)?.status || 'unknown')" />
+                <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(activeRouteStatus(row))" />
                 <span class="text-sm text-gray-800 dark:text-gray-200">{{ t('keys.routeModes.' + row.route_mode) }}</span>
                 <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ t('keys.routePlatforms.' + normalizeRoutePlatform(row.route_platform)) }}</span>
-                <span class="text-xs text-gray-500">{{ t('keys.nextGroup') }}: {{ nextGroupName(row) }}</span>
+                <span class="text-xs text-gray-500">{{ routingPreviewFor(row)?.natural_route ? t('keys.holdingGroup') : t('keys.nextGroup') }}: {{ activeRouteGroupName(row) }}</span>
                 <Icon name="chevronDown" size="sm" class="text-gray-400" />
               </button>
               <button
@@ -531,6 +531,21 @@
         </div>
 
         <div v-if="formData.route_mode === 'cheapest' || formData.route_mode === 'fastest'" class="space-y-2">
+          <div class="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-dark-700">
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('keys.naturalRevert') }}</span>
+              <Icon name="questionCircle" size="sm" class="shrink-0 text-gray-400" :title="t('keys.naturalRevertFormula')" />
+            </div>
+            <button
+              type="button"
+              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none"
+              :class="formData.natural_revert_enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'"
+              :title="formData.natural_revert_enabled ? t('common.enabled') : t('common.disabled')"
+              @click="formData.natural_revert_enabled = !formData.natural_revert_enabled"
+            >
+              <span :class="['pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition', formData.natural_revert_enabled ? 'translate-x-4' : 'translate-x-0']" />
+            </button>
+          </div>
           <label class="input-label">{{ t('keys.disabledGroups') }}</label>
           <label v-for="group in groups" :key="group.id" class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
             <input v-model="formData.disabled_group_ids" type="checkbox" :value="group.id" class="checkbox" />
@@ -1001,9 +1016,19 @@
       </template>
     </BaseDialog>
 
-    <BaseDialog :show="routingPreview !== null" :title="t('keys.routingPreviewTitle')" width="normal" @close="routingPreview = null">
+    <BaseDialog :show="routingPreview !== null" :title="t('keys.routingPreviewTitle')" width="normal" @close="closeRoutingPreview">
       <div v-if="routingPreview" class="space-y-3">
         <p class="text-sm text-gray-500">{{ t('keys.routingPreviewMode', { mode: t('keys.routeModes.' + routingPreview.route_mode) }) }}</p>
+        <div v-if="routingPreview.natural_route" class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/70 dark:bg-amber-950/20">
+          <div class="flex items-center gap-3">
+            <Icon name="sync" size="sm" class="shrink-0 text-amber-600 dark:text-amber-400" />
+            <span class="min-w-0 flex-1 text-sm text-amber-900 dark:text-amber-100">{{ t('keys.holdingRoute', { group: naturalRouteGroupName(routingPreview), model: routingPreview.natural_route.model }) }}</span>
+            <button type="button" class="btn btn-secondary btn-sm shrink-0" :title="t('keys.returnNow')" @click="resetNaturalRoute">
+              <Icon name="swap" size="sm" />{{ t('keys.returnNow') }}
+            </button>
+          </div>
+          <p v-if="naturalRouteCostSummary(routingPreview.natural_route)" class="ml-7 mt-1 text-xs text-amber-800 dark:text-amber-200">{{ naturalRouteCostSummary(routingPreview.natural_route) }}</p>
+        </div>
         <div v-for="group in routingPreview.groups" :key="group.group_id" class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-dark-700">
           <span class="w-6 text-center text-xs font-semibold tabular-nums text-gray-400">{{ group.position || '-' }}</span>
           <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(group.status)" />
@@ -1190,7 +1215,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
-import type { RoutingPreview } from '@/api/keys'
+import type { NaturalRoute, RoutingPreview } from '@/api/keys'
 import { listGroupHealth, type GroupHealthItem } from '@/api/groupHealth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -1348,6 +1373,7 @@ const userGroupRates = ref<Record<number, number>>({})
 const groupHealthMap = reactive<Record<number, GroupHealthItem>>({})
 const routingPreviews = ref<Record<number, RoutingPreview>>({})
 const routingPreview = ref<RoutingPreview | null>(null)
+const routingPreviewKeyID = ref<number | null>(null)
 
 const pagination = ref({
   page: 1,
@@ -1403,6 +1429,7 @@ const formData = ref({
   group_id: null as number | null,
 	route_mode: 'fixed' as 'fixed' | 'cheapest' | 'fastest' | 'custom',
 	route_platform: 'openai' as 'openai' | 'anthropic' | 'grok',
+	natural_revert_enabled: true,
 	max_rate_multiplier: null as number | null,
 	disabled_group_ids: [] as number[],
 	custom_group_ids: [] as number[],
@@ -1467,9 +1494,29 @@ const normalizeRoutePlatform = (platform?: string): 'openai' | 'anthropic' | 'gr
 const effectiveGroupRate = (group: Group) => userGroupRates.value[group.id] ?? group.rate_multiplier
 
 const routingPreviewFor = (key: ApiKey) => routingPreviews.value[key.id]
-const nextGroupName = (key: ApiKey) => {
+const activeRouteGroupName = (key: ApiKey) => {
   const preview = routingPreviewFor(key)
-  return preview?.groups.find((g) => g.group_id === preview.next_group_id)?.name || t('keys.noGroup')
+  const groupID = preview?.natural_route?.group_id || preview?.next_group_id
+  return preview?.groups.find((group) => group.group_id === groupID)?.name || t('keys.noGroup')
+}
+const activeRouteStatus = (key: ApiKey) => {
+  const preview = routingPreviewFor(key)
+  const groupID = preview?.natural_route?.group_id || preview?.next_group_id
+  return preview?.groups.find((group) => group.group_id === groupID)?.status || 'unknown'
+}
+const naturalRouteGroupName = (preview: RoutingPreview) => {
+  const groupID = preview.natural_route?.group_id
+  return preview.groups.find((group) => group.group_id === groupID)?.name || `#${groupID}`
+}
+const naturalRouteCostSummary = (route?: NaturalRoute | null) => {
+  if (!route || route.reason !== 'fallback_cache_cost_hold' || !route.comparison_requests || !route.usage_samples || route.estimated_keep_cost == null || route.estimated_return_cost == null) return ''
+  const formatCost = (cost: number) => cost < 0.0001 ? cost.toExponential(2) : cost.toFixed(4)
+  return t('keys.holdingCostEstimate', {
+    requests: route.comparison_requests,
+    samples: route.usage_samples,
+    keep: formatCost(route.estimated_keep_cost),
+    return: formatCost(route.estimated_return_cost),
+  })
 }
 const routingStatusClass = (status: string) => ({ healthy: 'bg-emerald-500', unavailable: 'bg-red-500', balance_insufficient: 'bg-red-500', not_enabled: 'bg-amber-400', unknown: 'bg-gray-400' }[status] || 'bg-gray-400')
 const routingStatusLabel = (status: string) => {
@@ -1497,7 +1544,25 @@ const openRoutingPreview = async (key: ApiKey) => {
     const preview = await keysAPI.getRoutingPreview(key.id)
     routingPreviews.value[key.id] = preview
     routingPreview.value = preview
+    routingPreviewKeyID.value = key.id
   } catch (error) { appStore.showError(extractApiErrorMessage(error, t('keys.routingPreviewError'))) }
+}
+const resetNaturalRoute = async () => {
+  const keyID = routingPreviewKeyID.value
+  if (!keyID) return
+  try {
+    await keysAPI.resetNaturalRoute(keyID)
+    const refreshed = await keysAPI.getRoutingPreview(keyID)
+    routingPreviews.value[keyID] = refreshed
+    routingPreview.value = refreshed
+    appStore.showSuccess(t('keys.returnNowSuccess'))
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('keys.routingPreviewError')))
+  }
+}
+const closeRoutingPreview = () => {
+  routingPreview.value = null
+  routingPreviewKeyID.value = null
 }
 
 const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
@@ -1710,6 +1775,7 @@ const editKey = (key: ApiKey) => {
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
 		route_mode: key.route_mode || 'fixed',
 		route_platform: normalizeRoutePlatform(key.route_platform),
+		natural_revert_enabled: key.natural_revert_enabled !== false,
 		max_rate_multiplier: key.max_rate_multiplier,
 		disabled_group_ids: (key.group_preferences || []).filter(item => item.disabled).map(item => item.group_id),
 		custom_group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
@@ -1868,6 +1934,7 @@ const handleSubmit = async () => {
         group_id: formData.value.group_id,
 		route_mode: formData.value.route_mode,
 		route_platform: formData.value.route_mode === 'fixed' ? 'openai' : formData.value.route_platform,
+		natural_revert_enabled: formData.value.natural_revert_enabled,
 		max_rate_multiplier: formData.value.max_rate_multiplier,
 		disabled_group_ids: formData.value.disabled_group_ids,
 		custom_group_ids: formData.value.custom_group_ids,
@@ -1898,6 +1965,7 @@ const handleSubmit = async () => {
 		{
 			route_mode: formData.value.route_mode,
 			route_platform: formData.value.route_mode === 'fixed' ? 'openai' : formData.value.route_platform,
+			natural_revert_enabled: formData.value.natural_revert_enabled,
 			max_rate_multiplier: formData.value.max_rate_multiplier,
 			disabled_group_ids: formData.value.disabled_group_ids,
 			custom_group_ids: formData.value.custom_group_ids
@@ -1949,6 +2017,7 @@ const closeModals = () => {
     group_id: null,
 		route_mode: 'fixed',
 		route_platform: 'openai',
+		natural_revert_enabled: true,
 		max_rate_multiplier: null,
 		disabled_group_ids: [],
 		custom_group_ids: [],

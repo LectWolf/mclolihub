@@ -18,7 +18,20 @@ export interface RoutingPreviewGroup {
   position: number
   excluded_reason?: string
 }
-export interface RoutingPreview { route_mode: string; route_platform: 'openai' | 'anthropic' | 'grok'; next_group_id: number; groups: RoutingPreviewGroup[] }
+export interface NaturalRoute {
+  group_id: number
+  model: string
+  session_scoped: boolean
+  started_at: string
+  expires_at: string
+  reason: string
+  comparison_requests?: number
+  usage_samples?: number
+  estimated_keep_cost?: number
+  estimated_return_cost?: number
+  estimated_saving_percent?: number
+}
+export interface RoutingPreview { route_mode: string; route_platform: 'openai' | 'anthropic' | 'grok'; next_group_id: number; groups: RoutingPreviewGroup[]; natural_route?: NaturalRoute | null }
 
 /**
  * List all API keys for current user
@@ -64,6 +77,10 @@ export async function getRoutingPreview(id: number): Promise<RoutingPreview> {
   return data
 }
 
+export async function resetNaturalRoute(id: number): Promise<void> {
+  await apiClient.post(`/keys/${id}/natural-route/reset`)
+}
+
 /**
  * Create new API key
  * @param name - Key name
@@ -85,7 +102,7 @@ export async function create(
   quota?: number,
   expiresInDays?: number,
   rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
-  routing?: { route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'; route_platform?: 'openai' | 'anthropic' | 'grok'; max_rate_multiplier?: number | null; disabled_group_ids?: number[]; custom_group_ids?: number[] }
+  routing?: { route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'; route_platform?: 'openai' | 'anthropic' | 'grok'; natural_revert_enabled?: boolean; max_rate_multiplier?: number | null; disabled_group_ids?: number[]; custom_group_ids?: number[] }
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
 	Object.assign(payload, routing || {})
@@ -156,6 +173,7 @@ export const keysAPI = {
   list,
   getById,
   getRoutingPreview,
+  resetNaturalRoute,
   create,
   update,
   delete: deleteKey,

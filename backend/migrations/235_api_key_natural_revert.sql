@@ -1,0 +1,2 @@
+ALTER TABLE api_keys
+    ADD COLUMN IF NOT EXISTS natural_revert_enabled BOOLEAN NOT NULL DEFAULT TRUE;

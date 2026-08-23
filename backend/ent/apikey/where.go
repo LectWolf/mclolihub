@@ -100,6 +100,11 @@ func RoutePlatform(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldRoutePlatform, v))
 }
 
+// NaturalRevertEnabled applies equality check predicate on the "natural_revert_enabled" field. It's identical to NaturalRevertEnabledEQ.
+func NaturalRevertEnabled(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldNaturalRevertEnabled, v))
+}
+
 // MaxRateMultiplier applies equality check predicate on the "max_rate_multiplier" field. It's identical to MaxRateMultiplierEQ.
 func MaxRateMultiplier(v float64) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldMaxRateMultiplier, v))
@@ -613,6 +618,16 @@ func RoutePlatformEqualFold(v string) predicate.APIKey {
 // RoutePlatformContainsFold applies the ContainsFold predicate on the "route_platform" field.
 func RoutePlatformContainsFold(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldContainsFold(FieldRoutePlatform, v))
+}
+
+// NaturalRevertEnabledEQ applies the EQ predicate on the "natural_revert_enabled" field.
+func NaturalRevertEnabledEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldNaturalRevertEnabled, v))
+}
+
+// NaturalRevertEnabledNEQ applies the NEQ predicate on the "natural_revert_enabled" field.
+func NaturalRevertEnabledNEQ(v bool) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldNaturalRevertEnabled, v))
 }
 
 // MaxRateMultiplierEQ applies the EQ predicate on the "max_rate_multiplier" field.

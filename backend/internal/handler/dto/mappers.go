@@ -89,6 +89,7 @@ func APIKeyFromService(k *service.APIKey) *APIKey {
 		GroupID:            k.GroupID,
 		RouteMode:          k.RouteMode,
 		RoutePlatform:      routePlatform,
+		NaturalRevertEnabled: k.NaturalRevertEnabled,
 		MaxRateMultiplier:  k.MaxRateMultiplier,
 		GroupPreferences:   k.GroupPreferences,
 		Status:             k.Status,

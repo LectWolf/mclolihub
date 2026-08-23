@@ -128,6 +128,20 @@ func (_c *APIKeyCreate) SetNillableRoutePlatform(v *string) *APIKeyCreate {
 	return _c
 }
 
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (_c *APIKeyCreate) SetNaturalRevertEnabled(v bool) *APIKeyCreate {
+	_c.mutation.SetNaturalRevertEnabled(v)
+	return _c
+}
+
+// SetNillableNaturalRevertEnabled sets the "natural_revert_enabled" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableNaturalRevertEnabled(v *bool) *APIKeyCreate {
+	if v != nil {
+		_c.SetNaturalRevertEnabled(*v)
+	}
+	return _c
+}
+
 // SetMaxRateMultiplier sets the "max_rate_multiplier" field.
 func (_c *APIKeyCreate) SetMaxRateMultiplier(v float64) *APIKeyCreate {
 	_c.mutation.SetMaxRateMultiplier(v)
@@ -449,6 +463,10 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultRoutePlatform
 		_c.mutation.SetRoutePlatform(v)
 	}
+	if _, ok := _c.mutation.NaturalRevertEnabled(); !ok {
+		v := apikey.DefaultNaturalRevertEnabled
+		_c.mutation.SetNaturalRevertEnabled(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -530,6 +548,9 @@ func (_c *APIKeyCreate) check() error {
 		if err := apikey.RoutePlatformValidator(v); err != nil {
 			return &ValidationError{Name: "route_platform", err: fmt.Errorf(`ent: validator failed for field "APIKey.route_platform": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.NaturalRevertEnabled(); !ok {
+		return &ValidationError{Name: "natural_revert_enabled", err: errors.New(`ent: missing required field "APIKey.natural_revert_enabled"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "APIKey.status"`)}
@@ -620,6 +641,10 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RoutePlatform(); ok {
 		_spec.SetField(apikey.FieldRoutePlatform, field.TypeString, value)
 		_node.RoutePlatform = value
+	}
+	if value, ok := _c.mutation.NaturalRevertEnabled(); ok {
+		_spec.SetField(apikey.FieldNaturalRevertEnabled, field.TypeBool, value)
+		_node.NaturalRevertEnabled = value
 	}
 	if value, ok := _c.mutation.MaxRateMultiplier(); ok {
 		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
@@ -912,6 +937,18 @@ func (u *APIKeyUpsert) SetRoutePlatform(v string) *APIKeyUpsert {
 // UpdateRoutePlatform sets the "route_platform" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateRoutePlatform() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldRoutePlatform)
+	return u
+}
+
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (u *APIKeyUpsert) SetNaturalRevertEnabled(v bool) *APIKeyUpsert {
+	u.Set(apikey.FieldNaturalRevertEnabled, v)
+	return u
+}
+
+// UpdateNaturalRevertEnabled sets the "natural_revert_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateNaturalRevertEnabled() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldNaturalRevertEnabled)
 	return u
 }
 
@@ -1389,6 +1426,20 @@ func (u *APIKeyUpsertOne) SetRoutePlatform(v string) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateRoutePlatform() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateRoutePlatform()
+	})
+}
+
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (u *APIKeyUpsertOne) SetNaturalRevertEnabled(v bool) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetNaturalRevertEnabled(v)
+	})
+}
+
+// UpdateNaturalRevertEnabled sets the "natural_revert_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateNaturalRevertEnabled() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateNaturalRevertEnabled()
 	})
 }
 
@@ -2083,6 +2134,20 @@ func (u *APIKeyUpsertBulk) SetRoutePlatform(v string) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateRoutePlatform() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateRoutePlatform()
+	})
+}
+
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (u *APIKeyUpsertBulk) SetNaturalRevertEnabled(v bool) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetNaturalRevertEnabled(v)
+	})
+}
+
+// UpdateNaturalRevertEnabled sets the "natural_revert_enabled" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateNaturalRevertEnabled() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateNaturalRevertEnabled()
 	})
 }
 

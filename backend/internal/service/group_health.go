@@ -140,6 +140,17 @@ type GroupRouteHealth struct {
 	RealTTFTSamples int
 }
 
+// GroupRouteUsageStats is a compact, passive usage summary used only to
+// decide whether a short-lived fallback should retain its upstream cache.
+// Token values are sums over successful requests in the observation window.
+type GroupRouteUsageStats struct {
+	SuccessfulRequests  int64
+	InputTokens         int64
+	OutputTokens        int64
+	CacheCreationTokens int64
+	CacheReadTokens     int64
+}
+
 func ValidateRouteMode(mode string) error {
 	switch mode {
 	case RouteModeFixed, RouteModeCheapest, RouteModeFastest, RouteModeCustom:

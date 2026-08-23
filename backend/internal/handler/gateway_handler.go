@@ -225,6 +225,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	}
 	body = parsedReq.Body.Bytes()
 	reqModel := parsedReq.Model
+	naturalRouteSessionID := service.ExtractClientSessionID(c)
 	reqStream := parsedReq.Stream
 	dynamicGroups := []service.Group(nil)
 	dynamicGroupIndex := 0
@@ -235,6 +236,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			h.errorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
 			return
 		}
+		dynamicGroups, _ = h.apiKeyService.ApplyNaturalRoute(c.Request.Context(), apiKey, reqModel, naturalRouteSessionID, dynamicGroups)
 		apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[0])
 		applyDynamicGroupRequestContext(c, apiKey, reqModel)
 	}
@@ -709,8 +711,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						dynamicNoAccounts.Observe(classifyNoAccountError(c.Request.Context(), h.gatewayService, currentAPIKey, reqModel, reqModel, platform))
 					}
 					if dynamicGroupIndex+1 < len(dynamicGroups) {
+						h.apiKeyService.ClearNaturalRoute(apiKey.ID, reqModel, naturalRouteSessionID)
 						dynamicGroupIndex++
 						currentAPIKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+						h.apiKeyService.RememberNaturalRoute(currentAPIKey, reqModel, naturalRouteSessionID, *currentAPIKey.GroupID)
 						currentSubscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, currentAPIKey)
 						if err != nil {
 							h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", err.Error(), streamStarted)
@@ -1108,6 +1112,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						}
 					}
 					if len(dynamicGroups) > 0 {
+						h.apiKeyService.ClearNaturalRoute(apiKey.ID, reqModel, naturalRouteSessionID)
 						dynamicNoAccounts.MarkCompatibleUnavailable()
 						h.reportDynamicGroupFailure(currentAPIKey, account, failoverErr, false)
 						h.gatewayService.TempUnscheduleRetryableError(c.Request.Context(), account.ID, failoverErr)
@@ -1117,6 +1122,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						}
 						dynamicGroupIndex++
 						currentAPIKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
+						h.apiKeyService.RememberNaturalRoute(currentAPIKey, reqModel, naturalRouteSessionID, *currentAPIKey.GroupID)
 						currentSubscription, err = h.subscriptionForRoutingGroup(c.Request.Context(), subject.UserID, currentAPIKey)
 						if err != nil {
 							h.handleStreamingAwareError(c, http.StatusForbidden, "subscription_error", err.Error(), streamStarted)

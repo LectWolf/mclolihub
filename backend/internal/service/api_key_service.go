@@ -76,9 +76,10 @@ type APIKeyUpdateFields struct {
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
 	// RouteMode, RoutePlatform and MaxRateMultiplier control multi-group routing.
-	RouteMode         bool
-	RoutePlatform     bool
-	MaxRateMultiplier bool
+	RouteMode            bool
+	RoutePlatform        bool
+	NaturalRevertEnabled bool
+	MaxRateMultiplier    bool
 }
 
 // IsEmpty 报告该次 Update 是否不写任何列。
@@ -135,6 +136,10 @@ type apiKeyPreferenceRepository interface {
 
 type groupRouteHealthReader interface {
 	GetRouteHealth(context.Context, []int64) (map[int64]GroupRouteHealth, error)
+}
+
+type groupRouteUsageStatsReader interface {
+	GetUserRouteUsageStats(context.Context, int64, string, []int64) (map[int64]GroupRouteUsageStats, error)
 }
 
 type RoutingGroupPreview struct {
@@ -331,7 +336,11 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 	}
 	out := make([]Group, 0, len(ranked))
 	for _, candidate := range ranked {
-		out = append(out, groupByID[candidate.GroupID])
+		group := groupByID[candidate.GroupID]
+		group.RouteEffectiveMultiplier = candidate.RateMultiplier
+		group.RouteRealTTFTP50MS = candidate.RealTTFTP50MS
+		group.RouteProbeTTFTMS = candidate.ProbeTTFTMS
+		out = append(out, group)
 	}
 	if len(out) == 0 {
 		return nil, infraerrors.ServiceUnavailable("NO_HEALTHY_ROUTE_GROUP", "no healthy group matches API key routing policy")
@@ -484,16 +493,17 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name              string   `json:"name"`
-	GroupID           *int64   `json:"group_id"`
-	RouteMode         string   `json:"route_mode"`
-	RoutePlatform     string   `json:"route_platform"`
-	MaxRateMultiplier *float64 `json:"max_rate_multiplier"`
-	DisabledGroupIDs  []int64  `json:"disabled_group_ids"`
-	CustomGroupIDs    []int64  `json:"custom_group_ids"`
-	CustomKey         *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist       []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist       []string `json:"ip_blacklist"` // IP 黑名单
+	Name                 string   `json:"name"`
+	GroupID              *int64   `json:"group_id"`
+	RouteMode            string   `json:"route_mode"`
+	RoutePlatform        string   `json:"route_platform"`
+	NaturalRevertEnabled *bool    `json:"natural_revert_enabled"`
+	MaxRateMultiplier    *float64 `json:"max_rate_multiplier"`
+	DisabledGroupIDs     []int64  `json:"disabled_group_ids"`
+	CustomGroupIDs       []int64  `json:"custom_group_ids"`
+	CustomKey            *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist          []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist          []string `json:"ip_blacklist"` // IP 黑名单
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -511,6 +521,7 @@ type UpdateAPIKeyRequest struct {
 	GroupID              *int64    `json:"group_id"`
 	RouteMode            *string   `json:"route_mode"`
 	RoutePlatform        *string   `json:"route_platform"`
+	NaturalRevertEnabled *bool     `json:"natural_revert_enabled"`
 	MaxRateMultiplier    *float64  `json:"max_rate_multiplier"`
 	MaxRateMultiplierSet bool      `json:"-"`
 	DisabledGroupIDs     *[]int64  `json:"disabled_group_ids"`
@@ -616,6 +627,13 @@ type APIKeyService struct {
 	authLookupInFlight        atomic.Int64
 	invalidAuthAbuse          *invalidAuthAbuseLimiter
 	authInvalidationStart     sync.Once
+	naturalRouteMu            sync.Mutex
+	naturalRoutes             map[string]naturalRouteState
+	naturalRouteLatest        map[int64]string
+	naturalRouteUsageMu       sync.Mutex
+	naturalRouteUsageCache    map[string]naturalRouteUsageCacheEntry
+	naturalRouteBilling       *BillingService
+	naturalRoutePricing       *ModelPricingResolver
 	authInvalidationStop      sync.Once
 	authInvalidationCancel    context.CancelFunc
 	authInvalidationWG        sync.WaitGroup
@@ -655,13 +673,16 @@ func NewAPIKeyService(
 	cfg *config.Config,
 ) *APIKeyService {
 	svc := &APIKeyService{
-		apiKeyRepo:        apiKeyRepo,
-		userRepo:          userRepo,
-		groupRepo:         groupRepo,
-		userSubRepo:       userSubRepo,
-		userGroupRateRepo: userGroupRateRepo,
-		cache:             cache,
-		cfg:               cfg,
+		apiKeyRepo:             apiKeyRepo,
+		userRepo:               userRepo,
+		groupRepo:              groupRepo,
+		userSubRepo:            userSubRepo,
+		userGroupRateRepo:      userGroupRateRepo,
+		cache:                  cache,
+		cfg:                    cfg,
+		naturalRoutes:          make(map[string]naturalRouteState),
+		naturalRouteLatest:     make(map[int64]string),
+		naturalRouteUsageCache: make(map[string]naturalRouteUsageCacheEntry),
 	}
 	svc.initAuthCache(cfg)
 	lookupConcurrency := defaultAuthLookupConcurrency
@@ -671,6 +692,21 @@ func NewAPIKeyService(
 	svc.authLookupSlots = make(chan struct{}, lookupConcurrency)
 	svc.invalidAuthAbuse = newInvalidAuthAbuseLimiter(cfg)
 	return svc
+}
+
+// SetNaturalRouteBillingService enables cache-versus-multiplier comparisons
+// for temporary fallback routing. It is optional so isolated service tests and
+// deployments without pricing data continue to use the conservative thresholds.
+func (s *APIKeyService) SetNaturalRouteBillingService(billing *BillingService) {
+	if s == nil {
+		return
+	}
+	s.naturalRouteBilling = billing
+	if billing != nil {
+		s.naturalRoutePricing = NewModelPricingResolver(nil, billing)
+	} else {
+		s.naturalRoutePricing = nil
+	}
 }
 
 // SetRateLimitCacheInvalidator sets the optional rate limit cache invalidator.
@@ -849,24 +885,28 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:            userID,
-		Key:               key,
-		Name:              html.EscapeString(req.Name),
-		GroupID:           req.GroupID,
-		Status:            StatusActive,
-		RouteMode:         req.RouteMode,
-		RoutePlatform:     NormalizeRoutePlatform(req.RoutePlatform),
-		MaxRateMultiplier: req.MaxRateMultiplier,
-		IPWhitelist:       req.IPWhitelist,
-		IPBlacklist:       req.IPBlacklist,
-		Quota:             req.Quota,
-		QuotaUsed:         0,
-		RateLimit5h:       req.RateLimit5h,
-		RateLimit1d:       req.RateLimit1d,
-		RateLimit7d:       req.RateLimit7d,
+		UserID:               userID,
+		Key:                  key,
+		Name:                 html.EscapeString(req.Name),
+		GroupID:              req.GroupID,
+		Status:               StatusActive,
+		RouteMode:            req.RouteMode,
+		RoutePlatform:        NormalizeRoutePlatform(req.RoutePlatform),
+		NaturalRevertEnabled: true,
+		MaxRateMultiplier:    req.MaxRateMultiplier,
+		IPWhitelist:          req.IPWhitelist,
+		IPBlacklist:          req.IPBlacklist,
+		Quota:                req.Quota,
+		QuotaUsed:            0,
+		RateLimit5h:          req.RateLimit5h,
+		RateLimit1d:          req.RateLimit1d,
+		RateLimit7d:          req.RateLimit7d,
 	}
 	if apiKey.RouteMode == "" {
 		apiKey.RouteMode = RouteModeFixed
+	}
+	if req.NaturalRevertEnabled != nil {
+		apiKey.NaturalRevertEnabled = *req.NaturalRevertEnabled
 	}
 	if apiKey.RouteMode == RouteModeFixed {
 		apiKey.RoutePlatform = RoutePlatformOpenAI
@@ -1182,6 +1222,11 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if req.RoutePlatform != nil {
 		apiKey.RoutePlatform = NormalizeRoutePlatform(*req.RoutePlatform)
 		fields.RoutePlatform = true
+	}
+	if req.NaturalRevertEnabled != nil {
+		apiKey.NaturalRevertEnabled = *req.NaturalRevertEnabled
+		fields.NaturalRevertEnabled = true
+		s.ClearNaturalRoutes(apiKey.ID)
 	}
 	if apiKey.RouteMode == RouteModeFixed && apiKey.RoutePlatform != RoutePlatformOpenAI {
 		apiKey.RoutePlatform = RoutePlatformOpenAI

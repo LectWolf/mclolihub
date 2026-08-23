@@ -63,6 +63,7 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 			}
 			return service.NormalizeRoutePlatform(key.RoutePlatform)
 		}()).
+		SetNaturalRevertEnabled(key.NaturalRevertEnabled).
 		SetNillableMaxRateMultiplier(key.MaxRateMultiplier).
 		SetNillableLastUsedAt(key.LastUsedAt).
 		SetQuota(key.Quota).
@@ -153,6 +154,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldGroupID,
 			apikey.FieldRouteMode,
 			apikey.FieldRoutePlatform,
+			apikey.FieldNaturalRevertEnabled,
 			apikey.FieldMaxRateMultiplier,
 			apikey.FieldName,
 			apikey.FieldStatus,
@@ -330,6 +332,9 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey, fiel
 	}
 	if fields.RoutePlatform {
 		builder.SetRoutePlatform(key.RoutePlatform)
+	}
+	if fields.NaturalRevertEnabled {
+		builder.SetNaturalRevertEnabled(key.NaturalRevertEnabled)
 	}
 	if fields.MaxRateMultiplier {
 		if key.MaxRateMultiplier != nil {
@@ -920,6 +925,7 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		GroupID:           m.GroupID,
 		RouteMode:         m.RouteMode,
 		RoutePlatform:     m.RoutePlatform,
+		NaturalRevertEnabled: m.NaturalRevertEnabled,
 		MaxRateMultiplier: m.MaxRateMultiplier,
 		Quota:             m.Quota,
 		QuotaUsed:         m.QuotaUsed,

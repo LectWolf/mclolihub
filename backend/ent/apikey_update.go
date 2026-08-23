@@ -149,6 +149,20 @@ func (_u *APIKeyUpdate) SetNillableRoutePlatform(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (_u *APIKeyUpdate) SetNaturalRevertEnabled(v bool) *APIKeyUpdate {
+	_u.mutation.SetNaturalRevertEnabled(v)
+	return _u
+}
+
+// SetNillableNaturalRevertEnabled sets the "natural_revert_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableNaturalRevertEnabled(v *bool) *APIKeyUpdate {
+	if v != nil {
+		_u.SetNaturalRevertEnabled(*v)
+	}
+	return _u
+}
+
 // SetMaxRateMultiplier sets the "max_rate_multiplier" field.
 func (_u *APIKeyUpdate) SetMaxRateMultiplier(v float64) *APIKeyUpdate {
 	_u.mutation.ResetMaxRateMultiplier()
@@ -701,6 +715,9 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.RoutePlatform(); ok {
 		_spec.SetField(apikey.FieldRoutePlatform, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.NaturalRevertEnabled(); ok {
+		_spec.SetField(apikey.FieldNaturalRevertEnabled, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.MaxRateMultiplier(); ok {
 		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)
 	}
@@ -1093,6 +1110,20 @@ func (_u *APIKeyUpdateOne) SetRoutePlatform(v string) *APIKeyUpdateOne {
 func (_u *APIKeyUpdateOne) SetNillableRoutePlatform(v *string) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetRoutePlatform(*v)
+	}
+	return _u
+}
+
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (_u *APIKeyUpdateOne) SetNaturalRevertEnabled(v bool) *APIKeyUpdateOne {
+	_u.mutation.SetNaturalRevertEnabled(v)
+	return _u
+}
+
+// SetNillableNaturalRevertEnabled sets the "natural_revert_enabled" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableNaturalRevertEnabled(v *bool) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetNaturalRevertEnabled(*v)
 	}
 	return _u
 }
@@ -1678,6 +1709,9 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.RoutePlatform(); ok {
 		_spec.SetField(apikey.FieldRoutePlatform, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NaturalRevertEnabled(); ok {
+		_spec.SetField(apikey.FieldNaturalRevertEnabled, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.MaxRateMultiplier(); ok {
 		_spec.SetField(apikey.FieldMaxRateMultiplier, field.TypeFloat64, value)

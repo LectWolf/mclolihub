@@ -124,6 +124,7 @@ type APIKeyMutation struct {
 	name                     *string
 	route_mode               *string
 	route_platform           *string
+	natural_revert_enabled   *bool
 	max_rate_multiplier      *float64
 	addmax_rate_multiplier   *float64
 	status                   *string
@@ -614,6 +615,42 @@ func (m *APIKeyMutation) OldRoutePlatform(ctx context.Context) (v string, err er
 // ResetRoutePlatform resets all changes to the "route_platform" field.
 func (m *APIKeyMutation) ResetRoutePlatform() {
 	m.route_platform = nil
+}
+
+// SetNaturalRevertEnabled sets the "natural_revert_enabled" field.
+func (m *APIKeyMutation) SetNaturalRevertEnabled(b bool) {
+	m.natural_revert_enabled = &b
+}
+
+// NaturalRevertEnabled returns the value of the "natural_revert_enabled" field in the mutation.
+func (m *APIKeyMutation) NaturalRevertEnabled() (r bool, exists bool) {
+	v := m.natural_revert_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNaturalRevertEnabled returns the old "natural_revert_enabled" field's value of the APIKey entity.
+// If the APIKey object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *APIKeyMutation) OldNaturalRevertEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNaturalRevertEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNaturalRevertEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNaturalRevertEnabled: %w", err)
+	}
+	return oldValue.NaturalRevertEnabled, nil
+}
+
+// ResetNaturalRevertEnabled resets all changes to the "natural_revert_enabled" field.
+func (m *APIKeyMutation) ResetNaturalRevertEnabled() {
+	m.natural_revert_enabled = nil
 }
 
 // SetMaxRateMultiplier sets the "max_rate_multiplier" field.
@@ -1741,7 +1778,7 @@ func (m *APIKeyMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *APIKeyMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, apikey.FieldCreatedAt)
 	}
@@ -1768,6 +1805,9 @@ func (m *APIKeyMutation) Fields() []string {
 	}
 	if m.route_platform != nil {
 		fields = append(fields, apikey.FieldRoutePlatform)
+	}
+	if m.natural_revert_enabled != nil {
+		fields = append(fields, apikey.FieldNaturalRevertEnabled)
 	}
 	if m.max_rate_multiplier != nil {
 		fields = append(fields, apikey.FieldMaxRateMultiplier)
@@ -1846,6 +1886,8 @@ func (m *APIKeyMutation) Field(name string) (ent.Value, bool) {
 		return m.RouteMode()
 	case apikey.FieldRoutePlatform:
 		return m.RoutePlatform()
+	case apikey.FieldNaturalRevertEnabled:
+		return m.NaturalRevertEnabled()
 	case apikey.FieldMaxRateMultiplier:
 		return m.MaxRateMultiplier()
 	case apikey.FieldStatus:
@@ -1907,6 +1949,8 @@ func (m *APIKeyMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldRouteMode(ctx)
 	case apikey.FieldRoutePlatform:
 		return m.OldRoutePlatform(ctx)
+	case apikey.FieldNaturalRevertEnabled:
+		return m.OldNaturalRevertEnabled(ctx)
 	case apikey.FieldMaxRateMultiplier:
 		return m.OldMaxRateMultiplier(ctx)
 	case apikey.FieldStatus:
@@ -2012,6 +2056,13 @@ func (m *APIKeyMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRoutePlatform(v)
+		return nil
+	case apikey.FieldNaturalRevertEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNaturalRevertEnabled(v)
 		return nil
 	case apikey.FieldMaxRateMultiplier:
 		v, ok := value.(float64)
@@ -2381,6 +2432,9 @@ func (m *APIKeyMutation) ResetField(name string) error {
 		return nil
 	case apikey.FieldRoutePlatform:
 		m.ResetRoutePlatform()
+		return nil
+	case apikey.FieldNaturalRevertEnabled:
+		m.ResetNaturalRevertEnabled()
 		return nil
 	case apikey.FieldMaxRateMultiplier:
 		m.ResetMaxRateMultiplier()

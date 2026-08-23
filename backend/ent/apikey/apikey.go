@@ -33,6 +33,8 @@ const (
 	FieldRouteMode = "route_mode"
 	// FieldRoutePlatform holds the string denoting the route_platform field in the database.
 	FieldRoutePlatform = "route_platform"
+	// FieldNaturalRevertEnabled holds the string denoting the natural_revert_enabled field in the database.
+	FieldNaturalRevertEnabled = "natural_revert_enabled"
 	// FieldMaxRateMultiplier holds the string denoting the max_rate_multiplier field in the database.
 	FieldMaxRateMultiplier = "max_rate_multiplier"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -119,6 +121,7 @@ var Columns = []string{
 	FieldGroupID,
 	FieldRouteMode,
 	FieldRoutePlatform,
+	FieldNaturalRevertEnabled,
 	FieldMaxRateMultiplier,
 	FieldStatus,
 	FieldLastUsedAt,
@@ -174,6 +177,8 @@ var (
 	DefaultRoutePlatform string
 	// RoutePlatformValidator is a validator for the "route_platform" field. It is called by the builders before save.
 	RoutePlatformValidator func(string) error
+	// DefaultNaturalRevertEnabled holds the default value on creation for the "natural_revert_enabled" field.
+	DefaultNaturalRevertEnabled bool
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -247,6 +252,11 @@ func ByRouteMode(opts ...sql.OrderTermOption) OrderOption {
 // ByRoutePlatform orders the results by the route_platform field.
 func ByRoutePlatform(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRoutePlatform, opts...).ToFunc()
+}
+
+// ByNaturalRevertEnabled orders the results by the natural_revert_enabled field.
+func ByNaturalRevertEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNaturalRevertEnabled, opts...).ToFunc()
 }
 
 // ByMaxRateMultiplier orders the results by the max_rate_multiplier field.

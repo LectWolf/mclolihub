@@ -21,6 +21,11 @@ type Group struct {
 	Description    string
 	Platform       string
 	RateMultiplier float64
+	// Dynamic routing annotations are filled for the request-local candidate list.
+	// They are not persisted or exposed as normal group configuration.
+	RouteEffectiveMultiplier float64
+	RouteRealTTFTP50MS       int
+	RouteProbeTTFTMS         int
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
 	PeakRateEnabled    bool
