@@ -97,6 +97,10 @@ const { t, locale } = useI18n()
 const appStore = useAppStore()
 const items = ref<GroupHealthItem[]>([])
 const loading = ref(false)
+type GroupHealthPanelState = 'loading' | 'available' | 'empty' | 'error'
+const emit = defineEmits<{
+  (event: 'state', state: GroupHealthPanelState): void
+}>()
 type SortKey = 'status' | 'rate_multiplier' | 'real_ttft_p50_ms' | 'probe_ttft_ms' | 'real_availability_6h'
 
 const sortKey = ref<SortKey>('status')
@@ -109,13 +113,18 @@ async function reload() {
   const next = new AbortController()
   controller = next
   loading.value = true
+  emit('state', 'loading')
   try {
     const result = await listGroupHealth(next.signal)
-    if (!next.signal.aborted) items.value = result.items || []
+    if (!next.signal.aborted) {
+      items.value = result.items || []
+      emit('state', items.value.length > 0 ? 'available' : 'empty')
+    }
   } catch (error) {
     const e = error as { name?: string; code?: string }
     if (e?.name !== 'AbortError' && e?.name !== 'CanceledError' && e?.code !== 'ERR_CANCELED') {
       appStore.showError(extractApiErrorMessage(error, t('groupHealth.loadError')))
+      emit('state', 'error')
     }
   } finally {
     if (controller === next) loading.value = false

@@ -10,7 +10,7 @@
       @refresh="manualReload"
     />
 
-    <GroupHealthPanel class="mx-4 mb-6 sm:mx-6" />
+    <GroupHealthPanel class="mx-4 mb-6 sm:mx-6" @state="handleGroupHealthState" />
 
     <MonitorCardGrid
       :items="items"
@@ -18,6 +18,7 @@
       :countdown-seconds="countdown"
       :loading="loading"
       :detail-cache="detailCache"
+      :suppress-empty="groupHealthState !== 'empty'"
       @card-click="openDetail"
     />
 
@@ -62,6 +63,8 @@ const currentWindow = ref<MonitorWindow>('7d')
 const detailCache = reactive<Record<number, UserMonitorDetail>>({})
 const showDetail = ref(false)
 const detailTarget = ref<UserMonitorView | null>(null)
+type GroupHealthPanelState = 'loading' | 'available' | 'empty' | 'error'
+const groupHealthState = ref<GroupHealthPanelState>('loading')
 
 let abortController: AbortController | null = null
 
@@ -87,6 +90,10 @@ const overallStatus = computed<OverallStatus>(() => {
 const detailTitle = computed(() => {
   return detailTarget.value?.name || t('channelStatus.detailTitle')
 })
+
+function handleGroupHealthState(state: GroupHealthPanelState) {
+  groupHealthState.value = state
+}
 
 // ── Loaders ──
 async function reload(silent = false) {
