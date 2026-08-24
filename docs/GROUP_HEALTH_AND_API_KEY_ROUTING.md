@@ -90,7 +90,7 @@ OpenAI 分组优先使用 Responses API 发起低 token 探测，并使用流式
 - `fastest`：候选过滤与低价优先相同，但排序使用真实用户 TTFT。
 - `custom`：只使用用户显式添加并排序的分组，不提供额外禁用列表，仍应用最大倍率。
 
-最大倍率比较当前用户的实际生效倍率，包括用户专属分组倍率；未设置最大倍率表示不限制。低价优先和响应优先的“禁用分组”只影响当前 API 密钥，不改变分组本身状态，也不影响用户的其他 API 密钥。
+最大倍率比较当前用户的实际生效倍率，包括用户专属分组倍率；未设置或设为 0 表示不限制。低价优先和响应优先的“禁用分组”只影响当前 API 密钥，不改变分组本身状态，也不影响用户的其他 API 密钥。
 
 动态 API 密钥的协议平台由 `route_platform` 决定：`openai` 只进入 Responses、Chat Completions 等原生 OpenAI 处理路径，`anthropic` 只进入 Messages 路径，`grok` 只进入 Grok 路径。旧的 `auto` 密钥继续沿用其绑定分组的平台，避免跨协议候选混用。动态候选每次请求实时读取当前 active 分组，因此管理员新增更便宜分组后，不需要重新编辑 API 密钥，下一次请求即可参与排序。
 
@@ -123,7 +123,7 @@ OpenAI 分组优先使用 Responses API 发起低 token 探测，并使用流式
 - `group_health_states` 保存每个分组的当前健康快照、最近成功、失败计数、下一次恢复时间和状态原因。
 - `group_health_events` 保存主动探测及影响健康的真实请求结果，用于审计和趋势聚合。
 - `api_keys.route_mode` 保存 `fixed`、`cheapest`、`fastest` 或 `custom`。
-- `api_keys.max_rate_multiplier` 保存该密钥可接受的最大生效倍率；空值表示不限制。
+- `api_keys.max_rate_multiplier` 保存该密钥可接受的最大生效倍率；空值或 0 表示不限制。
 - `api_key_group_preferences` 在低价/响应模式保存用户排除项，在自定义模式保存显式候选和顺序。
 
 现有 `api_keys.group_id` 继续承载固定分组模式，保证升级后所有旧密钥行为不变。

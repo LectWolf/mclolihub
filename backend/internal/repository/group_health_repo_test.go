@@ -9,6 +9,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 func captureSQLMatcher(target *string) sqlmock.QueryMatcherFunc {
@@ -67,11 +69,41 @@ func TestRollingMetricsIncludesEveryHealthStateForWindowReset(t *testing.T) {
 	normalized := strings.ToLower(strings.Join(strings.Fields(query), " "))
 	require.Contains(t, normalized, "$1::timestamptz - interval '6 hours'")
 	require.Contains(t, normalized, "ul.created_at >= $1::timestamptz - interval '6 hours'")
-	require.Contains(t, normalized, "from group_health_states s")
+	require.Contains(t, normalized, "from group_health_states")
 	require.Contains(t, normalized, "left join probe")
 	require.Contains(t, normalized, "left join real_success")
 	require.Contains(t, normalized, "left join account_groups ag")
 	require.Contains(t, normalized, "coalesce(ul.group_id, ag.group_id)")
 	require.NotContains(t, normalized, "full join")
+	require.Contains(t, normalized, "union")
+	require.Contains(t, normalized, "insert into group_health_states")
 	require.NoError(t, mock.ExpectationsWereMet(), fmt.Sprintf("query: %s", query))
+}
+
+func TestObservedUserMetricsFillRealTTFTWithoutHealthState(t *testing.T) {
+	var query string
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(captureSQLMatcher(&query)))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	rows := sqlmock.NewRows([]string{
+		"group_id", "cache_overall", "cache_6h", "real_p50", "real_avg", "real_p95", "real_samples", "real_total",
+	}).AddRow(int64(9), 0.25, 0.4, 320, 350, 480, 4, 900)
+	mock.ExpectQuery("capture").WillReturnRows(rows)
+
+	out := map[int64]service.GroupHealthSnapshot{}
+	err = (&groupHealthStore{db: db}).overlayObservedUserMetrics(context.Background(), []int64{9}, out)
+	require.NoError(t, err)
+	require.Equal(t, 320, out[9].RealTTFTP50MS)
+	require.Equal(t, 350, out[9].RealTTFTAvgMS)
+	require.Equal(t, 480, out[9].RealTTFTP95MS)
+	require.Equal(t, 4, out[9].RealTTFTSamples)
+	require.Equal(t, 900, out[9].RealTotalAvgMS)
+	require.InDelta(t, 0.25, out[9].CacheRateOverall, 0.0001)
+	require.InDelta(t, 0.4, out[9].CacheRate6h, 0.0001)
+	normalized := strings.ToLower(query)
+	require.Contains(t, normalized, "first_token_ms")
+	require.Contains(t, normalized, "usage_logs")
+	require.NotContains(t, normalized, "probe_enabled")
+	require.NotContains(t, normalized, "group_health_states")
+	require.NoError(t, mock.ExpectationsWereMet())
 }

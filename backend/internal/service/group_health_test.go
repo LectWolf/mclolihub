@@ -220,6 +220,20 @@ func TestFixedBypassesHealthButNotMaxRate(t *testing.T) {
 	require.False(t, CanFailover(true, true, true, true))
 }
 
+func TestZeroMaxRateMultiplierIsUnlimited(t *testing.T) {
+	zero := 0.0
+	candidates := []GroupRouteCandidate{
+		{GroupID: 1, RateMultiplier: 1.5, Healthy: true, ProbeEnabled: true},
+		{GroupID: 2, RateMultiplier: .2, Healthy: true, ProbeEnabled: true},
+	}
+	got, err := RankGroupCandidates(RouteModeCheapest, &zero, candidates)
+	require.NoError(t, err)
+	require.Equal(t, []int64{2, 1}, []int64{got[0].GroupID, got[1].GroupID})
+	got, err = RankGroupCandidates(RouteModeFixed, &zero, []GroupRouteCandidate{{GroupID: 3, RateMultiplier: 9}})
+	require.NoError(t, err)
+	require.Equal(t, []int64{3}, []int64{got[0].GroupID})
+}
+
 func TestCanFailoverOnlyBeforeSemanticOutput(t *testing.T) {
 	require.True(t, CanFailover(true, true, false, true))
 	require.False(t, CanFailover(false, true, false, true), "fixed routing must keep its existing account behavior")

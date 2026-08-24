@@ -183,6 +183,14 @@ func routePlatformMatches(scope, platform string) bool {
 	return strings.EqualFold(scope, strings.TrimSpace(platform))
 }
 
+// effectiveMaxRateMultiplier treats a missing or zero max rate as unlimited.
+func effectiveMaxRateMultiplier(maxRate *float64) *float64 {
+	if maxRate == nil || *maxRate == 0 {
+		return nil
+	}
+	return maxRate
+}
+
 // RankGroupCandidates applies health, disabled and max-rate gates, then deterministically sorts candidates.
 func RankGroupCandidates(mode string, maxRate *float64, candidates []GroupRouteCandidate) ([]GroupRouteCandidate, error) {
 	if err := ValidateRouteMode(mode); err != nil {
@@ -191,6 +199,7 @@ func RankGroupCandidates(mode string, maxRate *float64, candidates []GroupRouteC
 	if maxRate != nil && (math.IsNaN(*maxRate) || math.IsInf(*maxRate, 0) || *maxRate < 0) {
 		return nil, errors.New("max rate multiplier must be finite and non-negative")
 	}
+	maxRate = effectiveMaxRateMultiplier(maxRate)
 	out := make([]GroupRouteCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		if maxRate != nil && candidate.RateMultiplier > *maxRate {

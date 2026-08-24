@@ -317,8 +317,14 @@ func (r *groupHealthStore) UpdateRollingMetrics(ctx context.Context, now time.Ti
 	), real_failure AS (
 		 SELECT group_id,COUNT(*) AS failures FROM group_health_events
 		 WHERE is_probe IS FALSE AND success IS FALSE AND observed_at >= $1::timestamptz - interval '6 hours' GROUP BY group_id
+	), group_ids AS (
+		 SELECT group_id FROM group_health_states
+		 UNION
+		 SELECT group_id FROM real_success WHERE group_id IS NOT NULL
+		 UNION
+		 SELECT group_id FROM probe
 	), metrics AS (
-		 SELECT s.group_id,
+		 SELECT ids.group_id,
 		  COALESCE(p.availability,0) AS probe_availability,
 		  COALESCE(p.avg_ttft,0) AS probe_avg_ttft,
 		  COALESCE(p.p95_ttft,0) AS probe_p95_ttft,
@@ -329,18 +335,30 @@ func (r *groupHealthStore) UpdateRollingMetrics(ctx context.Context, now time.Ti
 		  COALESCE(rs.successes,0) AS real_samples,
 		  COALESCE(rs.avg_total,0) AS real_avg_total,
 		  COALESCE(rf.failures,0) AS real_failures
-		 FROM group_health_states s
-		 LEFT JOIN probe p ON p.group_id=s.group_id
-		 LEFT JOIN real_success rs ON rs.group_id=s.group_id
-		 LEFT JOIN real_failure rf ON rf.group_id=s.group_id
+		 FROM group_ids ids
+		 LEFT JOIN probe p ON p.group_id=ids.group_id
+		 LEFT JOIN real_success rs ON rs.group_id=ids.group_id
+		 LEFT JOIN real_failure rf ON rf.group_id=ids.group_id
 	)
-	UPDATE group_health_states s SET
-	 probe_availability_6h=m.probe_availability,probe_ttft_avg_ms=m.probe_avg_ttft,probe_ttft_p95_ms=m.probe_p95_ttft,probe_samples=m.probe_samples,
-	 real_ttft_p50_ms=m.real_p50_ttft,real_ttft_avg_ms=m.real_avg_ttft,real_ttft_p95_ms=m.real_p95_ttft,real_ttft_samples=m.real_samples,real_total_avg_ms=m.real_avg_total,
-	 real_availability_6h=CASE WHEN m.real_samples+m.real_failures=0 THEN 0 ELSE 100.0*m.real_samples/(m.real_samples+m.real_failures) END,
-	 updated_at=NOW()
+	INSERT INTO group_health_states(
+	 group_id,status,reason,
+	 probe_availability_6h,probe_ttft_avg_ms,probe_ttft_p95_ms,probe_samples,
+	 real_ttft_p50_ms,real_ttft_avg_ms,real_ttft_p95_ms,real_ttft_samples,real_total_avg_ms,
+	 real_availability_6h,created_at,updated_at
+	)
+	SELECT m.group_id,'unknown',NULL,
+	 m.probe_availability,m.probe_avg_ttft,m.probe_p95_ttft,m.probe_samples,
+	 m.real_p50_ttft,m.real_avg_ttft,m.real_p95_ttft,m.real_samples,m.real_avg_total,
+	 CASE WHEN m.real_samples+m.real_failures=0 THEN 0 ELSE 100.0*m.real_samples/(m.real_samples+m.real_failures) END,
+	 NOW(),NOW()
 	FROM metrics m
-	WHERE s.group_id=m.group_id`, now)
+	ON CONFLICT (group_id) DO UPDATE SET
+	 probe_availability_6h=EXCLUDED.probe_availability_6h,probe_ttft_avg_ms=EXCLUDED.probe_ttft_avg_ms,
+	 probe_ttft_p95_ms=EXCLUDED.probe_ttft_p95_ms,probe_samples=EXCLUDED.probe_samples,
+	 real_ttft_p50_ms=EXCLUDED.real_ttft_p50_ms,real_ttft_avg_ms=EXCLUDED.real_ttft_avg_ms,
+	 real_ttft_p95_ms=EXCLUDED.real_ttft_p95_ms,real_ttft_samples=EXCLUDED.real_ttft_samples,
+	 real_total_avg_ms=EXCLUDED.real_total_avg_ms,real_availability_6h=EXCLUDED.real_availability_6h,
+	 updated_at=NOW()`, now)
 	return err
 }
 
@@ -356,13 +374,24 @@ func (r *groupHealthStore) LoadMetrics(ctx context.Context, groupIDs []int64) (m
 	for _, state := range states {
 		out[state.GroupID] = groupHealthEntityToSnapshot(state)
 	}
-	// Cache hit rate is derived from usage logs rather than the probe snapshot:
-	// the overall value is historical, while the second ring is a rolling
-	// six-hour view. Keep the same denominator as channel-monitor-v2.
+	if err := r.overlayObservedUserMetrics(ctx, groupIDs, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// overlayObservedUserMetrics fills cache hit rates and real-user TTFT from
+// usage_logs. Probe snapshots only exist after a group has been probed, but
+// observed user performance is independent of that switch.
+func (r *groupHealthStore) overlayObservedUserMetrics(ctx context.Context, groupIDs []int64, out map[int64]service.GroupHealthSnapshot) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
 	rows, err := r.db.QueryContext(ctx, `
 		WITH grouped_usage AS (
 			SELECT COALESCE(ul.group_id, ag.group_id) AS group_id,
-			       ul.created_at, ul.input_tokens, ul.cache_creation_tokens, ul.cache_read_tokens
+			       ul.created_at, ul.input_tokens, ul.cache_creation_tokens, ul.cache_read_tokens,
+			       ul.first_token_ms, ul.duration_ms
 			FROM usage_logs ul
 			LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
 			WHERE COALESCE(ul.group_id, ag.group_id) = ANY($1)
@@ -370,28 +399,37 @@ func (r *groupHealthStore) LoadMetrics(ctx context.Context, groupIDs []int64) (m
 		SELECT group_id,
 		       COALESCE(SUM(cache_read_tokens)::float8 / NULLIF(SUM(input_tokens + cache_creation_tokens + cache_read_tokens), 0), 0),
 		       COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours')::float8 /
-		                NULLIF(SUM(input_tokens + cache_creation_tokens + cache_read_tokens) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours'), 0), 0)
+		                NULLIF(SUM(input_tokens + cache_creation_tokens + cache_read_tokens) FILTER (WHERE created_at >= NOW() - INTERVAL '6 hours'), 0), 0),
+		       COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL AND created_at >= NOW() - INTERVAL '6 hours'), 0)::int,
+		       COALESCE(AVG(first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL AND created_at >= NOW() - INTERVAL '6 hours'), 0)::int,
+		       COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL AND created_at >= NOW() - INTERVAL '6 hours'), 0)::int,
+		       COUNT(*) FILTER (WHERE first_token_ms IS NOT NULL AND created_at >= NOW() - INTERVAL '6 hours')::int,
+		       COALESCE(AVG(duration_ms) FILTER (WHERE first_token_ms IS NOT NULL AND created_at >= NOW() - INTERVAL '6 hours'), 0)::int
 		FROM grouped_usage
 		GROUP BY group_id`, pq.Array(groupIDs))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var groupID int64
 		var overall, recent float64
-		if err := rows.Scan(&groupID, &overall, &recent); err != nil {
-			return nil, err
+		var p50, avg, p95, samples, total int
+		if err := rows.Scan(&groupID, &overall, &recent, &p50, &avg, &p95, &samples, &total); err != nil {
+			return err
 		}
 		item := out[groupID]
+		item.GroupID = groupID
 		item.CacheRateOverall = overall
 		item.CacheRate6h = recent
+		item.RealTTFTP50MS = p50
+		item.RealTTFTAvgMS = avg
+		item.RealTTFTP95MS = p95
+		item.RealTTFTSamples = samples
+		item.RealTotalAvgMS = total
 		out[groupID] = item
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return rows.Err()
 }
 
 func (r *groupHealthStore) LoadTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]service.GroupHealthTrendBucket, error) {

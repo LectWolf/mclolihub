@@ -158,4 +158,39 @@ describe('GroupHealthPanel', () => {
 
     wrapper.unmount()
   })
+
+  it('shows observed user TTFT even when probing is disabled', async () => {
+    listGroupHealth.mockResolvedValue({
+      window_hours: 12,
+      bucket_minutes: 10,
+      items: [{
+        group_id: 9,
+        name: 'No Probe Group',
+        platform: 'openai',
+        rate_multiplier: 0.2,
+        probe_enabled: false,
+        probe_model: '',
+        status: 'not_enabled',
+        probe_ttft_ms: 0,
+        real_ttft_p50_ms: 812,
+        real_ttft_avg_ms: 900,
+        real_ttft_p95_ms: 1100,
+        real_ttft_samples: 6,
+        cache_rate_overall: 0,
+        cache_rate_6h: 0,
+        trend: [],
+      }],
+    })
+
+    const wrapper = mount(GroupHealthPanel, {
+      global: { stubs: { Icon: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('812 ms')
+    expect(wrapper.text()).toContain('groupHealth.statuses.not_enabled')
+    expect(wrapper.text()).toContain('groupHealth.notEnabled')
+
+    wrapper.unmount()
+  })
 })

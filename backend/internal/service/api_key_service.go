@@ -219,7 +219,7 @@ func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) 
 			eligible = false
 			reason = "disabled_by_api_key"
 		}
-		if key.MaxRateMultiplier != nil && rate > *key.MaxRateMultiplier {
+		if maxRate := effectiveMaxRateMultiplier(key.MaxRateMultiplier); maxRate != nil && rate > *maxRate {
 			eligible = false
 			reason = "max_rate_exceeded"
 		}
@@ -283,7 +283,7 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 				rate = *custom
 			}
 		}
-		if key.MaxRateMultiplier != nil && rate > *key.MaxRateMultiplier {
+		if maxRate := effectiveMaxRateMultiplier(key.MaxRateMultiplier); maxRate != nil && rate > *maxRate {
 			return nil, infraerrors.Forbidden("API_KEY_MAX_RATE_EXCEEDED", "fixed group exceeds API key max rate multiplier")
 		}
 		return []Group{*key.Group}, nil
