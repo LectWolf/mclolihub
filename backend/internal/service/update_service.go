@@ -792,6 +792,9 @@ func compareNumericVersions(current, latest string, segmentCount int) int {
 
 func parseNumericVersion(v string, segmentCount int) ([]int, bool) {
 	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if idx := strings.IndexByte(v, '-'); idx != -1 {
+		v = v[:idx]
+	}
 	parts := strings.Split(v, ".")
 	if len(parts) < 3 || len(parts) > segmentCount {
 		return nil, false
