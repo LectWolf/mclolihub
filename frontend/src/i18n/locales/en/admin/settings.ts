@@ -34,6 +34,9 @@ export default {
           showQuota: 'Show channel usage/balance to users',
           showQuotaHint:
             'When on, quota-mode channel monitors expose the linked account usage windows/balance on the user Channel Status page. Disabled by default; admins always see it.',
+          hideGroupStatus: 'Hide group channel status from users',
+          hideGroupStatusHint:
+            'When on, the user Channel Status page omits the group health panel. Background probing and routing keep running. Admin group pages and API key views are unchanged.',
         },
         availableChannels: {
           title: 'Available Channels',

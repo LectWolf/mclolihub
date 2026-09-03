@@ -116,6 +116,27 @@ func TestSettingService_ChannelMonitorHideThroughputDefaultsToPrivate(t *testing
 	}
 }
 
+func TestSettingService_ChannelMonitorHideGroupStatusFailsClosed(t *testing.T) {
+	missingRuntime := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{}).GetChannelMonitorRuntime(context.Background())
+	require.False(t, missingRuntime.HideGroupStatus)
+	missingPublic, err := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{}).
+		GetPublicSettings(context.Background())
+	require.NoError(t, err)
+	require.False(t, missingPublic.ChannelMonitorHideGroupStatus)
+
+	runtime := NewSettingService(&settingPublicRepoStub{values: map[string]string{
+		SettingKeyChannelMonitorHideGroupStatus: "true",
+	}}, &config.Config{}).GetChannelMonitorRuntime(context.Background())
+	require.True(t, runtime.HideGroupStatus)
+
+	for _, value := range []string{"false", "TRUE", "1", "yes", "on", "garbage"} {
+		rt := NewSettingService(&settingPublicRepoStub{values: map[string]string{
+			SettingKeyChannelMonitorHideGroupStatus: value,
+		}}, &config.Config{}).GetChannelMonitorRuntime(context.Background())
+		require.False(t, rt.HideGroupStatus, "value=%q", value)
+	}
+}
+
 func TestSettingService_ChannelMonitorShowQuotaFailsClosed(t *testing.T) {
 	// 缺省（迁移插入 'false' / 老库无行）一律不展示。
 	missingRuntime := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{}).GetChannelMonitorRuntime(context.Background())

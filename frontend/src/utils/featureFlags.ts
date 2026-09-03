@@ -202,3 +202,9 @@ export function isChannelMonitorQuotaVisible(): boolean {
   const appStore = useAppStore()
   return appStore.cachedPublicSettings?.channel_monitor_show_quota === true
 }
+
+/** Hide the group-health panel on user channel status. Probing still runs. */
+export function isChannelMonitorGroupStatusHidden(): boolean {
+  const appStore = useAppStore()
+  return appStore.cachedPublicSettings?.channel_monitor_hide_group_status === true
+}

@@ -34,6 +34,9 @@ export default {
           showQuota: '向用户展示渠道用量/余额',
           showQuotaHint:
             '开启后，配额模式的渠道监控会在用户端渠道状态页展示关联账号的用量滚动窗口/余额。默认关闭；管理员始终可见。',
+          hideGroupStatus: '对用户隐藏分组渠道状态',
+          hideGroupStatusHint:
+            '开启后用户端渠道状态页不再展示分组健康面板，后台探测与调度仍照常运行。管理员分组页和密钥页不受影响。',
         },
         availableChannels: {
           title: '可用渠道',

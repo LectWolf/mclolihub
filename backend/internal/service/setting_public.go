@@ -232,6 +232,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
 		SettingKeyChannelMonitorHideThroughput,
 		SettingKeyChannelMonitorShowQuota,
+		SettingKeyChannelMonitorHideGroupStatus,
 		SettingKeyAvailableChannelsEnabled,
 		SettingKeyModelPlazaEnabled,
 		SettingKeyModelPlazaRequireAuth,
@@ -358,6 +359,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorDefaultIntervalSeconds: parseChannelMonitorInterval(settings[SettingKeyChannelMonitorDefaultIntervalSeconds]),
 		ChannelMonitorHideThroughput:         !isFalseSettingValue(settings[SettingKeyChannelMonitorHideThroughput]),
 		ChannelMonitorShowQuota:              settings[SettingKeyChannelMonitorShowQuota] == "true",
+		ChannelMonitorHideGroupStatus:        settings[SettingKeyChannelMonitorHideGroupStatus] == "true",
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
 
@@ -430,6 +432,9 @@ type ChannelMonitorRuntime struct {
 	// snapshots; otherwise the user handler strips them server-side.
 	// Parsed fail-closed (only literal "true" enables). Admin always sees them.
 	ShowQuota bool
+	// HideGroupStatus: when true, the user channel status page omits the group
+	// health panel. Probing keeps running. Parsed fail-closed.
+	HideGroupStatus bool
 }
 
 // ActiveProbesAllowed reports whether V1 active provider probes may run.
@@ -459,6 +464,7 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
 		SettingKeyChannelMonitorHideThroughput,
 		SettingKeyChannelMonitorShowQuota,
+		SettingKeyChannelMonitorHideGroupStatus,
 	})
 	if err != nil {
 		return ChannelMonitorRuntime{
@@ -474,6 +480,7 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 		DefaultIntervalSeconds: parseChannelMonitorInterval(vals[SettingKeyChannelMonitorDefaultIntervalSeconds]),
 		HideThroughput:         !isFalseSettingValue(vals[SettingKeyChannelMonitorHideThroughput]),
 		ShowQuota:              vals[SettingKeyChannelMonitorShowQuota] == "true",
+		HideGroupStatus:        vals[SettingKeyChannelMonitorHideGroupStatus] == "true",
 	}
 }
 
@@ -618,14 +625,15 @@ type PublicSettingsInjectionPayload struct {
 	ChannelMonitorHideThroughput bool `json:"channel_monitor_hide_throughput"`
 	// ChannelMonitorShowQuota gates the user-facing quota/balance display on
 	// monitors; fail-closed (absent/false = hidden). Admin UI always shows it.
-	ChannelMonitorShowQuota    bool `json:"channel_monitor_show_quota"`
-	AvailableChannelsEnabled   bool `json:"available_channels_enabled"`
-	ModelPlazaEnabled          bool `json:"model_plaza_enabled"`
-	ModelPlazaRequireAuth      bool `json:"model_plaza_require_auth"`
-	PluginManagementEnabled    bool `json:"plugin_management_enabled"`
-	AffiliateEnabled           bool `json:"affiliate_enabled"`
-	RiskControlEnabled         bool `json:"risk_control_enabled"`
-	AllowUserViewErrorRequests bool `json:"allow_user_view_error_requests"`
+	ChannelMonitorShowQuota       bool `json:"channel_monitor_show_quota"`
+	ChannelMonitorHideGroupStatus bool `json:"channel_monitor_hide_group_status"`
+	AvailableChannelsEnabled      bool `json:"available_channels_enabled"`
+	ModelPlazaEnabled             bool `json:"model_plaza_enabled"`
+	ModelPlazaRequireAuth         bool `json:"model_plaza_require_auth"`
+	PluginManagementEnabled       bool `json:"plugin_management_enabled"`
+	AffiliateEnabled              bool `json:"affiliate_enabled"`
+	RiskControlEnabled            bool `json:"risk_control_enabled"`
+	AllowUserViewErrorRequests    bool `json:"allow_user_view_error_requests"`
 }
 
 // GetPublicSettingsForInjection returns public settings in a format suitable for HTML injection.
@@ -700,6 +708,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		ChannelMonitorHideThroughput:         settings.ChannelMonitorHideThroughput,
 		ChannelMonitorShowQuota:              settings.ChannelMonitorShowQuota,
+		ChannelMonitorHideGroupStatus:        settings.ChannelMonitorHideGroupStatus,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
 		ModelPlazaEnabled:                    settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:                settings.ModelPlazaRequireAuth,

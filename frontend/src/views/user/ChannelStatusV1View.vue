@@ -10,7 +10,7 @@
       @refresh="manualReload"
     />
 
-    <GroupHealthPanel class="mx-4 mb-6 sm:mx-6" @state="handleGroupHealthState" />
+    <GroupHealthPanel v-if="showGroupHealth" class="mx-4 mb-6 sm:mx-6" @state="handleGroupHealthState" />
 
     <MonitorCardGrid
       :items="items"
@@ -18,7 +18,7 @@
       :countdown-seconds="countdown"
       :loading="loading"
       :detail-cache="detailCache"
-      :suppress-empty="groupHealthState !== 'empty'"
+      :suppress-empty="showGroupHealth && groupHealthState !== 'empty'"
       @card-click="openDetail"
     />
 
@@ -51,6 +51,7 @@ import MonitorCardGrid from '@/components/user/monitor/MonitorCardGrid.vue'
 import MonitorDetailDialog from '@/components/user/MonitorDetailDialog.vue'
 import GroupHealthPanel from '@/components/user/GroupHealthPanel.vue'
 import { DEFAULT_INTERVAL_SECONDS, STATUS_OPERATIONAL } from '@/constants/channelMonitor'
+import { isChannelMonitorGroupStatusHidden } from '@/utils/featureFlags'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { t } = useI18n()
@@ -65,6 +66,7 @@ const showDetail = ref(false)
 const detailTarget = ref<UserMonitorView | null>(null)
 type GroupHealthPanelState = 'loading' | 'available' | 'empty' | 'error'
 const groupHealthState = ref<GroupHealthPanelState>('loading')
+const showGroupHealth = computed(() => !isChannelMonitorGroupStatusHidden())
 
 let abortController: AbortController | null = null
 

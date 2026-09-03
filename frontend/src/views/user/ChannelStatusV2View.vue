@@ -193,7 +193,7 @@
         </div>
       </section>
 
-      <GroupHealthPanel @state="handleGroupHealthState" />
+      <GroupHealthPanel v-if="showGroupHealth" @state="handleGroupHealthState" />
 
       <!-- Overview KPI: success · TTFT · tokens/s(optional) · cache · (+ RPM when throughput visible) -->
       <section
@@ -437,7 +437,7 @@
           </div>
 
           <div v-if="tabLoading" class="empty-state py-10 text-sm text-gray-400">{{ t('common.loading') }}</div>
-          <div v-else-if="activeRowsEmpty && !hasChannelData && groupHealthState === 'empty'" class="empty-state py-10">
+          <div v-else-if="activeRowsEmpty && !hasChannelData && groupHealthEmpty" class="empty-state py-10">
             <p class="empty-state-title text-base">
               {{
                 bootstrapActive
@@ -476,7 +476,7 @@ import RelayPulseMatrix from '@/features/channel-monitor-v2/RelayPulseMatrix.vue
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { isChannelMonitorThroughputHidden } from '@/utils/featureFlags'
+import { isChannelMonitorGroupStatusHidden, isChannelMonitorThroughputHidden } from '@/utils/featureFlags'
 import * as api from '@/api/channelMonitorV2'
 import type {
   HealthState,
@@ -563,6 +563,8 @@ const tabLoading = ref(false)
 const refreshing = ref(false)
 type GroupHealthPanelState = 'loading' | 'available' | 'empty' | 'error'
 const groupHealthState = ref<GroupHealthPanelState>('loading')
+const showGroupHealth = computed(() => !isChannelMonitorGroupStatusHidden())
+const groupHealthEmpty = computed(() => !showGroupHealth.value || groupHealthState.value === 'empty')
 const expandedErrors = ref(new Set<string>())
 let controller: AbortController | null = null
 let sequence = 0

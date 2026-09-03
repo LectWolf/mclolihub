@@ -485,6 +485,12 @@ const (
 	// keep the full snapshots regardless of this flag.
 	SettingKeyChannelMonitorShowQuota = "channel_monitor_show_quota"
 
+	// SettingKeyChannelMonitorHideGroupStatus hides the group-health panel on
+	// the user-facing channel status page. Probing and routing keep running;
+	// admin group pages and API-key routing badges are unaffected.
+	// Default false (show). Parsed fail-closed: only the literal "true" hides it.
+	SettingKeyChannelMonitorHideGroupStatus = "channel_monitor_hide_group_status"
+
 	// SettingKeyGrokDefaultTextModel is the fallback Grok text model for empty
 	// request models and built-in Grok aliases (e.g. "grok" → this id). Default grok-4.5.
 	SettingKeyGrokDefaultTextModel = "grok_default_text_model"
