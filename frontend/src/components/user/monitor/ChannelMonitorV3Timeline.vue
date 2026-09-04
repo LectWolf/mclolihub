@@ -60,13 +60,22 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { MonitorMatrixBucket } from '@/api/channelMonitorV2'
 import { availabilityBarClass, formatMonitorMs, formatMonitorPercent } from '@/features/channel-monitor-v2/monitorFormat'
+import {
+  buildV3TimelineSlots,
+  type V3TimelineProbeBucket,
+  type V3TimelineSlot,
+} from '@/features/channel-monitor-v2/v3CardPresentation'
 
 const props = withDefaults(defineProps<{
   buckets?: MonitorMatrixBucket[]
+  probeBuckets?: V3TimelineProbeBucket[]
+  slotBucketMs?: number
   countdownSeconds: number
   length?: number
 }>(), {
   buckets: () => [],
+  probeBuckets: () => [],
+  slotBucketMs: 5 * 60 * 1000,
   length: 18,
 })
 
@@ -132,6 +141,13 @@ const STATUS_STYLE = {
   unknown: { colorClass: 'bg-gray-300 dark:bg-dark-600', heightPct: 15 },
 } as const
 
+const PROBE_STYLE = {
+  healthy: { colorClass: 'bg-sky-500', heightPct: 100 },
+  warning: { colorClass: 'bg-amber-400', heightPct: 65 },
+  critical: { colorClass: 'bg-red-500', heightPct: 35 },
+  unknown: { colorClass: 'bg-gray-300 dark:bg-dark-600', heightPct: 15 },
+} as const
+
 interface TimelineBar {
   key: string
   colorClass: string
@@ -139,7 +155,7 @@ interface TimelineBar {
   title: string
 }
 
-function formatBucketTime(value: string) {
+function formatBucketTime(value: number | string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '-'
   return new Intl.DateTimeFormat(locale.value || undefined, {
@@ -147,37 +163,57 @@ function formatBucketTime(value: string) {
   }).format(date)
 }
 
-const displayBars = computed<TimelineBar[]>(() => {
-  const real = [...props.buckets]
-    .sort((a, b) => Date.parse(a.bucket_start) - Date.parse(b.bucket_start))
-    .slice(-props.length)
-  const bars: TimelineBar[] = Array.from({ length: Math.max(0, props.length - real.length) }, (_, index) => ({
-    key: `empty-${index}`,
-    ...STATUS_STYLE.unknown,
-    title: '',
-  }))
-
-  for (const bucket of real) {
-    const state = bucket.health.overall === 'healthy' || bucket.health.overall === 'warning' || bucket.health.overall === 'critical'
-      ? bucket.health.overall
-      : 'unknown'
-    const availabilityPercent = (1 - bucket.metrics.error_rate) * 100
-    const style = {
-      ...(STATUS_STYLE[state]),
-      colorClass: availabilityBarClass(availabilityPercent),
-    }
-    bars.push({
-      key: bucket.bucket_start,
-      ...style,
-      title: t('channelMonitorV3.timelineTooltip', {
-        time: formatBucketTime(bucket.bucket_start),
-        availability: formatMonitorPercent(1 - bucket.metrics.error_rate, locale.value || 'zh-CN'),
-        cache: formatMonitorPercent(bucket.metrics.cache_rate, locale.value || 'zh-CN'),
-        ttft: formatMonitorMs(bucket.metrics.ttft.p50_ms),
-      }),
+function slotTitle(slot: V3TimelineSlot): string {
+  if (slot.source === 'traffic' && slot.traffic) {
+    return t('channelMonitorV3.timelineTooltip', {
+      time: formatBucketTime(slot.startMs),
+      availability: formatMonitorPercent(1 - slot.traffic.errorRate, locale.value || 'zh-CN'),
+      cache: formatMonitorPercent(slot.traffic.cacheRate, locale.value || 'zh-CN'),
+      ttft: formatMonitorMs(slot.traffic.ttftP50Ms),
     })
   }
-  return bars
+  if (slot.source === 'probe' && slot.probe) {
+    return t('channelMonitorV3.probeTimelineTooltip', {
+      time: formatBucketTime(slot.startMs),
+      success: slot.probe.success,
+      failure: slot.probe.failure,
+      ttft: formatMonitorMs(slot.probe.ttftMs),
+    })
+  }
+  return ''
+}
+
+function slotStyle(slot: V3TimelineSlot) {
+  if (slot.source === 'traffic' && slot.traffic) {
+    return {
+      ...STATUS_STYLE[slot.state],
+      colorClass: availabilityBarClass((1 - slot.traffic.errorRate) * 100),
+    }
+  }
+  if (slot.source === 'probe') return PROBE_STYLE[slot.state]
+  return STATUS_STYLE.unknown
+}
+
+const displayBars = computed<TimelineBar[]>(() => {
+  const slots = buildV3TimelineSlots({
+    nowMs: Date.now(),
+    length: props.length,
+    bucketMs: props.slotBucketMs,
+    trafficBuckets: (props.buckets ?? []).map(bucket => ({
+      startMs: Date.parse(bucket.bucket_start),
+      requestCount: bucket.metrics.request_count,
+      errorRate: bucket.metrics.error_rate,
+      cacheRate: bucket.metrics.cache_rate,
+      ttftP50Ms: bucket.metrics.ttft.p50_ms,
+      overall: bucket.health.overall,
+    })).filter(bucket => Number.isFinite(bucket.startMs)),
+    probeBuckets: props.probeBuckets ?? [],
+  })
+  return slots.map(slot => ({
+    key: String(slot.startMs),
+    ...slotStyle(slot),
+    title: slotTitle(slot),
+  }))
 })
 
 const tooltipStyle = computed(() => ({

@@ -34,8 +34,10 @@
           :key="row.group_id ?? `${row.platform}:${row.group_name ?? ''}`"
           :row="row"
           :user-rate-multiplier="getUserRateMultiplier(row.group_id)"
+          :group-meta="getGroupMeta(row.group_id)"
           :countdown-seconds="countdownSeconds"
           :timeline-length="timelineLength"
+          :timeline-bucket-ms="timelineBucketMs"
         />
       </div>
     </div>
@@ -51,11 +53,13 @@ import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import * as api from '@/api/channelMonitorV2'
+import { listGroupHealth, type GroupHealthItem } from '@/api/groupHealth'
 import userGroupsAPI from '@/api/groups'
 import type { MonitorFilter, MonitorMatrixResponse, MonitorRange, MonitorSnapshot } from '@/api/channelMonitorV2'
 import type { Group } from '@/types'
 import ChannelMonitorV3Card from '@/components/user/monitor/ChannelMonitorV3Card.vue'
 import { formatMonitorPercent } from '@/features/channel-monitor-v2/monitorFormat'
+import type { V3CardGroupMeta } from '@/features/channel-monitor-v2/v3CardPresentation'
 
 const { t, locale } = useI18n()
 const appStore = useAppStore()
@@ -71,6 +75,7 @@ const matrix = ref<MonitorMatrixResponse | null>(null)
 const loading = ref(false)
 const refreshing = ref(false)
 const userGroupRates = ref<Record<number, number>>({})
+const groupMetaById = ref<Record<number, V3CardGroupMeta>>({})
 const countdownSeconds = ref(0)
 let controller: AbortController | null = null
 let refreshTimer: number | null = null
@@ -82,6 +87,11 @@ const rows = computed(() => [...(matrix.value?.items ?? [])]
   .filter(row => row.group_id != null && row.group_id > 0)
   .sort((a, b) => (a.group_id ?? 0) - (b.group_id ?? 0)))
 const timelineLength = computed(() => ({ '90m': 18, '24h': 24, '7d': 14, '30d': 30 })[filter.value.range])
+const timelineBucketMs = computed(() => {
+  const seconds = snapshot.value?.coverage.bucket_seconds
+  if (seconds && seconds > 0) return seconds * 1000
+  return ({ '90m': 5 * 60, '24h': 60 * 60, '7d': 12 * 60 * 60, '30d': 24 * 60 * 60 })[filter.value.range] * 1000
+})
 const latestSnapshotMetrics = computed(() => {
   const trend = [...(snapshot.value?.trend ?? [])]
     .filter(point => point.bucket_start && point.metrics)
@@ -99,15 +109,60 @@ function getUserRateMultiplier(groupId?: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function getGroupMeta(groupId?: number): V3CardGroupMeta | null {
+  if (!groupId) return null
+  return groupMetaById.value[groupId] ?? null
+}
+
+function mergeGroupMeta(groups: Group[], healthItems: GroupHealthItem[], probeBucketMs: number) {
+  const healthById = Object.fromEntries(healthItems.map(item => [item.group_id, item]))
+  const next: Record<number, V3CardGroupMeta> = {}
+  const toProbeBuckets = (item?: GroupHealthItem) => (item?.trend || [])
+    .filter(bucket => bucket.probe_success > 0 || bucket.probe_failure > 0)
+    .map(bucket => ({
+      startMs: Date.parse(bucket.started_at),
+      durationMs: probeBucketMs,
+      success: bucket.probe_success,
+      failure: bucket.probe_failure,
+      ttftMs: bucket.probe_ttft_ms,
+    }))
+    .filter(bucket => Number.isFinite(bucket.startMs))
+  for (const group of groups) {
+    const health = healthById[group.id]
+    next[group.id] = {
+      description: group.description,
+      probeEnabled: Boolean(health?.probe_enabled ?? group.probe_enabled),
+      probeStatus: health?.status ?? null,
+      probeTtftMs: health?.probe_ttft_ms ?? null,
+      probeBucketMs,
+      probeBuckets: toProbeBuckets(health),
+    }
+  }
+  for (const item of healthItems) {
+    if (next[item.group_id]) continue
+    next[item.group_id] = {
+      description: null,
+      probeEnabled: item.probe_enabled,
+      probeStatus: item.status,
+      probeTtftMs: item.probe_ttft_ms,
+      probeBucketMs,
+      probeBuckets: toProbeBuckets(item),
+    }
+  }
+  groupMetaById.value = next
+}
+
 async function loadUserGroupRates() {
   try {
-    const [groups, customRates] = await Promise.all([
+    const [groups, customRates, health] = await Promise.all([
       userGroupsAPI.getAvailable(),
       userGroupsAPI.getUserGroupRates(),
-    ])
+      listGroupHealth().catch(() => ({ items: [] as GroupHealthItem[], window_hours: 12, bucket_minutes: 10 })),
     userGroupRates.value = Object.fromEntries(
       (groups as Group[]).map(group => [group.id, customRates[group.id] ?? group.rate_multiplier]),
     )
+    const probeBucketMs = Math.max(1, (health.bucket_minutes || 10) * 60 * 1000)
+    mergeGroupMeta(groups as Group[], health.items || [], probeBucketMs)
   } catch (error) {
     // Monitoring remains usable when the optional pricing endpoint is unavailable.
     console.warn('Failed to load channel monitor group rates', error)
@@ -115,6 +170,7 @@ async function loadUserGroupRates() {
 }
 
 async function reload(silent = true) {
+  void loadUserGroupRates()
   controller?.abort()
   const request = new AbortController()
   controller = request
@@ -151,7 +207,7 @@ function scheduleRefresh(seconds: number) {
 }
 
 watch(() => filter.value.range, () => void reload(false))
-onMounted(() => { void loadUserGroupRates(); void reload(false) })
+onMounted(() => { void reload(false) })
 onBeforeUnmount(() => {
   controller?.abort()
   if (refreshTimer) window.clearInterval(refreshTimer)
