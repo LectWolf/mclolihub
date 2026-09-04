@@ -166,6 +166,7 @@ type Group struct {
 	ProbeModel                 string                          `json:"probe_model"`
 	ProbeIntervalSeconds       int                             `json:"probe_interval_seconds"`
 	RetryWithinGroupOnFailover bool                            `json:"retry_within_group_on_failover"`
+	SortOrder                  int                             `json:"sort_order"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

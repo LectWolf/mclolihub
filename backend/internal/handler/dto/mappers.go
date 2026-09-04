@@ -236,6 +236,7 @@ func groupFromServiceBase(g *service.Group) Group {
 		ProbeModel:                      g.ProbeModel,
 		ProbeIntervalSeconds:            g.ProbeIntervalSeconds,
 		RetryWithinGroupOnFailover:      g.RetryWithinGroupOnFailover,
+		SortOrder:                       g.SortOrder,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}
