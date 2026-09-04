@@ -158,6 +158,7 @@ async function loadUserGroupRates() {
       userGroupsAPI.getAvailable(),
       userGroupsAPI.getUserGroupRates(),
       listGroupHealth().catch(() => ({ items: [] as GroupHealthItem[], window_hours: 12, bucket_minutes: 10 })),
+    ])
     userGroupRates.value = Object.fromEntries(
       (groups as Group[]).map(group => [group.id, customRates[group.id] ?? group.rate_multiplier]),
     )
