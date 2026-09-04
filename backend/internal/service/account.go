@@ -2,6 +2,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"hash/fnv"
@@ -184,12 +185,7 @@ func (a *Account) EffectiveLoadFactor() int {
 }
 
 func (a *Account) IsSchedulable() bool {
-	if !a.IsActive() || !a.Schedulable {
-		return false
-	}
-	if a.HealthRuntimeStatus == AccountRuntimeProbing ||
-		a.HealthRuntimeStatus == AccountRuntimeUnavailable ||
-		a.HealthRuntimeStatus == AccountRuntimeLegacyFailed {
+	if a == nil || !a.IsActive() || !a.Schedulable {
 		return false
 	}
 	now := time.Now()
@@ -202,13 +198,23 @@ func (a *Account) IsSchedulable() bool {
 	if a.RateLimitResetAt != nil && now.Before(*a.RateLimitResetAt) {
 		return false
 	}
-	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) {
+	if a.TempUnschedulableUntil != nil && now.Before(*a.TempUnschedulableUntil) && !isGroupHealthProbeTempUnschedulable(a, now) {
 		return false
 	}
 	if a.IsAPIKeyOrBedrock() && a.IsQuotaExceeded() {
 		return false
 	}
 	return true
+}
+
+// IsSchedulableForRequest applies ordinary scheduling gates, then optionally
+// hides accounts quarantined by group-health probes. Probe quarantine only
+// applies when the request context enabled the dynamic-routing gate.
+func (a *Account) IsSchedulableForRequest(ctx context.Context) bool {
+	if !a.IsSchedulable() {
+		return false
+	}
+	return !AppliesGroupHealthAccountGate(ctx) || !a.IsBlockedByGroupHealthProbe()
 }
 
 // IsCredentialUsableForShadow 报告本账号(作为某 spark 影子的母账号)的凭据/传输是否可被影子透传使用。

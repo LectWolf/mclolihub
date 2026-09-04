@@ -38,8 +38,9 @@ func TestGroupHealthClaimImmediateProbePersistsTwoMinuteThrottleWithoutMarkingFa
 	require.Contains(t, strings.ToLower(query), "'probing'",
 		"the immediate verification must quarantine the account before the async probe runs")
 	require.Contains(t, strings.ToLower(query), "scheduler_outbox")
-	require.Contains(t, query, "2099-12-31")
+	require.NotContains(t, query, "2099-12-31")
 	require.NotContains(t, query, "9999-12-31")
+	require.NotContains(t, strings.ToLower(query), "temp_unschedulable", "probe quarantine must not pause fixed-group scheduling")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

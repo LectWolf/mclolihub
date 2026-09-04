@@ -198,11 +198,8 @@ func (r *groupHealthStore) SaveAccountHealth(ctx context.Context, state service.
 	if err != nil {
 		return err
 	}
-	switch state.RuntimeStatus {
-	case service.AccountRuntimeActive:
+	if state.RuntimeStatus == service.AccountRuntimeActive {
 		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=NULL, temp_unschedulable_reason=NULL, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL AND temp_unschedulable_reason LIKE 'group_health_probe:%'`, state.AccountID)
-	case service.AccountRuntimeProbing, service.AccountRuntimeUnavailable, service.AccountRuntimeLegacyFailed:
-		_, err = r.db.ExecContext(ctx, `UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '2099-12-31 23:59:59+00', temp_unschedulable_reason=$2, updated_at=NOW() WHERE id=$1 AND status='active' AND deleted_at IS NULL`, state.AccountID, "group_health_probe: "+state.Reason)
 	}
 	if err == nil {
 		_ = enqueueSchedulerOutbox(ctx, r.db, service.SchedulerOutboxEventAccountChanged, &state.AccountID, nil, nil)
@@ -264,13 +261,9 @@ func (r *groupHealthStore) ClaimImmediateProbe(ctx context.Context, accountID, g
 			WHERE account_health_states.runtime_status <> 'balance_insufficient'
 			  AND (account_health_states.last_immediate_probe_at IS NULL OR account_health_states.last_immediate_probe_at <= $3 - $4::interval)
 			RETURNING account_id
-		), updated AS (
-			UPDATE accounts SET temp_unschedulable_until=TIMESTAMPTZ '2099-12-31 23:59:59+00', temp_unschedulable_reason='group_health_probe: immediate verification pending', updated_at=NOW()
-			WHERE id IN (SELECT account_id FROM claimed) AND status='active' AND deleted_at IS NULL
-			RETURNING id
 		)
 		INSERT INTO scheduler_outbox (event_type, account_id, group_id, payload)
-		SELECT 'account_changed', id, NULL, NULL FROM updated`, accountID, groupID, now, fmt.Sprintf("%f seconds", cooldown.Seconds()))
+		SELECT 'account_changed', account_id, NULL, NULL FROM claimed`, accountID, groupID, now, fmt.Sprintf("%f seconds", cooldown.Seconds()))
 	if err != nil {
 		return false, err
 	}

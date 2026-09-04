@@ -521,7 +521,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		clearBinding()
 		return nil, false, nil
 	}
-	if shouldClearStickySession(account, req.RequestedModel) || account.Platform != NormalizeOpenAICompatiblePlatform(req.Platform) || !account.IsOpenAICompatible() || !account.IsSchedulable() {
+	if shouldClearStickySession(account, req.RequestedModel) || account.Platform != NormalizeOpenAICompatiblePlatform(req.Platform) || !account.IsOpenAICompatible() || !account.IsSchedulableForRequest(ctx) {
 		clearBinding()
 		return nil, false, nil
 	}
@@ -1439,7 +1439,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 				continue
 			}
 		}
-		if !account.IsSchedulable() {
+		if !account.IsSchedulableForRequest(ctx) {
 			filterStats.exclude("not_schedulable")
 			continue
 		}

@@ -1,12 +1,52 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"math"
 	"sort"
 	"strings"
 	"time"
 )
+
+type groupHealthAccountGateKey struct{}
+
+// WithGroupHealthAccountGate marks a request so probe-quarantined accounts
+// are excluded from scheduling. Dynamic API-key routing (cheapest / fastest /
+// custom) enables this; fixed single-group keys leave it off.
+func WithGroupHealthAccountGate(ctx context.Context, enabled bool) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, groupHealthAccountGateKey{}, enabled)
+}
+
+// AppliesGroupHealthAccountGate reports whether the current request should
+// hide accounts that group-health probes marked probing or unavailable.
+func AppliesGroupHealthAccountGate(ctx context.Context) bool {
+	enabled, _ := ctx.Value(groupHealthAccountGateKey{}).(bool)
+	return enabled
+}
+
+// IsBlockedByGroupHealthProbe reports whether group-health runtime has taken
+// this account out of dynamic routing. Fixed keys ignore this signal.
+func (a *Account) IsBlockedByGroupHealthProbe() bool {
+	if a == nil {
+		return false
+	}
+	switch a.HealthRuntimeStatus {
+	case AccountRuntimeProbing, AccountRuntimeUnavailable, AccountRuntimeLegacyFailed:
+		return true
+	}
+	return isGroupHealthProbeTempUnschedulable(a, time.Now())
+}
+
+func isGroupHealthProbeTempUnschedulable(a *Account, now time.Time) bool {
+	if a == nil || a.TempUnschedulableUntil == nil || !now.Before(*a.TempUnschedulableUntil) {
+		return false
+	}
+	return strings.HasPrefix(a.TempUnschedulableReason, "group_health_probe:")
+}
 
 // IsGroupPolicyDispatchError reports errors caused by the selected group's
 // protocol policy rather than by an upstream account.  Such errors must not

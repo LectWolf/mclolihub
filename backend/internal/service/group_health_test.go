@@ -182,11 +182,21 @@ func TestDeriveGroupHealth(t *testing.T) {
 
 func TestHealthRuntimeBlocksUserSchedulingUntilProbeSuccess(t *testing.T) {
 	account := &Account{Status: StatusActive, Schedulable: true, HealthRuntimeStatus: AccountRuntimeProbing}
-	require.False(t, account.IsSchedulable(), "reaching next_probe_at must not expose a probing account to user traffic")
+	require.True(t, account.IsSchedulable(), "fixed single-group keys keep using probe-quarantined accounts")
+	require.True(t, account.IsSchedulableForRequest(context.Background()), "fixed requests do not apply the probe gate")
+	dynamic := WithGroupHealthAccountGate(context.Background(), true)
+	require.False(t, account.IsSchedulableForRequest(dynamic), "dynamic routing must hide probing accounts")
 	account.HealthRuntimeStatus = AccountRuntimeUnavailable
-	require.False(t, account.IsSchedulable())
+	require.True(t, account.IsSchedulable())
+	require.False(t, account.IsSchedulableForRequest(dynamic))
 	account.HealthRuntimeStatus = AccountRuntimeActive
 	require.True(t, account.IsSchedulable())
+	require.True(t, account.IsSchedulableForRequest(dynamic))
+	future := time.Now().Add(time.Hour)
+	account.TempUnschedulableUntil = &future
+	account.TempUnschedulableReason = "group_health_probe: waiting for recovery probe"
+	require.True(t, account.IsSchedulable(), "legacy probe temp-unsched must not block fixed keys")
+	require.False(t, account.IsSchedulableForRequest(dynamic))
 }
 
 func TestGroupPolicyDispatchErrorDoesNotBecomeHealthFailure(t *testing.T) {

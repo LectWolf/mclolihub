@@ -175,6 +175,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 
 		if cfg.RunMode == config.RunModeSimple {
 			c.Set(string(ContextKeyAPIKey), apiKey)
+			attachAPIKeyRouteContext(c, apiKey)
 			c.Set(string(ContextKeyUser), AuthSubject{
 				UserID:      apiKey.User.ID,
 				Concurrency: apiKey.User.Concurrency,
@@ -273,6 +274,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			c.Set(string(ContextKeySubscription), subscription)
 		}
 		c.Set(string(ContextKeyAPIKey), apiKey)
+		attachAPIKeyRouteContext(c, apiKey)
 		c.Set(string(ContextKeyUser), AuthSubject{
 			UserID:      apiKey.User.ID,
 			Concurrency: apiKey.User.Concurrency,
@@ -338,6 +340,15 @@ func isAsyncImageTaskRead(method, path string) bool {
 		return false
 	}
 	return strings.HasPrefix(path, "/v1/images/tasks/") || strings.HasPrefix(path, "/images/tasks/")
+}
+
+func attachAPIKeyRouteContext(c *gin.Context, apiKey *service.APIKey) {
+	if c == nil || apiKey == nil || c.Request == nil {
+		return
+	}
+	if apiKey.RouteMode != "" && apiKey.RouteMode != service.RouteModeFixed {
+		c.Request = c.Request.WithContext(service.WithGroupHealthAccountGate(c.Request.Context(), true))
+	}
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key
