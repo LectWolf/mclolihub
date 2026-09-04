@@ -9,7 +9,7 @@
           <div class="cursor-help truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ groupLabel }}</div>
           <template #tip>
             <div class="text-[11px] font-semibold">{{ groupLabel }}</div>
-            <div class="mt-1 font-medium leading-relaxed text-slate-200">{{ groupDescription }}</div>
+            <div class="mt-1 whitespace-pre-wrap break-words font-medium leading-relaxed text-slate-200">{{ groupDescription }}</div>
           </template>
         </ChannelMonitorV3HoverTip>
         <div v-else class="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ groupLabel }}</div>
