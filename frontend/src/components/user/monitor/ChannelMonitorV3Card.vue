@@ -5,11 +5,14 @@
         <ProviderIcon :provider="row.platform" :size="20" />
       </span>
       <div class="min-w-0 flex-1">
-        <div
-          class="truncate text-base font-semibold text-gray-900 dark:text-gray-100"
-          :class="groupDescription ? 'cursor-help' : ''"
-          :title="groupDescription"
-        >{{ groupLabel }}</div>
+        <ChannelMonitorV3HoverTip v-if="groupDescription" class="block min-w-0">
+          <div class="cursor-help truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ groupLabel }}</div>
+          <template #tip>
+            <div class="text-[11px] font-semibold">{{ groupLabel }}</div>
+            <div class="mt-1 font-medium leading-relaxed text-slate-200">{{ groupDescription }}</div>
+          </template>
+        </ChannelMonitorV3HoverTip>
+        <div v-else class="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{{ groupLabel }}</div>
         <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
           <span class="rounded-md px-1.5 py-0.5 text-[10px] font-medium" :class="providerBadgeClass(row.platform)">{{ providerLabel(row.platform) }}</span>
           <span class="rounded-md bg-primary-50 px-1.5 py-0.5 font-mono text-[10px] font-medium text-primary-700 dark:bg-dark-700 dark:text-gray-300">{{ t('channelMonitorV3.userRate') }} {{ formattedUserRate }}</span>
@@ -47,7 +50,7 @@
     <ChannelMonitorV3Timeline
       class="mt-auto"
       :buckets="row.buckets"
-      :probe-buckets="groupMeta?.probeBuckets"
+      :probe-buckets="probeBuckets"
       :slot-bucket-ms="timelineBucketMs"
       :countdown-seconds="countdownSeconds"
       :length="timelineLength"
@@ -69,7 +72,9 @@ import {
   type V3CardGroupMeta,
 } from '@/features/channel-monitor-v2/v3CardPresentation'
 import { providerGradient, useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
+import { formatMultiplier } from '@/utils/formatters'
 import ProviderIcon from './ProviderIcon.vue'
+import ChannelMonitorV3HoverTip from './ChannelMonitorV3HoverTip.vue'
 import ChannelMonitorV3Timeline from './ChannelMonitorV3Timeline.vue'
 
 const props = defineProps<{
@@ -91,8 +96,19 @@ const groupDescription = computed(() => {
 const probeEnabled = computed(() => Boolean(props.groupMeta?.probeEnabled))
 const formattedUserRate = computed(() => {
   const value = props.userRateMultiplier
-  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}x` : '-'
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  if (value === 0) return t('channelMonitorV3.freeRate')
+  return `${formatMultiplier(value)}x`
 })
+const probeBuckets = computed(() => (props.row.probe_buckets ?? [])
+  .map(bucket => ({
+    startMs: Date.parse(bucket.bucket_start),
+    durationMs: 10 * 60 * 1000,
+    success: bucket.success,
+    failure: bucket.failure,
+    ttftMs: bucket.ttft_ms,
+  }))
+  .filter(bucket => Number.isFinite(bucket.startMs)))
 const latestBucket = computed(() => [...props.row.buckets]
   .filter(bucket => bucket.bucket_start && bucket.metrics)
   .sort((a, b) => Date.parse(a.bucket_start) - Date.parse(b.bucket_start))
@@ -111,7 +127,7 @@ const timelineSlots = computed(() => buildV3TimelineSlots({
     ttftP50Ms: bucket.metrics.ttft.p50_ms,
     overall: bucket.health.overall,
   })).filter(bucket => Number.isFinite(bucket.startMs)),
-  probeBuckets: props.groupMeta?.probeBuckets ?? [],
+  probeBuckets: probeBuckets.value,
 }))
 const latestSlot = computed(() => latestActiveV3Slot(timelineSlots.value))
 // Cache stays traffic-only. Availability mixes overlapping probe samples into the latest slot.
@@ -129,16 +145,19 @@ const resolvedStatus = computed(() => {
     const fromRate = statusFromAvailabilityRate(slot.availabilityRate)
     if (fromRate) return { status: fromRate, source: slot.source }
   }
+  const latestProbe = probeBuckets.value.at(-1)
   return resolveV3CardStatus({
     trafficOverall: latestHealth.value.overall,
     probeEnabled: probeEnabled.value,
-    probeStatus: props.groupMeta?.probeStatus,
+    probeStatus: latestProbe
+      ? (latestProbe.success > 0 ? 'healthy' : 'unavailable')
+      : props.groupMeta?.probeStatus,
   })
 })
 const resolvedTtft = computed(() => resolveV3CardTtftMs({
   trafficTtftMs: latestMetrics.value.ttft.p50_ms,
   probeEnabled: probeEnabled.value,
-  probeTtftMs: props.groupMeta?.probeTtftMs,
+  probeTtftMs: probeBuckets.value.at(-1)?.ttftMs ?? props.groupMeta?.probeTtftMs,
 }))
 const ttft = computed(() => formatMonitorMs(resolvedTtft.value.ms))
 const ttftTitle = computed(() => resolvedTtft.value.source === 'probe' ? t('channelMonitorV3.probeTtftHint') : undefined)

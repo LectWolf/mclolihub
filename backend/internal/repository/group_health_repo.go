@@ -432,6 +432,50 @@ func (r *groupHealthStore) overlayObservedUserMetrics(ctx context.Context, group
 	return rows.Err()
 }
 
+func (r *groupHealthStore) HasRecentUserSuccess(ctx context.Context, groupID int64, since time.Time) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM usage_logs ul
+			LEFT JOIN account_groups ag ON ag.account_id = ul.account_id AND ul.group_id IS NULL
+			WHERE COALESCE(ul.group_id, ag.group_id) = $1
+			  AND ul.first_token_ms IS NOT NULL
+			  AND ul.created_at >= $2
+			LIMIT 1
+		)`, groupID, since).Scan(&exists)
+	return exists, err
+}
+
+func (r *groupHealthStore) LoadProbeTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]service.GroupHealthTrendBucket, error) {
+	out := make(map[int64][]service.GroupHealthTrendBucket, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT group_id, date_bin('10 minutes', observed_at, TIMESTAMPTZ '2000-01-01') AS bucket,
+		 COUNT(*) FILTER (WHERE is_probe AND success)::int AS probe_success,
+		 COUNT(*) FILTER (WHERE is_probe AND NOT success)::int AS probe_failure,
+		 COALESCE(AVG(ttft_ms) FILTER (WHERE is_probe AND success AND ttft_ms > 0), 0)::int AS probe_ttft
+		FROM group_health_events
+		WHERE group_id = ANY($1) AND is_probe AND observed_at >= $2 AND observed_at < $3
+		GROUP BY group_id, bucket
+		ORDER BY 1, 2`, pq.Array(groupIDs), start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID int64
+		var bucket service.GroupHealthTrendBucket
+		if err := rows.Scan(&groupID, &bucket.StartedAt, &bucket.ProbeSuccess, &bucket.ProbeFailure, &bucket.ProbeTTFTMS); err != nil {
+			return nil, err
+		}
+		out[groupID] = append(out[groupID], bucket)
+	}
+	return out, rows.Err()
+}
+
 func (r *groupHealthStore) LoadTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]service.GroupHealthTrendBucket, error) {
 	out := make(map[int64][]service.GroupHealthTrendBucket, len(groupIDs))
 	if len(groupIDs) == 0 {

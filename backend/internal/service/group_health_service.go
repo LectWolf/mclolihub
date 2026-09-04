@@ -137,6 +137,16 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 		return nil
 	}
 	defer release()
+	if finder, ok := s.repo.(interface {
+		HasRecentUserSuccess(context.Context, int64, time.Time) (bool, error)
+	}); ok {
+		recent, err := finder.HasRecentUserSuccess(ctx, target.GroupID, now.Add(-10*time.Minute))
+		if err != nil {
+			slog.Warn("group_health: recent user traffic lookup failed", "group_id", target.GroupID, "error", err)
+		} else if recent {
+			return s.deferScheduledProbe(ctx, target, now, "skipped_recent_user_traffic")
+		}
+	}
 	accounts, err := s.accountRepo.ListByGroup(ctx, target.GroupID)
 	if err != nil {
 		return err
@@ -197,6 +207,22 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 		snapshot.Reason = "probe_success"
 		snapshot.LastSuccessAt = &now
 		snapshot.ProbeTTFTMS = int(successTTFT / time.Millisecond)
+	}
+	return s.repo.Save(ctx, snapshot)
+}
+
+func (s *GroupHealthService) deferScheduledProbe(ctx context.Context, target GroupProbeTarget, now time.Time, reason string) error {
+	snapshot, err := s.repo.Load(ctx, target.GroupID)
+	if err != nil {
+		return err
+	}
+	if snapshot == nil {
+		snapshot = &GroupHealthSnapshot{GroupID: target.GroupID, Status: GroupHealthUnknown}
+	}
+	next := now.Add(target.Interval)
+	snapshot.NextProbeAt = &next
+	if reason != "" {
+		snapshot.Reason = reason
 	}
 	return s.repo.Save(ctx, snapshot)
 }
@@ -488,5 +514,14 @@ func (s *GroupHealthService) LoadMetrics(ctx context.Context, groupIDs []int64) 
 }
 
 func (s *GroupHealthService) LoadTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]GroupHealthTrendBucket, error) {
+	return s.repo.LoadTrend(ctx, groupIDs, start, end)
+}
+
+func (s *GroupHealthService) LoadProbeTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]GroupHealthTrendBucket, error) {
+	if loader, ok := s.repo.(interface {
+		LoadProbeTrend(context.Context, []int64, time.Time, time.Time) (map[int64][]GroupHealthTrendBucket, error)
+	}); ok {
+		return loader.LoadProbeTrend(ctx, groupIDs, start, end)
+	}
 	return s.repo.LoadTrend(ctx, groupIDs, start, end)
 }

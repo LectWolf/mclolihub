@@ -1676,7 +1676,7 @@ const loadApiKeys = async () => {
     pagination.value.pages = response.pages
 
     try {
-      const health = await listGroupHealth(signal)
+      const health = await listGroupHealth(signal, { trend: 'none' })
       for (const key of Object.keys(groupHealthMap)) delete groupHealthMap[Number(key)]
       for (const item of health.items || []) groupHealthMap[item.group_id] = item
       await Promise.all(response.items.filter((key) => key.route_mode !== 'fixed').map(async (key) => {

@@ -84,9 +84,10 @@ describe('v3CardPresentation', () => {
       '2026-09-04T17:30:00.000Z',
       '2026-09-04T17:35:00.000Z',
     ])
+    expect(slots.map(slot => new Date(slot.startMs).toISOString()).at(-1)).toBe('2026-09-04T17:35:00.000Z')
   })
 
-  it('mixes overlapping probe outcomes into the same 5-minute collection slot', () => {
+  it('uses probe only in collection slots that have no user traffic', () => {
     const nowMs = Date.parse('2026-09-04T17:42:00Z')
     const bucketMs = 5 * 60 * 1000
     const slots = buildV3TimelineSlots({
@@ -112,8 +113,8 @@ describe('v3CardPresentation', () => {
     const byStart = Object.fromEntries(slots.map(slot => [new Date(slot.startMs).toISOString(), slot]))
     expect(byStart['2026-09-04T17:30:00.000Z'].source).toBe('probe')
     expect(byStart['2026-09-04T17:30:00.000Z'].availabilityRate).toBe(0)
-    expect(byStart['2026-09-04T17:35:00.000Z'].source).toBe('mixed')
-    expect(byStart['2026-09-04T17:35:00.000Z'].availabilityRate).toBe(0.75)
+    expect(byStart['2026-09-04T17:35:00.000Z'].source).toBe('traffic')
+    expect(byStart['2026-09-04T17:35:00.000Z'].availabilityRate).toBe(1)
   })
 
   it('lets probe samples change displayed availability', () => {
@@ -125,6 +126,10 @@ describe('v3CardPresentation', () => {
       probeSuccess: 0,
       probeFailure: 1,
     })).toEqual({ rate: 0, source: 'probe' })
+    expect(mixAvailabilityRate({
+      probeSuccess: 1,
+      probeFailure: 2,
+    })).toEqual({ rate: 1, source: 'probe' })
     expect(mixAvailabilityRate({
       hasTraffic: true,
       trafficErrorRate: 0,
@@ -143,4 +148,5 @@ describe('v3CardPresentation', () => {
     expect(statusFromAvailabilityRate(0)).toBe('failed')
     expect(statusFromAvailabilityRate(1)).toBe('operational')
   })
+
 })

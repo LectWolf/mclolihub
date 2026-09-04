@@ -53,7 +53,6 @@ import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import * as api from '@/api/channelMonitorV2'
-import { listGroupHealth, type GroupHealthItem } from '@/api/groupHealth'
 import userGroupsAPI from '@/api/groups'
 import type { MonitorFilter, MonitorMatrixResponse, MonitorRange, MonitorSnapshot } from '@/api/channelMonitorV2'
 import type { Group } from '@/types'
@@ -85,7 +84,11 @@ let countdownTimer: number | null = null
 // monitor group_ids selected by the operator, so unrelated groups never appear.
 const rows = computed(() => [...(matrix.value?.items ?? [])]
   .filter(row => row.group_id != null && row.group_id > 0)
-  .sort((a, b) => (a.group_id ?? 0) - (b.group_id ?? 0)))
+  .sort((a, b) => {
+    const ao = groupMetaById.value[a.group_id ?? 0]?.sortOrder ?? Number.MAX_SAFE_INTEGER
+    const bo = groupMetaById.value[b.group_id ?? 0]?.sortOrder ?? Number.MAX_SAFE_INTEGER
+    return ao - bo || (a.group_id ?? 0) - (b.group_id ?? 0)
+  }))
 const timelineLength = computed(() => ({ '90m': 18, '24h': 24, '7d': 14, '30d': 30 })[filter.value.range])
 const timelineBucketMs = computed(() => {
   const seconds = snapshot.value?.coverage.bucket_seconds
@@ -114,39 +117,13 @@ function getGroupMeta(groupId?: number): V3CardGroupMeta | null {
   return groupMetaById.value[groupId] ?? null
 }
 
-function mergeGroupMeta(groups: Group[], healthItems: GroupHealthItem[], probeBucketMs: number) {
-  const healthById = Object.fromEntries(healthItems.map(item => [item.group_id, item]))
+function mergeGroupMeta(groups: Group[]) {
   const next: Record<number, V3CardGroupMeta> = {}
-  const toProbeBuckets = (item?: GroupHealthItem) => (item?.trend || [])
-    .filter(bucket => bucket.probe_success > 0 || bucket.probe_failure > 0)
-    .map(bucket => ({
-      startMs: Date.parse(bucket.started_at),
-      durationMs: probeBucketMs,
-      success: bucket.probe_success,
-      failure: bucket.probe_failure,
-      ttftMs: bucket.probe_ttft_ms,
-    }))
-    .filter(bucket => Number.isFinite(bucket.startMs))
   for (const group of groups) {
-    const health = healthById[group.id]
     next[group.id] = {
       description: group.description,
-      probeEnabled: Boolean(health?.probe_enabled ?? group.probe_enabled),
-      probeStatus: health?.status ?? null,
-      probeTtftMs: health?.probe_ttft_ms ?? null,
-      probeBucketMs,
-      probeBuckets: toProbeBuckets(health),
-    }
-  }
-  for (const item of healthItems) {
-    if (next[item.group_id]) continue
-    next[item.group_id] = {
-      description: null,
-      probeEnabled: item.probe_enabled,
-      probeStatus: item.status,
-      probeTtftMs: item.probe_ttft_ms,
-      probeBucketMs,
-      probeBuckets: toProbeBuckets(item),
+      probeEnabled: Boolean(group.probe_enabled),
+      sortOrder: group.sort_order,
     }
   }
   groupMetaById.value = next
@@ -154,16 +131,14 @@ function mergeGroupMeta(groups: Group[], healthItems: GroupHealthItem[], probeBu
 
 async function loadUserGroupRates() {
   try {
-    const [groups, customRates, health] = await Promise.all([
+    const [groups, customRates] = await Promise.all([
       userGroupsAPI.getAvailable(),
       userGroupsAPI.getUserGroupRates(),
-      listGroupHealth().catch(() => ({ items: [] as GroupHealthItem[], window_hours: 12, bucket_minutes: 10 })),
     ])
     userGroupRates.value = Object.fromEntries(
       (groups as Group[]).map(group => [group.id, customRates[group.id] ?? group.rate_multiplier]),
     )
-    const probeBucketMs = Math.max(1, (health.bucket_minutes || 10) * 60 * 1000)
-    mergeGroupMeta(groups as Group[], health.items || [], probeBucketMs)
+    mergeGroupMeta(groups as Group[])
   } catch (error) {
     // Monitoring remains usable when the optional pricing endpoint is unavailable.
     console.warn('Failed to load channel monitor group rates', error)
@@ -171,7 +146,6 @@ async function loadUserGroupRates() {
 }
 
 async function reload(silent = true) {
-  void loadUserGroupRates()
   controller?.abort()
   const request = new AbortController()
   controller = request
@@ -181,6 +155,7 @@ async function reload(silent = true) {
     const [nextSnapshot, nextMatrix] = await Promise.all([
       api.getSnapshot(filter.value, false, request.signal),
       api.getMatrix(filter.value, 'platform_group', false, request.signal),
+      loadUserGroupRates(),
     ])
     if (request.signal.aborted || controller !== request) return
     snapshot.value = nextSnapshot

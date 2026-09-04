@@ -243,14 +243,22 @@ type ChannelMonitorV2ModelRow struct {
 	Health   ChannelMonitorV2Health `json:"health"`
 }
 
+type ChannelMonitorV2ProbeBucket struct {
+	BucketStart time.Time `json:"bucket_start"`
+	Success     int       `json:"success"`
+	Failure     int       `json:"failure"`
+	TTFTMs      int       `json:"ttft_ms"`
+}
+
 type ChannelMonitorV2MatrixRow struct {
-	Platform  string                       `json:"platform"`
-	GroupID   *int64                       `json:"group_id,omitempty"`
-	GroupName string                       `json:"group_name,omitempty"`
-	Model     string                       `json:"model,omitempty"`
-	Metrics   ChannelMonitorV2Metric       `json:"metrics"`
-	Health    ChannelMonitorV2Health       `json:"health"`
-	Buckets   []ChannelMonitorV2TrendPoint `json:"buckets"`
+	Platform     string                        `json:"platform"`
+	GroupID      *int64                        `json:"group_id,omitempty"`
+	GroupName    string                        `json:"group_name,omitempty"`
+	Model        string                        `json:"model,omitempty"`
+	Metrics      ChannelMonitorV2Metric        `json:"metrics"`
+	Health       ChannelMonitorV2Health        `json:"health"`
+	Buckets      []ChannelMonitorV2TrendPoint  `json:"buckets"`
+	ProbeBuckets []ChannelMonitorV2ProbeBucket `json:"probe_buckets,omitempty"`
 }
 
 type ChannelMonitorV2Matrix struct {
@@ -526,7 +534,50 @@ func (s *ChannelMonitorV2Service) Matrix(ctx context.Context, filter ChannelMoni
 			}
 		}
 	}
+	s.attachProbeBuckets(ctx, matrix, filter)
 	return matrix, nil
+}
+
+type channelMonitorV2ProbeTrendLoader interface {
+	LoadGroupProbeTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]ChannelMonitorV2ProbeBucket, error)
+}
+
+func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix *ChannelMonitorV2Matrix, filter ChannelMonitorV2Filter) {
+	if s == nil || matrix == nil {
+		return
+	}
+	loader, ok := s.repo.(channelMonitorV2ProbeTrendLoader)
+	if !ok {
+		return
+	}
+	seen := make(map[int64]struct{})
+	ids := make([]int64, 0)
+	for i := range matrix.Items {
+		if matrix.Items[i].GroupID == nil || *matrix.Items[i].GroupID <= 0 {
+			continue
+		}
+		id := *matrix.Items[i].GroupID
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return
+	}
+	trends, err := loader.LoadGroupProbeTrend(ctx, ids, filter.Start, filter.End)
+	if err != nil || trends == nil {
+		return
+	}
+	for i := range matrix.Items {
+		if matrix.Items[i].GroupID == nil {
+			continue
+		}
+		if buckets := trends[*matrix.Items[i].GroupID]; len(buckets) > 0 {
+			matrix.Items[i].ProbeBuckets = buckets
+		}
+	}
 }
 
 func ParseChannelMonitorV2GroupBy(value string) (ChannelMonitorV2GroupBy, error) {

@@ -10,8 +10,7 @@ export interface V3CardGroupMeta {
   probeEnabled?: boolean
   probeStatus?: GroupHealthStatus | null
   probeTtftMs?: number | null
-  probeBucketMs?: number
-  probeBuckets?: V3TimelineProbeBucket[]
+  sortOrder?: number
 }
 
 export function trafficMonitorStatus(overall?: HealthState | null): MonitorStatus | null {
@@ -86,6 +85,15 @@ export interface V3TimelineSlot {
   probe?: V3TimelineProbeBucket
 }
 
+export function effectiveProbeOutcome(success = 0, failure = 0): { success: number; failure: number } {
+  const ok = Math.max(0, success)
+  const fail = Math.max(0, failure)
+  // A group probe round stops on first success, so mixed success+failure counts as up.
+  if (ok > 0) return { success: 1, failure: 0 }
+  if (fail > 0) return { success: 0, failure: 1 }
+  return { success: 0, failure: 0 }
+}
+
 export function mixAvailabilityRate(opts: {
   hasTraffic?: boolean
   trafficErrorRate?: number | null
@@ -93,8 +101,9 @@ export function mixAvailabilityRate(opts: {
   probeSuccess?: number
   probeFailure?: number
 }): { rate: number | null; source: V3CardSignalSource } {
-  const probeSuccess = Math.max(0, opts.probeSuccess ?? 0)
-  const probeFailure = Math.max(0, opts.probeFailure ?? 0)
+  const probe = effectiveProbeOutcome(opts.probeSuccess, opts.probeFailure)
+  const probeSuccess = probe.success
+  const probeFailure = probe.failure
   const probeTotal = probeSuccess + probeFailure
   const hasTraffic = Boolean(opts.hasTraffic) || opts.trafficErrorRate != null
   const trafficRate = hasTraffic ? 1 - (opts.trafficErrorRate ?? 0) : null
@@ -128,7 +137,9 @@ function stateFromAvailabilityRate(rate: number | null): V3TimelineSlotState {
 
 export function alignTimelineEndMs(nowMs: number, bucketMs: number): number {
   if (bucketMs <= 0) return nowMs
-  return Math.floor(nowMs / bucketMs) * bucketMs + bucketMs
+  // Exclusive end is the start of the in-progress bucket so the rightmost bar
+  // is the last completed collection slot, not a trailing empty gray "now".
+  return Math.floor(nowMs / bucketMs) * bucketMs
 }
 
 export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
@@ -169,26 +180,30 @@ export function buildV3TimelineSlots(opts: {
       .sort((a, b) => a.startMs - b.startMs)
       .at(-1)
 
-    if (!trafficHit && !probeHit) {
+    if (trafficHit) {
+      const trafficRate = 1 - trafficHit.errorRate
+      slots.push({
+        startMs,
+        source: 'traffic',
+        state: trafficSlotState(trafficHit),
+        availabilityRate: trafficRate,
+        traffic: trafficHit,
+      })
+      continue
+    }
+    if (!probeHit) {
       slots.push({ startMs, source: 'none', state: 'unknown', availabilityRate: null })
       continue
     }
-
     const mixed = mixAvailabilityRate({
-      hasTraffic: Boolean(trafficHit),
-      trafficErrorRate: trafficHit?.errorRate,
-      trafficRequestCount: trafficHit?.requestCount,
-      probeSuccess: probeHit?.success,
-      probeFailure: probeHit?.failure,
+      probeSuccess: probeHit.success,
+      probeFailure: probeHit.failure,
     })
     slots.push({
       startMs,
-      source: mixed.source,
-      state: mixed.source === 'traffic' && trafficHit
-        ? trafficSlotState(trafficHit)
-        : stateFromAvailabilityRate(mixed.rate),
+      source: 'probe',
+      state: stateFromAvailabilityRate(mixed.rate),
       availabilityRate: mixed.rate,
-      traffic: trafficHit,
       probe: probeHit,
     })
   }
@@ -199,3 +214,5 @@ export function buildV3TimelineSlots(opts: {
 export function latestActiveV3Slot(slots: V3TimelineSlot[]): V3TimelineSlot | null {
   return [...slots].reverse().find(slot => slot.source !== 'none') ?? null
 }
+
+

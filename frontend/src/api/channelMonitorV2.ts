@@ -158,6 +158,13 @@ export interface MonitorMatrixBucket {
   health: MonitorHealth
 }
 
+export interface MonitorProbeBucket {
+  bucket_start: string
+  success: number
+  failure: number
+  ttft_ms: number
+}
+
 export interface MonitorMatrixRow {
   platform: string
   group_id?: number
@@ -166,6 +173,7 @@ export interface MonitorMatrixRow {
   metrics: MonitorMetric
   health: MonitorHealth
   buckets: MonitorMatrixBucket[]
+  probe_buckets?: MonitorProbeBucket[]
 }
 
 export interface MonitorMatrixResponse {

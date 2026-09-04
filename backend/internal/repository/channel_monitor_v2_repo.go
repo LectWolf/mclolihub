@@ -1578,3 +1578,32 @@ func (r *channelMonitorV2Repository) loadIgnoredErrorCountsByMatrixKey(
 	}
 	return byDimBucket, byDim, rows.Err()
 }
+
+func (r *channelMonitorV2Repository) LoadGroupProbeTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]service.ChannelMonitorV2ProbeBucket, error) {
+	out := make(map[int64][]service.ChannelMonitorV2ProbeBucket, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT group_id, date_bin('10 minutes', observed_at, TIMESTAMPTZ '2000-01-01') AS bucket,
+		 COUNT(*) FILTER (WHERE success)::int AS probe_success,
+		 COUNT(*) FILTER (WHERE NOT success)::int AS probe_failure,
+		 COALESCE(AVG(ttft_ms) FILTER (WHERE success AND ttft_ms > 0), 0)::int AS probe_ttft
+		FROM group_health_events
+		WHERE group_id = ANY($1) AND is_probe AND observed_at >= $2 AND observed_at < $3
+		GROUP BY group_id, bucket
+		ORDER BY 1, 2`, pq.Array(groupIDs), start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var groupID int64
+		var bucket service.ChannelMonitorV2ProbeBucket
+		if err := rows.Scan(&groupID, &bucket.BucketStart, &bucket.Success, &bucket.Failure, &bucket.TTFTMs); err != nil {
+			return nil, err
+		}
+		out[groupID] = append(out[groupID], bucket)
+	}
+	return out, rows.Err()
+}

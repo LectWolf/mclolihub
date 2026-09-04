@@ -26,6 +26,7 @@
         >
           <span class="v3-bar-visual" :style="barMotionStyle(index)" aria-hidden="true">
             <span
+              :key="bar.key"
               class="v3-soft-glass-bar"
               :class="bar.colorClass"
               :style="{ height: `${bar.heightPct}%`, animationDelay: `${index * 18}ms` }"
@@ -164,16 +165,6 @@ function formatBucketTime(value: number | string) {
 }
 
 function slotTitle(slot: V3TimelineSlot): string {
-  if (slot.source === 'mixed' && slot.traffic && slot.probe) {
-    return t('channelMonitorV3.mixedTimelineTooltip', {
-      time: formatBucketTime(slot.startMs),
-      availability: formatMonitorPercent(slot.availabilityRate ?? 0, locale.value || 'zh-CN'),
-      cache: formatMonitorPercent(slot.traffic.cacheRate, locale.value || 'zh-CN'),
-      ttft: formatMonitorMs(slot.traffic.ttftP50Ms ?? slot.probe.ttftMs),
-      success: slot.probe.success,
-      failure: slot.probe.failure,
-    })
-  }
   if (slot.source === 'traffic' && slot.traffic) {
     return t('channelMonitorV3.timelineTooltip', {
       time: formatBucketTime(slot.startMs),
@@ -222,7 +213,7 @@ const displayBars = computed<TimelineBar[]>(() => {
     probeBuckets: props.probeBuckets ?? [],
   })
   return slots.map(slot => ({
-    key: String(slot.startMs),
+    key: `${slot.startMs}:${slot.source}`,
     ...slotStyle(slot),
     title: slotTitle(slot),
   }))

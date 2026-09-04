@@ -11,7 +11,16 @@ describe('group health API', () => {
     const controller = new AbortController()
 
     await expect(listGroupHealth(controller.signal)).resolves.toEqual(payload)
-    expect(get).toHaveBeenCalledWith('/group-health', { signal: controller.signal })
+    expect(get).toHaveBeenCalledWith('/group-health', { signal: controller.signal, params: undefined })
+  })
+
+  it('requests a compact probe trend window', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: { items: [], window_hours: 2, bucket_minutes: 10 } })
+    await listGroupHealth(undefined, { trendHours: 2, trend: 'probe' })
+    expect(get).toHaveBeenCalledWith('/group-health', {
+      signal: undefined,
+      params: { trend_hours: 2, trend: 'probe' },
+    })
   })
 
   it('loads the administrator health list', async () => {

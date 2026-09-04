@@ -118,6 +118,16 @@ func (h *GroupHealthHandler) RestoreBalance(c *gin.Context) {
 	response.Success(c, gin.H{"account_id": id, "status": service.StatusActive})
 }
 
+func parseGroupHealthTrendQuery(c *gin.Context) (hours int, probeOnly bool) {
+	hours = 12
+	if raw := c.Query("trend_hours"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n >= 1 && n <= 12 {
+			hours = n
+		}
+	}
+	return hours, c.Query("trend") == "probe"
+}
+
 func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group, rates map[int64]float64, includeTrend bool) {
 	ids := make([]int64, 0, len(groups))
 	for i := range groups {
@@ -129,9 +139,16 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 		return
 	}
 	trends := make(map[int64][]service.GroupHealthTrendBucket)
-	if includeTrend {
+	trendHours, probeOnly := parseGroupHealthTrendQuery(c)
+	loadTrend := includeTrend && c.Query("trend") != "none"
+	if loadTrend {
 		end := time.Now()
-		trends, err = h.health.LoadTrend(c.Request.Context(), ids, end.Add(-12*time.Hour), end)
+		start := end.Add(-time.Duration(trendHours) * time.Hour)
+		if probeOnly {
+			trends, err = h.health.LoadProbeTrend(c.Request.Context(), ids, start, end)
+		} else {
+			trends, err = h.health.LoadTrend(c.Request.Context(), ids, start, end)
+		}
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return
@@ -166,5 +183,9 @@ func (h *GroupHealthHandler) writeGroups(c *gin.Context, groups []service.Group,
 			Trend: trends[group.ID],
 		})
 	}
-	response.Success(c, gin.H{"items": items, "window_hours": 12, "bucket_minutes": 10})
+	windowHours := 12
+	if loadTrend {
+		windowHours = trendHours
+	}
+	response.Success(c, gin.H{"items": items, "window_hours": windowHours, "bucket_minutes": 10})
 }

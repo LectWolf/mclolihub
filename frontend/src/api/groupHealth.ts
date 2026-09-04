@@ -47,8 +47,17 @@ export interface GroupHealthResponse {
   bucket_minutes: number
 }
 
-export async function listGroupHealth(signal?: AbortSignal): Promise<GroupHealthResponse> {
-  const { data } = await apiClient.get<GroupHealthResponse>('/group-health', { signal })
+export async function listGroupHealth(
+  signal?: AbortSignal,
+  query?: { trendHours?: number; trend?: 'probe' | 'full' | 'none' },
+): Promise<GroupHealthResponse> {
+  const params: Record<string, string | number> = {}
+  if (query?.trendHours && query.trendHours > 0) params.trend_hours = query.trendHours
+  if (query?.trend && query.trend !== 'full') params.trend = query.trend
+  const { data } = await apiClient.get<GroupHealthResponse>('/group-health', {
+    signal,
+    params: Object.keys(params).length ? params : undefined,
+  })
   return data
 }
 

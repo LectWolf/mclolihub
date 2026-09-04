@@ -193,8 +193,6 @@
         </div>
       </section>
 
-      <GroupHealthPanel v-if="showGroupHealth" @state="handleGroupHealthState" />
-
       <!-- Overview KPI: success · TTFT · tokens/s(optional) · cache · (+ RPM when throughput visible) -->
       <section
         v-if="snapshot"
@@ -437,7 +435,7 @@
           </div>
 
           <div v-if="tabLoading" class="empty-state py-10 text-sm text-gray-400">{{ t('common.loading') }}</div>
-          <div v-else-if="activeRowsEmpty && !hasChannelData && groupHealthEmpty" class="empty-state py-10">
+          <div v-else-if="activeRowsEmpty && !hasChannelData" class="empty-state py-10">
             <p class="empty-state-title text-base">
               {{
                 bootstrapActive
@@ -464,7 +462,6 @@ import { useI18n } from 'vue-i18n'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import GroupHealthPanel from '@/components/user/GroupHealthPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Select from '@/components/common/Select.vue'
@@ -476,7 +473,7 @@ import RelayPulseMatrix from '@/features/channel-monitor-v2/RelayPulseMatrix.vue
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
-import { isChannelMonitorGroupStatusHidden, isChannelMonitorThroughputHidden } from '@/utils/featureFlags'
+import { isChannelMonitorThroughputHidden } from '@/utils/featureFlags'
 import * as api from '@/api/channelMonitorV2'
 import type {
   HealthState,
@@ -561,10 +558,6 @@ const userRows = ref<MonitorUserRow[]>([])
 const loading = ref(false)
 const tabLoading = ref(false)
 const refreshing = ref(false)
-type GroupHealthPanelState = 'loading' | 'available' | 'empty' | 'error'
-const groupHealthState = ref<GroupHealthPanelState>('loading')
-const showGroupHealth = computed(() => !isChannelMonitorGroupStatusHidden())
-const groupHealthEmpty = computed(() => !showGroupHealth.value || groupHealthState.value === 'empty')
 const expandedErrors = ref(new Set<string>())
 let controller: AbortController | null = null
 let sequence = 0
@@ -646,9 +639,6 @@ const activeRowsEmpty = computed(() =>
       ? errorRows.value.length === 0
       : userRows.value.length === 0
 )
-function handleGroupHealthState(state: GroupHealthPanelState) {
-  groupHealthState.value = state
-}
 // A tab may be empty while the monitor still has configured or observed
 // channels. Show the global empty state only when the monitor is truly empty.
 const hasChannelData = computed(() => {
