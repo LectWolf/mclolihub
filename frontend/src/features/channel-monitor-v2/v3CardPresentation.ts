@@ -3,7 +3,7 @@ import type { HealthState } from '@/api/channelMonitorV2'
 import type { GroupHealthStatus } from '@/api/groupHealth'
 
 export type V3CardStatusKey = MonitorStatus | 'balance_insufficient'
-export type V3CardSignalSource = 'traffic' | 'probe' | 'none'
+export type V3CardSignalSource = 'traffic' | 'probe' | 'mixed' | 'none'
 
 export interface V3CardGroupMeta {
   description?: string | null
@@ -81,8 +81,49 @@ export interface V3TimelineSlot {
   startMs: number
   source: V3CardSignalSource
   state: V3TimelineSlotState
+  availabilityRate: number | null
   traffic?: V3TimelineTrafficBucket
   probe?: V3TimelineProbeBucket
+}
+
+export function mixAvailabilityRate(opts: {
+  hasTraffic?: boolean
+  trafficErrorRate?: number | null
+  trafficRequestCount?: number
+  probeSuccess?: number
+  probeFailure?: number
+}): { rate: number | null; source: V3CardSignalSource } {
+  const probeSuccess = Math.max(0, opts.probeSuccess ?? 0)
+  const probeFailure = Math.max(0, opts.probeFailure ?? 0)
+  const probeTotal = probeSuccess + probeFailure
+  const hasTraffic = Boolean(opts.hasTraffic) || opts.trafficErrorRate != null
+  const trafficRate = hasTraffic ? 1 - (opts.trafficErrorRate ?? 0) : null
+  const probeRate = probeTotal > 0 ? probeSuccess / probeTotal : null
+
+  if (trafficRate == null && probeRate == null) return { rate: null, source: 'none' }
+  if (trafficRate == null) return { rate: probeRate, source: 'probe' }
+  if (probeRate == null) return { rate: trafficRate, source: 'traffic' }
+
+  const countedTraffic = opts.trafficRequestCount ?? 0
+  const trafficWeight = countedTraffic > 0 ? countedTraffic : probeTotal
+  return {
+    rate: (trafficRate * trafficWeight + probeSuccess) / (trafficWeight + probeTotal),
+    source: 'mixed',
+  }
+}
+
+export function statusFromAvailabilityRate(rate: number | null): MonitorStatus | null {
+  if (rate == null || !Number.isFinite(rate)) return null
+  if (rate >= 0.8) return 'operational'
+  if (rate >= 0.5) return 'degraded'
+  return 'failed'
+}
+
+function stateFromAvailabilityRate(rate: number | null): V3TimelineSlotState {
+  if (rate == null || !Number.isFinite(rate)) return 'unknown'
+  if (rate >= 0.8) return 'healthy'
+  if (rate >= 0.5) return 'warning'
+  return 'critical'
 }
 
 export function alignTimelineEndMs(nowMs: number, bucketMs: number): number {
@@ -92,12 +133,6 @@ export function alignTimelineEndMs(nowMs: number, bucketMs: number): number {
 
 export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
   return aStart < bEnd && bStart < aEnd
-}
-
-function probeSlotState(probe: V3TimelineProbeBucket): V3TimelineSlotState {
-  if (probe.success <= 0 && probe.failure <= 0) return 'unknown'
-  if (probe.success <= 0) return 'critical'
-  return probe.ttftMs > 10_000 ? 'warning' : 'healthy'
 }
 
 function trafficSlotState(traffic: V3TimelineTrafficBucket): V3TimelineSlotState {
@@ -126,16 +161,6 @@ export function buildV3TimelineSlots(opts: {
     const startMs = endMs - (length - index) * bucketMs
     const slotEndMs = startMs + bucketMs
     const trafficHit = traffic.find(bucket => rangesOverlap(bucket.startMs, bucket.startMs + bucketMs, startMs, slotEndMs))
-    if (trafficHit) {
-      slots.push({
-        startMs,
-        source: 'traffic',
-        state: trafficSlotState(trafficHit),
-        traffic: trafficHit,
-      })
-      continue
-    }
-
     const probeHit = [...probes]
       .filter(bucket => (
         (bucket.success > 0 || bucket.failure > 0)
@@ -143,18 +168,34 @@ export function buildV3TimelineSlots(opts: {
       ))
       .sort((a, b) => a.startMs - b.startMs)
       .at(-1)
-    if (probeHit) {
-      slots.push({
-        startMs,
-        source: 'probe',
-        state: probeSlotState(probeHit),
-        probe: probeHit,
-      })
+
+    if (!trafficHit && !probeHit) {
+      slots.push({ startMs, source: 'none', state: 'unknown', availabilityRate: null })
       continue
     }
 
-    slots.push({ startMs, source: 'none', state: 'unknown' })
+    const mixed = mixAvailabilityRate({
+      hasTraffic: Boolean(trafficHit),
+      trafficErrorRate: trafficHit?.errorRate,
+      trafficRequestCount: trafficHit?.requestCount,
+      probeSuccess: probeHit?.success,
+      probeFailure: probeHit?.failure,
+    })
+    slots.push({
+      startMs,
+      source: mixed.source,
+      state: mixed.source === 'traffic' && trafficHit
+        ? trafficSlotState(trafficHit)
+        : stateFromAvailabilityRate(mixed.rate),
+      availabilityRate: mixed.rate,
+      traffic: trafficHit,
+      probe: probeHit,
+    })
   }
 
   return slots
+}
+
+export function latestActiveV3Slot(slots: V3TimelineSlot[]): V3TimelineSlot | null {
+  return [...slots].reverse().find(slot => slot.source !== 'none') ?? null
 }

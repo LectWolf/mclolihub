@@ -23,6 +23,7 @@ export default {
     probeTtftHint: '来自分组定时探测，不是这段真实流量',
     timelineTooltip: '{time} · 可用率 {availability} · 缓存率 {cache} · 首 Token {ttft}',
     probeTimelineTooltip: '探测 {time} · 成功 {success} · 失败 {failure} · 首 Token {ttft}',
+    mixedTimelineTooltip: '{time} · 可用率 {availability}（含探测 成功 {success} / 失败 {failure}） · 缓存率 {cache} · 首 Token {ttft}',
     emptyTitle: '暂无渠道数据',
     emptyDescription: '当前时间范围内还没有可展示的被动监控数据',
     summary: '可用率 {success} · 缓存率 {cache}',

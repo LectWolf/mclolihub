@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildV3TimelineSlots,
+  mixAvailabilityRate,
   resolveV3CardStatus,
   resolveV3CardTtftMs,
+  statusFromAvailabilityRate,
   trafficMonitorStatus,
 } from '../v3CardPresentation'
 
@@ -84,7 +86,7 @@ describe('v3CardPresentation', () => {
     ])
   })
 
-  it('keeps real traffic in a 5-minute slot instead of the overlapping probe', () => {
+  it('mixes overlapping probe outcomes into the same 5-minute collection slot', () => {
     const nowMs = Date.parse('2026-09-04T17:42:00Z')
     const bucketMs = 5 * 60 * 1000
     const slots = buildV3TimelineSlots({
@@ -102,13 +104,43 @@ describe('v3CardPresentation', () => {
       probeBuckets: [{
         startMs: Date.parse('2026-09-04T17:30:00Z'),
         durationMs: 10 * 60 * 1000,
-        success: 1,
-        failure: 0,
-        ttftMs: 800,
+        success: 0,
+        failure: 1,
+        ttftMs: 0,
       }],
     })
-    const byStart = Object.fromEntries(slots.map(slot => [new Date(slot.startMs).toISOString(), slot.source]))
-    expect(byStart['2026-09-04T17:30:00.000Z']).toBe('probe')
-    expect(byStart['2026-09-04T17:35:00.000Z']).toBe('traffic')
+    const byStart = Object.fromEntries(slots.map(slot => [new Date(slot.startMs).toISOString(), slot]))
+    expect(byStart['2026-09-04T17:30:00.000Z'].source).toBe('probe')
+    expect(byStart['2026-09-04T17:30:00.000Z'].availabilityRate).toBe(0)
+    expect(byStart['2026-09-04T17:35:00.000Z'].source).toBe('mixed')
+    expect(byStart['2026-09-04T17:35:00.000Z'].availabilityRate).toBe(0.75)
+  })
+
+  it('lets probe samples change displayed availability', () => {
+    expect(mixAvailabilityRate({
+      probeSuccess: 1,
+      probeFailure: 0,
+    })).toEqual({ rate: 1, source: 'probe' })
+    expect(mixAvailabilityRate({
+      probeSuccess: 0,
+      probeFailure: 1,
+    })).toEqual({ rate: 0, source: 'probe' })
+    expect(mixAvailabilityRate({
+      hasTraffic: true,
+      trafficErrorRate: 0,
+      trafficRequestCount: 3,
+      probeSuccess: 0,
+      probeFailure: 1,
+    })).toEqual({ rate: 0.75, source: 'mixed' })
+    expect(mixAvailabilityRate({
+      hasTraffic: true,
+      trafficErrorRate: 0,
+      trafficRequestCount: 0,
+      probeSuccess: 0,
+      probeFailure: 1,
+    })).toEqual({ rate: 0.5, source: 'mixed' })
+    expect(statusFromAvailabilityRate(0.75)).toBe('degraded')
+    expect(statusFromAvailabilityRate(0)).toBe('failed')
+    expect(statusFromAvailabilityRate(1)).toBe('operational')
   })
 })

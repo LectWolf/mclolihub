@@ -61,8 +61,11 @@ import { useI18n } from 'vue-i18n'
 import type { MonitorMatrixRow } from '@/api/channelMonitorV2'
 import { availabilityTextClass, formatMonitorMs, formatMonitorPercent } from '@/features/channel-monitor-v2/monitorFormat'
 import {
+  buildV3TimelineSlots,
+  latestActiveV3Slot,
   resolveV3CardStatus,
   resolveV3CardTtftMs,
+  statusFromAvailabilityRate,
   type V3CardGroupMeta,
 } from '@/features/channel-monitor-v2/v3CardPresentation'
 import { providerGradient, useChannelMonitorFormat } from '@/composables/useChannelMonitorFormat'
@@ -96,16 +99,42 @@ const latestBucket = computed(() => [...props.row.buckets]
   .at(-1))
 const latestMetrics = computed(() => latestBucket.value?.metrics ?? props.row.metrics)
 const latestHealth = computed(() => latestBucket.value?.health ?? props.row.health)
-// The cards show the newest completed monitoring bucket, not the selected-range aggregate.
+const timelineSlots = computed(() => buildV3TimelineSlots({
+  nowMs: Date.now(),
+  length: props.timelineLength,
+  bucketMs: props.timelineBucketMs,
+  trafficBuckets: (props.row.buckets ?? []).map(bucket => ({
+    startMs: Date.parse(bucket.bucket_start),
+    requestCount: bucket.metrics.request_count,
+    errorRate: bucket.metrics.error_rate,
+    cacheRate: bucket.metrics.cache_rate,
+    ttftP50Ms: bucket.metrics.ttft.p50_ms,
+    overall: bucket.health.overall,
+  })).filter(bucket => Number.isFinite(bucket.startMs)),
+  probeBuckets: props.groupMeta?.probeBuckets ?? [],
+}))
+const latestSlot = computed(() => latestActiveV3Slot(timelineSlots.value))
+// Cache stays traffic-only. Availability mixes overlapping probe samples into the latest slot.
 const cacheRate = computed(() => formatMonitorPercent(latestMetrics.value.cache_rate))
-const availabilityPercent = computed(() => (1 - latestMetrics.value.error_rate) * 100)
+const availabilityPercent = computed(() => {
+  const mixed = latestSlot.value?.availabilityRate
+  if (mixed != null && Number.isFinite(mixed)) return mixed * 100
+  return (1 - latestMetrics.value.error_rate) * 100
+})
 const successRate = computed(() => formatMonitorPercent(availabilityPercent.value / 100))
 const availabilityClass = computed(() => availabilityTextClass(availabilityPercent.value))
-const resolvedStatus = computed(() => resolveV3CardStatus({
-  trafficOverall: latestHealth.value.overall,
-  probeEnabled: probeEnabled.value,
-  probeStatus: props.groupMeta?.probeStatus,
-}))
+const resolvedStatus = computed(() => {
+  const slot = latestSlot.value
+  if (slot && (slot.source === 'probe' || slot.source === 'mixed')) {
+    const fromRate = statusFromAvailabilityRate(slot.availabilityRate)
+    if (fromRate) return { status: fromRate, source: slot.source }
+  }
+  return resolveV3CardStatus({
+    trafficOverall: latestHealth.value.overall,
+    probeEnabled: probeEnabled.value,
+    probeStatus: props.groupMeta?.probeStatus,
+  })
+})
 const resolvedTtft = computed(() => resolveV3CardTtftMs({
   trafficTtftMs: latestMetrics.value.ttft.p50_ms,
   probeEnabled: probeEnabled.value,

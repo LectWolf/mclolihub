@@ -164,10 +164,20 @@ function formatBucketTime(value: number | string) {
 }
 
 function slotTitle(slot: V3TimelineSlot): string {
+  if (slot.source === 'mixed' && slot.traffic && slot.probe) {
+    return t('channelMonitorV3.mixedTimelineTooltip', {
+      time: formatBucketTime(slot.startMs),
+      availability: formatMonitorPercent(slot.availabilityRate ?? 0, locale.value || 'zh-CN'),
+      cache: formatMonitorPercent(slot.traffic.cacheRate, locale.value || 'zh-CN'),
+      ttft: formatMonitorMs(slot.traffic.ttftP50Ms ?? slot.probe.ttftMs),
+      success: slot.probe.success,
+      failure: slot.probe.failure,
+    })
+  }
   if (slot.source === 'traffic' && slot.traffic) {
     return t('channelMonitorV3.timelineTooltip', {
       time: formatBucketTime(slot.startMs),
-      availability: formatMonitorPercent(1 - slot.traffic.errorRate, locale.value || 'zh-CN'),
+      availability: formatMonitorPercent(slot.availabilityRate ?? (1 - slot.traffic.errorRate), locale.value || 'zh-CN'),
       cache: formatMonitorPercent(slot.traffic.cacheRate, locale.value || 'zh-CN'),
       ttft: formatMonitorMs(slot.traffic.ttftP50Ms),
     })
@@ -184,13 +194,15 @@ function slotTitle(slot: V3TimelineSlot): string {
 }
 
 function slotStyle(slot: V3TimelineSlot) {
-  if (slot.source === 'traffic' && slot.traffic) {
+  if (slot.availabilityRate != null) {
+    const palette = slot.source === 'probe' ? PROBE_STYLE : STATUS_STYLE
     return {
-      ...STATUS_STYLE[slot.state],
-      colorClass: availabilityBarClass((1 - slot.traffic.errorRate) * 100),
+      ...palette[slot.state],
+      colorClass: slot.source === 'probe'
+        ? PROBE_STYLE[slot.state].colorClass
+        : availabilityBarClass(slot.availabilityRate * 100),
     }
   }
-  if (slot.source === 'probe') return PROBE_STYLE[slot.state]
   return STATUS_STYLE.unknown
 }
 
