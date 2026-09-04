@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  availabilityBadgeClass,
+  availabilityBarClass,
+  availabilityTextClass,
   formatLatencyKpiSecondary,
   formatLatencyPrivacy,
   formatMonitorMs,
@@ -115,5 +118,27 @@ describe('monitorFormat accuracy', () => {
     expect(formatLatencyPrivacy(100, 250, 120, 300)).toBe('AVG 120ms · P50 100ms · P90 250ms')
     expect(formatLatencyPrivacy(100, null, null, 300)).toBe('P50 100ms · P95 300ms')
     expect(formatLatencyPrivacy(null, null)).toBe('-')
+  })
+
+  it('uses the requested availability color bands', () => {
+    expect(availabilityBadgeClass(95)).toContain('bg-emerald-700')
+    expect(availabilityBadgeClass(90)).toContain('bg-emerald-700')
+    expect(availabilityBadgeClass(89.9)).toContain('bg-emerald-100')
+    expect(availabilityBadgeClass(80)).toContain('bg-emerald-100')
+    expect(availabilityBadgeClass(79.9)).toContain('bg-yellow-100')
+    expect(availabilityBadgeClass(60)).toContain('bg-yellow-100')
+    expect(availabilityBadgeClass(59.9)).toContain('bg-amber-200')
+    expect(availabilityBadgeClass(50)).toContain('bg-amber-200')
+    expect(availabilityBadgeClass(49.9)).toContain('bg-red-600')
+    expect(availabilityBadgeClass(30)).toContain('bg-red-600')
+    expect(availabilityBadgeClass(29.9)).toContain('bg-gray-950')
+    expect(availabilityBarClass(95)).toContain('bg-emerald-600')
+    expect(availabilityBarClass(80)).toContain('bg-emerald-400')
+    expect(availabilityBarClass(60)).toContain('bg-yellow-300')
+    expect(availabilityBarClass(50)).toContain('bg-amber-400')
+    expect(availabilityBarClass(30)).toContain('bg-red-500')
+    expect(availabilityBarClass(29.9)).toContain('bg-gray-950')
+    expect(availabilityTextClass(95)).toContain('text-emerald-800')
+    expect(availabilityTextClass(45)).toContain('text-red-600')
   })
 })
