@@ -73,6 +73,7 @@ const props = withDefaults(defineProps<{
   slotBucketMs?: number
   countdownSeconds: number
   length?: number
+  dataThroughMs?: number
 }>(), {
   buckets: () => [],
   probeBuckets: () => [],
@@ -202,6 +203,7 @@ const displayBars = computed<TimelineBar[]>(() => {
     nowMs: Date.now(),
     length: props.length,
     bucketMs: props.slotBucketMs,
+    dataThroughMs: props.dataThroughMs,
     trafficBuckets: (props.buckets ?? []).map(bucket => ({
       startMs: Date.parse(bucket.bucket_start),
       requestCount: bucket.metrics.request_count,

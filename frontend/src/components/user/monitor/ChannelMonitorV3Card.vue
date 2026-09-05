@@ -54,6 +54,7 @@
       :slot-bucket-ms="timelineBucketMs"
       :countdown-seconds="countdownSeconds"
       :length="timelineLength"
+      :data-through-ms="dataThroughMs"
     />
   </article>
 </template>
@@ -84,6 +85,7 @@ const props = defineProps<{
   userRateMultiplier?: number | null
   groupMeta?: V3CardGroupMeta | null
   timelineBucketMs: number
+  dataThroughMs?: number
 }>()
 const { t } = useI18n()
 const { statusLabel, statusBadgeClass, providerLabel, providerBadgeClass } = useChannelMonitorFormat()
@@ -119,6 +121,7 @@ const timelineSlots = computed(() => buildV3TimelineSlots({
   nowMs: Date.now(),
   length: props.timelineLength,
   bucketMs: props.timelineBucketMs,
+  dataThroughMs: props.dataThroughMs,
   trafficBuckets: (props.row.buckets ?? []).map(bucket => ({
     startMs: Date.parse(bucket.bucket_start),
     requestCount: bucket.metrics.request_count,

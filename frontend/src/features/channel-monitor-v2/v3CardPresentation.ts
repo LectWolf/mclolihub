@@ -135,11 +135,16 @@ function stateFromAvailabilityRate(rate: number | null): V3TimelineSlotState {
   return 'critical'
 }
 
-export function alignTimelineEndMs(nowMs: number, bucketMs: number): number {
+export function alignTimelineEndMs(nowMs: number, bucketMs: number, dataThroughMs?: number): number {
   if (bucketMs <= 0) return nowMs
   // Exclusive end is the start of the in-progress bucket so the rightmost bar
   // is the last completed collection slot, not a trailing empty gray "now".
-  return Math.floor(nowMs / bucketMs) * bucketMs
+  let endMs = Math.floor(nowMs / bucketMs) * bucketMs
+  if (dataThroughMs != null && Number.isFinite(dataThroughMs)) {
+    const throughEnd = Math.floor(dataThroughMs / bucketMs) * bucketMs
+    if (throughEnd > 0 && throughEnd < endMs) endMs = throughEnd
+  }
+  return endMs
 }
 
 export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
@@ -158,12 +163,13 @@ export function buildV3TimelineSlots(opts: {
   nowMs: number
   length: number
   bucketMs: number
+  dataThroughMs?: number
   trafficBuckets?: V3TimelineTrafficBucket[]
   probeBuckets?: V3TimelineProbeBucket[]
 }): V3TimelineSlot[] {
   const length = Math.max(0, Math.floor(opts.length))
   const bucketMs = opts.bucketMs > 0 ? opts.bucketMs : 1
-  const endMs = alignTimelineEndMs(opts.nowMs, bucketMs)
+  const endMs = alignTimelineEndMs(opts.nowMs, bucketMs, opts.dataThroughMs)
   const traffic = opts.trafficBuckets ?? []
   const probes = opts.probeBuckets ?? []
   const slots: V3TimelineSlot[] = []

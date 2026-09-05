@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  alignTimelineEndMs,
   buildV3TimelineSlots,
   mixAvailabilityRate,
   resolveV3CardStatus,
@@ -60,6 +61,14 @@ describe('v3CardPresentation', () => {
       probeEnabled: true,
       probeTtftMs: 0,
     })).toEqual({ ms: null, source: 'none' })
+  })
+
+  it('ends the timeline at aggregated data_through instead of the in-progress wall-clock bucket', () => {
+    const bucketMs = 5 * 60 * 1000
+    const nowMs = Date.parse('2026-09-04T17:47:00Z')
+    const dataThroughMs = Date.parse('2026-09-04T17:42:30Z')
+    expect(alignTimelineEndMs(nowMs, bucketMs)).toBe(Date.parse('2026-09-04T17:45:00Z'))
+    expect(alignTimelineEndMs(nowMs, bucketMs, dataThroughMs)).toBe(Date.parse('2026-09-04T17:40:00Z'))
   })
 
   it('paints each collection slot that already inherited a probe sample', () => {

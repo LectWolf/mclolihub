@@ -576,7 +576,7 @@ func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix
 	if len(ids) == 0 {
 		return
 	}
-	lookback := time.Hour
+	lookback := 2 * time.Hour
 	events, err := loader.LoadGroupProbeEvents(ctx, ids, filter.Start.Add(-lookback), filter.End)
 	if err != nil || events == nil {
 		return
@@ -600,10 +600,15 @@ func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix
 	}
 }
 
-func projectProbeEventsOntoBuckets(events []ChannelMonitorV2ProbeEvent, interval time.Duration, start, end time.Time, bucket time.Duration) []ChannelMonitorV2ProbeBucket {
+func probeCarryForwardDuration(interval time.Duration) time.Duration {
 	if interval <= 0 {
 		interval = DefaultGroupProbeInterval
 	}
+	return interval + interval/2
+}
+
+func projectProbeEventsOntoBuckets(events []ChannelMonitorV2ProbeEvent, interval time.Duration, start, end time.Time, bucket time.Duration) []ChannelMonitorV2ProbeBucket {
+	interval = probeCarryForwardDuration(interval)
 	if bucket <= 0 {
 		bucket = 5 * time.Minute
 	}

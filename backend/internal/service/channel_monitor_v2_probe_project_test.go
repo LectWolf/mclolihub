@@ -24,6 +24,7 @@ func TestProjectProbeEventsOntoBucketsCarriesForwardWithinInterval(t *testing.T)
 		time.Date(2026, 9, 4, 16, 10, 0, 0, time.UTC),
 		time.Date(2026, 9, 4, 16, 15, 0, 0, time.UTC),
 		time.Date(2026, 9, 4, 16, 20, 0, 0, time.UTC),
+		time.Date(2026, 9, 4, 16, 25, 0, 0, time.UTC),
 	}, probeBucketStarts(got))
 	require.Equal(t, 1, got[0].Success)
 	require.Equal(t, 800, got[0].TTFTMs)
@@ -60,7 +61,8 @@ func TestProjectProbeEventsOntoBucketsStopsAfterInterval(t *testing.T) {
 	require.Equal(t, []time.Time{
 		time.Date(2026, 9, 4, 16, 10, 0, 0, time.UTC),
 		time.Date(2026, 9, 4, 16, 15, 0, 0, time.UTC),
-	}, probeBucketStarts(got))
+		time.Date(2026, 9, 4, 16, 20, 0, 0, time.UTC),
+	}, probeBucketStarts(got), "10-minute probes stay visible for 15 minutes")
 	require.Equal(t, 1, got[0].Failure)
 }
 

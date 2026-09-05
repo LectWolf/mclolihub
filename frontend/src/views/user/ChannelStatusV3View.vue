@@ -38,6 +38,7 @@
           :countdown-seconds="countdownSeconds"
           :timeline-length="timelineLength"
           :timeline-bucket-ms="timelineBucketMs"
+          :data-through-ms="dataThroughMs"
         />
       </div>
     </div>
@@ -94,6 +95,12 @@ const timelineBucketMs = computed(() => {
   const seconds = snapshot.value?.coverage.bucket_seconds
   if (seconds && seconds > 0) return seconds * 1000
   return ({ '90m': 5 * 60, '24h': 60 * 60, '7d': 12 * 60 * 60, '30d': 24 * 60 * 60 })[filter.value.range] * 1000
+})
+const dataThroughMs = computed(() => {
+  const value = snapshot.value?.coverage.data_through
+  if (!value) return undefined
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : undefined
 })
 const latestSnapshotMetrics = computed(() => {
   const trend = [...(snapshot.value?.trend ?? [])]
