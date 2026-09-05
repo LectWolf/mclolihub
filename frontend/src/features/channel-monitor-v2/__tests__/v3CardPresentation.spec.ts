@@ -62,21 +62,17 @@ describe('v3CardPresentation', () => {
     })).toEqual({ ms: null, source: 'none' })
   })
 
-  it('lets a 10-minute probe occupy two aligned 5-minute collection slots', () => {
+  it('paints each collection slot that already inherited a probe sample', () => {
     const nowMs = Date.parse('2026-09-04T17:42:00Z')
     const bucketMs = 5 * 60 * 1000
-    const probeStart = Date.parse('2026-09-04T17:30:00Z')
     const slots = buildV3TimelineSlots({
       nowMs,
       length: 4,
       bucketMs,
-      probeBuckets: [{
-        startMs: probeStart,
-        durationMs: 10 * 60 * 1000,
-        success: 1,
-        failure: 0,
-        ttftMs: 800,
-      }],
+      probeBuckets: [
+        { startMs: Date.parse('2026-09-04T17:30:00Z'), durationMs: bucketMs, success: 1, failure: 0, ttftMs: 800 },
+        { startMs: Date.parse('2026-09-04T17:35:00Z'), durationMs: bucketMs, success: 1, failure: 0, ttftMs: 800 },
+      ],
     })
     const filled = slots.filter(slot => slot.source === 'probe')
     expect(filled).toHaveLength(2)
@@ -104,7 +100,7 @@ describe('v3CardPresentation', () => {
       }],
       probeBuckets: [{
         startMs: Date.parse('2026-09-04T17:30:00Z'),
-        durationMs: 10 * 60 * 1000,
+        durationMs: bucketMs,
         success: 0,
         failure: 1,
         ttftMs: 0,

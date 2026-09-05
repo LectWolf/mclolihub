@@ -103,7 +103,7 @@ const formattedUserRate = computed(() => {
 const probeBuckets = computed(() => (props.row.probe_buckets ?? [])
   .map(bucket => ({
     startMs: Date.parse(bucket.bucket_start),
-    durationMs: 10 * 60 * 1000,
+    durationMs: props.timelineBucketMs,
     success: bucket.success,
     failure: bucket.failure,
     ttftMs: bucket.ttft_ms,

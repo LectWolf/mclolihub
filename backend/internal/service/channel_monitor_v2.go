@@ -250,6 +250,15 @@ type ChannelMonitorV2ProbeBucket struct {
 	TTFTMs      int       `json:"ttft_ms"`
 }
 
+// ChannelMonitorV2ProbeEvent is one group-health probe sample. Display slots
+// inherit the latest event whose coverage [observed_at, observed_at+interval)
+// overlaps the slot, including administrator ProbeNow samples.
+type ChannelMonitorV2ProbeEvent struct {
+	ObservedAt time.Time
+	Success    bool
+	TTFTMs     int
+}
+
 type ChannelMonitorV2MatrixRow struct {
 	Platform     string                        `json:"platform"`
 	GroupID      *int64                        `json:"group_id,omitempty"`
@@ -539,7 +548,8 @@ func (s *ChannelMonitorV2Service) Matrix(ctx context.Context, filter ChannelMoni
 }
 
 type channelMonitorV2ProbeTrendLoader interface {
-	LoadGroupProbeTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]ChannelMonitorV2ProbeBucket, error)
+	LoadGroupProbeEvents(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]ChannelMonitorV2ProbeEvent, error)
+	LoadGroupProbeIntervals(ctx context.Context, groupIDs []int64) (map[int64]time.Duration, error)
 }
 
 func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix *ChannelMonitorV2Matrix, filter ChannelMonitorV2Filter) {
@@ -566,18 +576,69 @@ func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix
 	if len(ids) == 0 {
 		return
 	}
-	trends, err := loader.LoadGroupProbeTrend(ctx, ids, filter.Start, filter.End)
-	if err != nil || trends == nil {
+	lookback := time.Hour
+	events, err := loader.LoadGroupProbeEvents(ctx, ids, filter.Start.Add(-lookback), filter.End)
+	if err != nil || events == nil {
 		return
+	}
+	intervals, err := loader.LoadGroupProbeIntervals(ctx, ids)
+	if err != nil {
+		intervals = map[int64]time.Duration{}
 	}
 	for i := range matrix.Items {
 		if matrix.Items[i].GroupID == nil {
 			continue
 		}
-		if buckets := trends[*matrix.Items[i].GroupID]; len(buckets) > 0 {
+		id := *matrix.Items[i].GroupID
+		interval := intervals[id]
+		if interval <= 0 {
+			interval = DefaultGroupProbeInterval
+		}
+		if buckets := projectProbeEventsOntoBuckets(events[id], interval, filter.Start, filter.End, filter.Bucket); len(buckets) > 0 {
 			matrix.Items[i].ProbeBuckets = buckets
 		}
 	}
+}
+
+func projectProbeEventsOntoBuckets(events []ChannelMonitorV2ProbeEvent, interval time.Duration, start, end time.Time, bucket time.Duration) []ChannelMonitorV2ProbeBucket {
+	if interval <= 0 {
+		interval = DefaultGroupProbeInterval
+	}
+	if bucket <= 0 {
+		bucket = 5 * time.Minute
+	}
+	start = start.UTC().Truncate(bucket)
+	end = end.UTC()
+	if truncated := end.Truncate(bucket); !truncated.Equal(end) {
+		end = truncated.Add(bucket)
+	}
+	sorted := append([]ChannelMonitorV2ProbeEvent(nil), events...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ObservedAt.Before(sorted[j].ObservedAt) })
+	out := make([]ChannelMonitorV2ProbeBucket, 0)
+	for slot := start; slot.Before(end); slot = slot.Add(bucket) {
+		slotEnd := slot.Add(bucket)
+		var hit *ChannelMonitorV2ProbeEvent
+		for i := range sorted {
+			ev := &sorted[i]
+			if !ev.ObservedAt.Before(slotEnd) {
+				break
+			}
+			if ev.ObservedAt.Add(interval).After(slot) {
+				hit = ev
+			}
+		}
+		if hit == nil {
+			continue
+		}
+		bucketRow := ChannelMonitorV2ProbeBucket{BucketStart: slot, TTFTMs: hit.TTFTMs}
+		if hit.Success {
+			bucketRow.Success = 1
+		} else {
+			bucketRow.Failure = 1
+		}
+		out = append(out, bucketRow)
+	}
+	return out
 }
 
 func ParseChannelMonitorV2GroupBy(value string) (ChannelMonitorV2GroupBy, error) {

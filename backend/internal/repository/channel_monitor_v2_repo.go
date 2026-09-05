@@ -1579,19 +1579,15 @@ func (r *channelMonitorV2Repository) loadIgnoredErrorCountsByMatrixKey(
 	return byDimBucket, byDim, rows.Err()
 }
 
-func (r *channelMonitorV2Repository) LoadGroupProbeTrend(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]service.ChannelMonitorV2ProbeBucket, error) {
-	out := make(map[int64][]service.ChannelMonitorV2ProbeBucket, len(groupIDs))
+func (r *channelMonitorV2Repository) LoadGroupProbeEvents(ctx context.Context, groupIDs []int64, start, end time.Time) (map[int64][]service.ChannelMonitorV2ProbeEvent, error) {
+	out := make(map[int64][]service.ChannelMonitorV2ProbeEvent, len(groupIDs))
 	if len(groupIDs) == 0 {
 		return out, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT group_id, date_bin('10 minutes', observed_at, TIMESTAMPTZ '2000-01-01') AS bucket,
-		 COUNT(*) FILTER (WHERE success)::int AS probe_success,
-		 COUNT(*) FILTER (WHERE NOT success)::int AS probe_failure,
-		 COALESCE(AVG(ttft_ms) FILTER (WHERE success AND ttft_ms > 0), 0)::int AS probe_ttft
+		SELECT group_id, observed_at, success, COALESCE(ttft_ms, 0)
 		FROM group_health_events
 		WHERE group_id = ANY($1) AND is_probe AND observed_at >= $2 AND observed_at < $3
-		GROUP BY group_id, bucket
 		ORDER BY 1, 2`, pq.Array(groupIDs), start, end)
 	if err != nil {
 		return nil, err
@@ -1599,11 +1595,36 @@ func (r *channelMonitorV2Repository) LoadGroupProbeTrend(ctx context.Context, gr
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var groupID int64
-		var bucket service.ChannelMonitorV2ProbeBucket
-		if err := rows.Scan(&groupID, &bucket.BucketStart, &bucket.Success, &bucket.Failure, &bucket.TTFTMs); err != nil {
+		var event service.ChannelMonitorV2ProbeEvent
+		if err := rows.Scan(&groupID, &event.ObservedAt, &event.Success, &event.TTFTMs); err != nil {
 			return nil, err
 		}
-		out[groupID] = append(out[groupID], bucket)
+		out[groupID] = append(out[groupID], event)
+	}
+	return out, rows.Err()
+}
+
+func (r *channelMonitorV2Repository) LoadGroupProbeIntervals(ctx context.Context, groupIDs []int64) (map[int64]time.Duration, error) {
+	out := make(map[int64]time.Duration, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, COALESCE(probe_interval_seconds, 0) FROM groups WHERE id = ANY($1)`, pq.Array(groupIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		var seconds int
+		if err := rows.Scan(&id, &seconds); err != nil {
+			return nil, err
+		}
+		if seconds <= 0 {
+			seconds = int(service.DefaultGroupProbeInterval / time.Second)
+		}
+		out[id] = time.Duration(seconds) * time.Second
 	}
 	return out, rows.Err()
 }
