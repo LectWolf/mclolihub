@@ -298,6 +298,18 @@ func TestChannelMonitorV2UsageSuccessExcludesCyberBillingRows(t *testing.T) {
 	require.Contains(t, channelMonitorV2HistogramSQL, "ul.actual_cost > 0")
 }
 
+func TestChannelMonitorV2BucketLoadFilterLeadsParseFilterStart(t *testing.T) {
+	filter := service.ChannelMonitorV2Filter{
+		Start:  time.Date(2026, 9, 4, 16, 20, 0, 0, time.UTC),
+		End:    time.Date(2026, 9, 4, 17, 50, 0, 0, time.UTC),
+		Bucket: 5 * time.Minute,
+	}
+	coverage := service.ChannelMonitorV2Coverage{DataThrough: time.Date(2026, 9, 4, 17, 42, 30, 0, time.UTC)}
+	got := channelMonitorV2BucketLoadFilter(filter, coverage)
+	require.Equal(t, time.Date(2026, 9, 4, 16, 10, 0, 0, time.UTC), got.Start)
+	require.Equal(t, filter.End, got.End)
+}
+
 func TestChannelMonitorV2RatesUseCoveredWindow(t *testing.T) {
 	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	filter := service.ChannelMonitorV2Filter{Start: start, End: start.Add(24 * time.Hour)}

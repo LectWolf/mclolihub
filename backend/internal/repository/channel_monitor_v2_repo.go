@@ -373,7 +373,8 @@ func (r *channelMonitorV2Repository) GetMatrix(ctx context.Context, filter servi
 	if err != nil {
 		return nil, err
 	}
-	effectiveFilter := channelMonitorV2CommonCoverageFilter(filter, *coverage)
+	totalFilter := channelMonitorV2CommonCoverageFilter(filter, *coverage)
+	effectiveFilter := channelMonitorV2CommonCoverageFilter(channelMonitorV2BucketLoadFilter(filter, *coverage), *coverage)
 	facts, err := r.loadFacts(ctx, effectiveFilter, cfg, true)
 	if err != nil {
 		return nil, err
@@ -422,7 +423,9 @@ func (r *channelMonitorV2Repository) GetMatrix(ctx context.Context, filter servi
 			bucket = newMetricAccumulator()
 			acc.buckets[fact.BucketStart] = bucket
 		}
-		acc.total.addFact(fact)
+		if channelMonitorV2FactInWindow(fact.BucketStart, totalFilter.Start, totalFilter.End) {
+			acc.total.addFact(fact)
+		}
 		bucket.addFact(fact)
 	}
 	for _, histogram := range histograms {
@@ -438,7 +441,9 @@ func (r *channelMonitorV2Repository) GetMatrix(ctx context.Context, filter servi
 		if acc == nil {
 			continue
 		}
-		acc.total.addHistogram(histogram)
+		if channelMonitorV2FactInWindow(histogram.BucketStart, totalFilter.Start, totalFilter.End) {
+			acc.total.addHistogram(histogram)
+		}
 		if bucket := acc.buckets[histogram.BucketStart]; bucket != nil {
 			bucket.addHistogram(histogram)
 		}
@@ -1266,6 +1271,22 @@ func channelMonitorV2CommonCoverageFilter(filter service.ChannelMonitorV2Filter,
 		filter.End = coverage.DataThrough
 	}
 	return filter
+}
+
+func channelMonitorV2BucketLoadFilter(filter service.ChannelMonitorV2Filter, coverage service.ChannelMonitorV2Coverage) service.ChannelMonitorV2Filter {
+	start := service.CompletedMonitorWindowStart(filter, coverage.DataThrough)
+	if start.Before(filter.Start) {
+		filter.Start = start
+	}
+	return filter
+}
+
+func channelMonitorV2FactInWindow(bucketStart string, start, end time.Time) bool {
+	ts, err := time.Parse(time.RFC3339Nano, bucketStart)
+	if err != nil {
+		return true
+	}
+	return !ts.Before(start) && ts.Before(end)
 }
 func intersectStrings(a, b []string) []string {
 	set := map[string]struct{}{}

@@ -71,6 +71,17 @@ func (s *immediateRefreshHealthRepo) UpdateRollingMetrics(context.Context, time.
 	return s.rollingMetrics
 }
 
+type occupancyHealthRepo struct {
+	immediateRefreshHealthRepo
+	recent bool
+	since  time.Time
+}
+
+func (s *occupancyHealthRepo) HasRecentUserSuccess(_ context.Context, _ int64, since time.Time) (bool, error) {
+	s.since = since
+	return s.recent, nil
+}
+
 type immediateRefreshAccountRepo struct {
 	AccountRepository
 	accounts []Account
@@ -114,6 +125,48 @@ func TestAccountProbeScheduleAndThrottle(t *testing.T) {
 	require.False(t, CanTriggerImmediateProbe(&last, now))
 	last = now.Add(-2 * time.Minute)
 	require.True(t, CanTriggerImmediateProbe(&last, now))
+}
+
+func TestGroupProbeSlotBoundsAlignToFiveMinutes(t *testing.T) {
+	start, end := groupProbeSlotBounds(time.Date(2026, 9, 6, 12, 4, 50, 0, time.UTC))
+	require.Equal(t, time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC), start)
+	require.Equal(t, time.Date(2026, 9, 6, 12, 5, 0, 0, time.UTC), end)
+}
+
+func TestDecideScheduledGroupProbeDefersTrafficToSlotEnd(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 2, 0, 0, time.UTC)
+	last := time.Date(2026, 9, 6, 11, 0, 0, 0, time.UTC)
+	skip, next, reason := decideScheduledGroupProbe(now, 10*time.Minute, true, &last)
+	require.True(t, skip)
+	require.Equal(t, time.Date(2026, 9, 6, 12, 5, 0, 0, time.UTC), next)
+	require.Equal(t, "skipped_recent_user_traffic", reason)
+}
+
+func TestDecideScheduledGroupProbeDefersRecentProbeToHeartbeat(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 6, 0, 0, time.UTC)
+	last := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	skip, next, reason := decideScheduledGroupProbe(now, 10*time.Minute, false, &last)
+	require.True(t, skip)
+	require.Equal(t, time.Date(2026, 9, 6, 12, 10, 0, 0, time.UTC), next)
+	require.Equal(t, "skipped_recent_probe", reason)
+}
+
+func TestDecideScheduledGroupProbeRunsWhenIdleAndIntervalElapsed(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 5, 0, 0, time.UTC)
+	last := time.Date(2026, 9, 6, 11, 50, 0, 0, time.UTC)
+	skip, next, reason := decideScheduledGroupProbe(now, 10*time.Minute, false, &last)
+	require.False(t, skip)
+	require.True(t, next.IsZero())
+	require.Empty(t, reason)
+}
+
+func TestDecideScheduledGroupProbeWakesAtSlotEndWhenTrafficOverlapsStaleProbe(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 2, 0, 0, time.UTC)
+	last := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	skip, next, reason := decideScheduledGroupProbe(now, 10*time.Minute, true, &last)
+	require.True(t, skip)
+	require.Equal(t, time.Date(2026, 9, 6, 12, 5, 0, 0, time.UTC), next, "re-ask at the next bar, not lastProbe+interval")
+	require.Equal(t, "skipped_recent_user_traffic", reason)
 }
 
 func TestScheduledProbeCanInspectEveryRuntimeStateWithoutAdvancingRecovery(t *testing.T) {
@@ -281,6 +334,36 @@ func TestProbeNowDoesNotReportInternalErrorAfterProbeCompleted(t *testing.T) {
 
 	require.NoError(t, service.ProbeNow(context.Background(), 8))
 	require.NotNil(t, healthRepo.snapshot, "the completed probe result must still be persisted")
+}
+
+func TestScheduledProbeDefersToSlotEndWhenCurrentBarHasTraffic(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 2, 0, 0, time.UTC)
+	healthRepo := &occupancyHealthRepo{recent: true}
+	svc := NewGroupHealthService(healthRepo, &immediateRefreshAccountRepo{}, &AccountTestService{}, nil, nil)
+	require.NoError(t, svc.probeGroup(context.Background(), GroupProbeTarget{GroupID: 8, Interval: 10 * time.Minute, ProbeEnabled: true}, now, false))
+	require.Equal(t, time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC), healthRepo.since)
+	require.Equal(t, "skipped_recent_user_traffic", healthRepo.snapshot.Reason)
+	require.Equal(t, time.Date(2026, 9, 6, 12, 5, 0, 0, time.UTC), healthRepo.snapshot.NextProbeAt.UTC())
+	require.Nil(t, healthRepo.snapshot.LastProbeAt)
+}
+
+func TestScheduledProbeDefersWhenIntervalHasNotElapsed(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 6, 0, 0, time.UTC)
+	last := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	healthRepo := &occupancyHealthRepo{immediateRefreshHealthRepo: immediateRefreshHealthRepo{snapshot: &GroupHealthSnapshot{GroupID: 8, LastProbeAt: &last}}}
+	svc := NewGroupHealthService(healthRepo, &immediateRefreshAccountRepo{}, &AccountTestService{}, nil, nil)
+	require.NoError(t, svc.probeGroup(context.Background(), GroupProbeTarget{GroupID: 8, Interval: 10 * time.Minute, ProbeEnabled: true}, now, false))
+	require.Equal(t, "skipped_recent_probe", healthRepo.snapshot.Reason)
+	require.Equal(t, time.Date(2026, 9, 6, 12, 10, 0, 0, time.UTC), healthRepo.snapshot.NextProbeAt.UTC())
+	require.Equal(t, last, *healthRepo.snapshot.LastProbeAt)
+}
+
+func TestProbeNowIgnoresOccupancySkip(t *testing.T) {
+	healthRepo := &occupancyHealthRepo{recent: true}
+	svc := NewGroupHealthService(healthRepo, &immediateRefreshAccountRepo{}, &AccountTestService{}, nil, nil)
+	require.NoError(t, svc.ProbeNow(context.Background(), 8))
+	require.NotNil(t, healthRepo.snapshot.LastProbeAt)
+	require.NotEqual(t, "skipped_recent_user_traffic", healthRepo.snapshot.Reason)
 }
 
 func TestOpenAIGroupProbeNeverDispatchesAnthropicAccount(t *testing.T) {

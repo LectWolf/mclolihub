@@ -109,7 +109,7 @@ func (s *GroupHealthService) runCycle() {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := s.probeGroup(ctx, target, now); err != nil {
+		if err := s.probeGroup(ctx, target, now, false); err != nil {
 			slog.Warn("group_health: group probe failed", "group_id", target.GroupID, "error", err)
 		}
 	}
@@ -131,20 +131,35 @@ func (s *GroupHealthService) runCycle() {
 	}
 }
 
-func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTarget, now time.Time) error {
+func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTarget, now time.Time, force bool) error {
 	release, acquired := tryAcquireSingletonLeaderLock(ctx, s.lockCache, s.db, fmt.Sprintf("group-health:group:%d", target.GroupID), s.instanceID, groupHealthLockTTL)
 	if !acquired {
 		return nil
 	}
 	defer release()
-	if finder, ok := s.repo.(interface {
-		HasRecentUserSuccess(context.Context, int64, time.Time) (bool, error)
-	}); ok {
-		recent, err := finder.HasRecentUserSuccess(ctx, target.GroupID, now.Add(-10*time.Minute))
+	if !force {
+		snapshot, err := s.repo.Load(ctx, target.GroupID)
 		if err != nil {
-			slog.Warn("group_health: recent user traffic lookup failed", "group_id", target.GroupID, "error", err)
-		} else if recent {
-			return s.deferScheduledProbe(ctx, target, now, "skipped_recent_user_traffic")
+			return err
+		}
+		var lastProbeAt *time.Time
+		if snapshot != nil {
+			lastProbeAt = snapshot.LastProbeAt
+		}
+		slotStart, _ := groupProbeSlotBounds(now)
+		slotHasTraffic := false
+		if finder, ok := s.repo.(interface {
+			HasRecentUserSuccess(context.Context, int64, time.Time) (bool, error)
+		}); ok {
+			recent, lookupErr := finder.HasRecentUserSuccess(ctx, target.GroupID, slotStart)
+			if lookupErr != nil {
+				slog.Warn("group_health: recent user traffic lookup failed", "group_id", target.GroupID, "error", lookupErr)
+			} else {
+				slotHasTraffic = recent
+			}
+		}
+		if skip, next, reason := decideScheduledGroupProbe(now, target.Interval, slotHasTraffic, lastProbeAt); skip {
+			return s.deferScheduledProbe(ctx, target, next, reason)
 		}
 	}
 	accounts, err := s.accountRepo.ListByGroup(ctx, target.GroupID)
@@ -211,7 +226,7 @@ func (s *GroupHealthService) probeGroup(ctx context.Context, target GroupProbeTa
 	return s.repo.Save(ctx, snapshot)
 }
 
-func (s *GroupHealthService) deferScheduledProbe(ctx context.Context, target GroupProbeTarget, now time.Time, reason string) error {
+func (s *GroupHealthService) deferScheduledProbe(ctx context.Context, target GroupProbeTarget, next time.Time, reason string) error {
 	snapshot, err := s.repo.Load(ctx, target.GroupID)
 	if err != nil {
 		return err
@@ -219,7 +234,6 @@ func (s *GroupHealthService) deferScheduledProbe(ctx context.Context, target Gro
 	if snapshot == nil {
 		snapshot = &GroupHealthSnapshot{GroupID: target.GroupID, Status: GroupHealthUnknown}
 	}
-	next := now.Add(target.Interval)
 	snapshot.NextProbeAt = &next
 	if reason != "" {
 		snapshot.Reason = reason
@@ -240,7 +254,7 @@ func (s *GroupHealthService) ProbeNow(ctx context.Context, groupID int64) error 
 		return fmt.Errorf("group probe is disabled")
 	}
 	now := time.Now()
-	if err := s.probeGroup(ctx, target, now); err != nil {
+	if err := s.probeGroup(ctx, target, now, true); err != nil {
 		return err
 	}
 	// The scheduled loop refreshes rolling metrics at the end of each cycle,

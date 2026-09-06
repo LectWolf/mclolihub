@@ -576,8 +576,9 @@ func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix
 	if len(ids) == 0 {
 		return
 	}
+	windowStart := completedMonitorWindowStart(filter, matrix.Coverage.DataThrough)
 	lookback := 2 * time.Hour
-	events, err := loader.LoadGroupProbeEvents(ctx, ids, filter.Start.Add(-lookback), filter.End)
+	events, err := loader.LoadGroupProbeEvents(ctx, ids, windowStart.Add(-lookback), filter.End)
 	if err != nil || events == nil {
 		return
 	}
@@ -594,10 +595,38 @@ func (s *ChannelMonitorV2Service) attachProbeBuckets(ctx context.Context, matrix
 		if interval <= 0 {
 			interval = DefaultGroupProbeInterval
 		}
-		if buckets := projectProbeEventsOntoBuckets(events[id], interval, filter.Start, filter.End, filter.Bucket); len(buckets) > 0 {
+		if buckets := projectProbeEventsOntoBuckets(events[id], interval, windowStart, filter.End, filter.Bucket); len(buckets) > 0 {
 			matrix.Items[i].ProbeBuckets = buckets
 		}
 	}
+}
+
+// completedMonitorWindowStart is the left edge of the V3 bar chart: N completed
+// buckets ending at floor(data_through). ParseFilter ends at the next wall-clock
+// bucket, so this is typically 1–2 buckets earlier than filter.Start and those
+// oldest V3 slots would otherwise have no probe/traffic rows.
+func completedMonitorWindowStart(filter ChannelMonitorV2Filter, dataThrough time.Time) time.Time {
+	if filter.Bucket <= 0 || filter.Start.IsZero() || filter.End.IsZero() {
+		return filter.Start
+	}
+	window := filter.End.Sub(filter.Start)
+	if window <= 0 {
+		return filter.Start
+	}
+	end := filter.End.UTC()
+	through := dataThrough.UTC().Truncate(filter.Bucket)
+	if through.IsZero() || !through.Before(end) {
+		through = end.Add(-filter.Bucket)
+	}
+	start := through.Add(-window)
+	if start.After(filter.Start) {
+		return filter.Start
+	}
+	return start
+}
+
+func CompletedMonitorWindowStart(filter ChannelMonitorV2Filter, dataThrough time.Time) time.Time {
+	return completedMonitorWindowStart(filter, dataThrough)
 }
 
 func probeCarryForwardDuration(interval time.Duration) time.Duration {

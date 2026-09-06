@@ -71,6 +71,25 @@ describe('v3CardPresentation', () => {
     expect(alignTimelineEndMs(nowMs, bucketMs, dataThroughMs)).toBe(Date.parse('2026-09-04T17:40:00Z'))
   })
 
+  it('keeps 18 completed 90m slots, so the oldest two sit before ParseFilter start', () => {
+    const bucketMs = 5 * 60 * 1000
+    const slots = buildV3TimelineSlots({
+      nowMs: Date.parse('2026-09-04T17:47:00Z'),
+      dataThroughMs: Date.parse('2026-09-04T17:42:30Z'),
+      length: 18,
+      bucketMs,
+      probeBuckets: [
+        { startMs: Date.parse('2026-09-04T16:10:00Z'), durationMs: bucketMs, success: 1, failure: 0, ttftMs: 400 },
+        { startMs: Date.parse('2026-09-04T16:15:00Z'), durationMs: bucketMs, success: 1, failure: 0, ttftMs: 400 },
+      ],
+    })
+    expect(slots).toHaveLength(18)
+    expect(new Date(slots[0].startMs).toISOString()).toBe('2026-09-04T16:10:00.000Z')
+    expect(new Date(slots[1].startMs).toISOString()).toBe('2026-09-04T16:15:00.000Z')
+    expect(slots[0].source).toBe('probe')
+    expect(slots[1].source).toBe('probe')
+  })
+
   it('paints each collection slot that already inherited a probe sample', () => {
     const nowMs = Date.parse('2026-09-04T17:42:00Z')
     const bucketMs = 5 * 60 * 1000

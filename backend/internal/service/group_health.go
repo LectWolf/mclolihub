@@ -77,6 +77,11 @@ const (
 	RoutePlatformGrok              = PlatformGrok
 	DefaultGroupProbeInterval      = 10 * time.Minute
 	ImmediateProbeCooldown         = 2 * time.Minute
+	// GroupProbeOccupancySlot is the 90m bar width. Scheduled probes ask
+	// "did this slot already have user traffic?" rather than looking back a
+	// full interval, so a green bar can be followed by a blue bar at the
+	// next slot start.
+	GroupProbeOccupancySlot = 5 * time.Minute
 )
 
 var accountProbeBackoff = [...]time.Duration{30 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
@@ -93,6 +98,38 @@ func NormalizeGroupProbeConfig(model string, intervalSeconds int) (string, int, 
 		return "", 0, errors.New("probe_interval_seconds must be between 30 and 3600")
 	}
 	return model, intervalSeconds, nil
+}
+
+func groupProbeSlotBounds(now time.Time) (start, end time.Time) {
+	start = now.UTC().Truncate(GroupProbeOccupancySlot)
+	return start, start.Add(GroupProbeOccupancySlot)
+}
+
+func decideScheduledGroupProbe(now time.Time, interval time.Duration, slotHasTraffic bool, lastProbeAt *time.Time) (skip bool, next time.Time, reason string) {
+	if interval <= 0 {
+		interval = DefaultGroupProbeInterval
+	}
+	now = now.UTC()
+	_, slotEnd := groupProbeSlotBounds(now)
+	recentProbe := lastProbeAt != nil && now.Sub(lastProbeAt.UTC()) < interval
+	if !slotHasTraffic && !recentProbe {
+		return false, time.Time{}, ""
+	}
+	next = slotEnd
+	if recentProbe {
+		heartbeat := lastProbeAt.UTC().Add(interval)
+		if !slotHasTraffic || heartbeat.Before(next) {
+			next = heartbeat
+		}
+	}
+	if !next.After(now) {
+		return false, time.Time{}, ""
+	}
+	reason = "skipped_recent_user_traffic"
+	if !slotHasTraffic {
+		reason = "skipped_recent_probe"
+	}
+	return true, next, reason
 }
 
 type AccountHealth struct {
