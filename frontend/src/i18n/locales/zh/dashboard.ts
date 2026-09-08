@@ -573,7 +573,7 @@ export default {
     },
     empty: {
       title: '暂无可显示的渠道',
-      description: ''
+      description: '尝试调整筛选条件，或稍后再看。'
     }
   },
 

@@ -568,7 +568,7 @@ export default {
     },
     empty: {
       title: 'No channels available',
-      description: ''
+      description: 'Try adjusting filters or check back later.'
     }
   },
 
