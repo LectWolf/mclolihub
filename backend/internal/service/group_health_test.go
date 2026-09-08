@@ -273,6 +273,16 @@ func TestRankGroupCandidates(t *testing.T) {
 	require.Equal(t, []int64{2}, []int64{got[0].GroupID})
 }
 
+func TestRankGroupCandidatesIncludesEqualMaxRate(t *testing.T) {
+	max := 0.09
+	got, err := RankGroupCandidates(RouteModeSmart, &max, []GroupRouteCandidate{
+		{GroupID: 1, RateMultiplier: 0.09, Healthy: true, ProbeEnabled: true, CustomPosition: 0},
+		{GroupID: 2, RateMultiplier: 0.0901, Healthy: true, ProbeEnabled: true, CustomPosition: 1},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []int64{1}, []int64{got[0].GroupID})
+}
+
 func TestFixedBypassesHealthButNotMaxRate(t *testing.T) {
 	max := 1.0
 	got, err := RankGroupCandidates(RouteModeFixed, &max, []GroupRouteCandidate{{GroupID: 1, RateMultiplier: .9, Healthy: false, ProbeEnabled: true}, {GroupID: 2, RateMultiplier: 1.1}})

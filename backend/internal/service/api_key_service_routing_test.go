@@ -68,7 +68,7 @@ func TestResolveRoutingGroupsLegacyAutoUsesOpenAI(t *testing.T) {
 
 	groups, err := svc.ResolveRoutingGroups(context.Background(), key)
 	require.NoError(t, err)
-	require.Equal(t, []int64{1}, []int64{groups[0].ID})
+	require.Equal(t, []int64{1, 2}, []int64{groups[0].ID, groups[1].ID}, "smart routing no longer locks a key to one platform")
 	require.Equal(t, RoutePlatformOpenAI, NormalizeRoutePlatform(RoutePlatformAuto))
 	require.Equal(t, RoutePlatformOpenAI, NormalizeRoutePlatform(""))
 	require.Error(t, ValidateRoutePlatform(RoutePlatformAuto))

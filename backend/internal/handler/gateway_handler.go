@@ -105,11 +105,13 @@ func applyDynamicGroupRequestContext(c *gin.Context, apiKey *service.APIKey, mod
 			platform = detected
 		}
 	}
+	ctx := c.Request.Context()
 	if platform != "" {
-		ctx := service.WithResolvedTargetPlatform(c.Request.Context(), platform)
-		ctx = context.WithValue(ctx, ctxkey.Group, apiKey.Group)
-		c.Request = c.Request.WithContext(ctx)
+		ctx = service.WithResolvedTargetPlatform(ctx, platform)
 	}
+	ctx = context.WithValue(ctx, ctxkey.Group, apiKey.Group)
+	ctx = service.BindGatewayTokenRequestBillingGroup(ctx, apiKey.Group)
+	c.Request = c.Request.WithContext(ctx)
 	// Authentication records the key before dynamic routing resolves its actual
 	// group. Keep the Gin value in sync so Ops/SLA attribution observes the
 	// group that handled the request rather than the key's original group.

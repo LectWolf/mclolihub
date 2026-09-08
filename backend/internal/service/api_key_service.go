@@ -182,11 +182,7 @@ func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) 
 	}
 	candidates := make([]GroupRouteCandidate, 0, len(groups))
 	previews := make([]RoutingGroupPreview, 0, len(groups))
-	routePlatform := effectiveRoutePlatform(key)
 	for _, g := range groups {
-		if !routePlatformMatches(routePlatform, g.Platform) {
-			continue
-		}
 		rate := g.RateMultiplier
 		if v, ok := rates[g.ID]; ok {
 			rate = v
@@ -211,7 +207,7 @@ func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) 
 			eligible = false
 			reason = "disabled_by_api_key"
 		}
-		if maxRate := effectiveMaxRateMultiplier(key.MaxRateMultiplier); maxRate != nil && rate > *maxRate {
+		if maxRate := effectiveMaxRateMultiplier(key.MaxRateMultiplier); maxRate != nil && rateExceedsMax(rate, *maxRate) {
 			eligible = false
 			reason = "max_rate_exceeded"
 		}
@@ -272,7 +268,7 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 				rate = *custom
 			}
 		}
-		if maxRate := effectiveMaxRateMultiplier(key.MaxRateMultiplier); maxRate != nil && rate > *maxRate {
+		if maxRate := effectiveMaxRateMultiplier(key.MaxRateMultiplier); maxRate != nil && rateExceedsMax(rate, *maxRate) {
 			return nil, infraerrors.Forbidden("API_KEY_MAX_RATE_EXCEEDED", "fixed group exceeds API key max rate multiplier")
 		}
 		return []Group{*key.Group}, nil
@@ -300,11 +296,7 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 		health, _ = reader.GetRouteHealth(ctx, ids)
 	}
 	candidates := make([]GroupRouteCandidate, 0, len(groups))
-	routePlatform := effectiveRoutePlatform(key)
 	for _, group := range groups {
-		if !routePlatformMatches(routePlatform, group.Platform) {
-			continue
-		}
 		if key.User == nil || !s.canUserBindGroup(ctx, key.User, &group) {
 			continue
 		}
@@ -335,13 +327,6 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 		return nil, infraerrors.ServiceUnavailable("NO_HEALTHY_ROUTE_GROUP", "no healthy group matches API key routing policy")
 	}
 	return out, nil
-}
-
-func effectiveRoutePlatform(key *APIKey) string {
-	if key == nil {
-		return RoutePlatformOpenAI
-	}
-	return NormalizeRoutePlatform(key.RoutePlatform)
 }
 
 func buildAPIKeyPreferences(custom []int64) []APIKeyGroupPreference {

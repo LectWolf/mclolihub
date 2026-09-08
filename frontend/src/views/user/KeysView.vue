@@ -135,12 +135,29 @@
 
           <template #cell-group="{ row }">
             <div class="group/dropdown relative">
-              <button v-if="row.route_mode !== 'fixed'" type="button" class="flex items-center gap-2 rounded-lg px-2 py-1 text-left transition-colors hover:bg-gray-100 dark:hover:bg-dark-700" @click="openRoutingPreview(row)">
-                <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(activeRouteStatus(row))" />
-                <span class="text-sm text-gray-800 dark:text-gray-200">{{ t('keys.routeModes.' + normalizeRouteMode(row.route_mode)) }}</span>
-                <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ t('keys.routePlatforms.' + normalizeRoutePlatform(row.route_platform)) }}</span>
-                <span class="text-xs text-gray-500">{{ t('keys.nextGroup') }}: {{ activeRouteGroupName(row) }}</span>
-                <Icon name="chevronDown" size="sm" class="text-gray-400" />
+              <button
+                v-if="isSmartRoutingKey(row)"
+                type="button"
+                class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
+                :title="t('keys.smartRoutingChangeInEditor')"
+                @click="editKey(row)"
+              >
+                <GroupBadge
+                  v-if="row.group"
+                  :name="row.group.name"
+                  :platform="row.group.platform"
+                  :subscription-type="row.group.subscription_type"
+                  :rate-multiplier="row.group.rate_multiplier"
+                  :user-rate-multiplier="userGroupRates[row.group.id]"
+                  :peak-rate-enabled="row.group.peak_rate_enabled"
+                  :peak-start="row.group.peak_start"
+                  :peak-end="row.group.peak_end"
+                  :peak-rate-multiplier="row.group.peak_rate_multiplier"
+                />
+                <span v-else class="text-sm text-gray-400 dark:text-dark-500">{{ t('keys.noGroup') }}</span>
+                <span class="rounded-full bg-primary-50 px-1.5 py-0.5 text-[11px] font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                  {{ t('keys.smartRouting') }}
+                </span>
               </button>
               <button
                 v-else
@@ -473,18 +490,73 @@
         </div>
 
         <div>
-          <label class="input-label">{{ t('keys.routeModeLabel') }}</label>
-          <Select v-model="formData.route_mode" :options="routeModeOptions" />
-        </div>
-
-        <div v-if="formData.route_mode !== 'fixed'">
-          <label class="input-label">{{ t('keys.routePlatformLabel') }}</label>
-          <Select v-model="formData.route_platform" :options="routePlatformOptions" />
-        </div>
-
-        <div v-if="formData.route_mode === 'fixed'">
           <label class="input-label">{{ t('keys.groupLabel') }}</label>
+          <div class="mb-3 flex items-center justify-between">
+            <span class="text-sm text-gray-700 dark:text-gray-200">{{ t('keys.smartRouting') }}</span>
+            <button
+              type="button"
+              :class="[
+                'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none',
+                formData.smart_routing ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+              :title="formData.smart_routing ? t('common.enabled') : t('common.disabled')"
+              @click="formData.smart_routing = !formData.smart_routing"
+            >
+              <span
+                :class="[
+                  'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition',
+                  formData.smart_routing ? 'translate-x-4' : 'translate-x-0'
+                ]"
+              />
+            </button>
+          </div>
+          <p v-if="formData.smart_routing" class="mb-3 text-xs text-gray-500 dark:text-dark-400">
+            {{ t('keys.smartRoutingHint') }}
+          </p>
+          <div v-if="formData.smart_routing" class="space-y-2">
+            <VueDraggable v-model="formData.group_ids" class="space-y-2" handle=".route-drag-handle">
+              <div
+                v-for="(groupId, index) in formData.group_ids"
+                :key="`${groupId}-${index}`"
+                class="flex h-10 items-center gap-2 rounded-md border border-gray-200 px-3 dark:border-dark-600"
+              >
+                <button type="button" class="route-drag-handle cursor-grab text-gray-400" :title="t('keys.dragToReorder')">
+                  <Icon name="menu" size="sm" />
+                </button>
+                <div class="min-w-0 flex-1">
+                  <GroupBadge
+                    v-if="groupOptionById(groupId)"
+                    :name="groupOptionById(groupId)!.label"
+                    :platform="groupOptionById(groupId)!.platform"
+                    :subscription-type="groupOptionById(groupId)!.subscriptionType"
+                    :rate-multiplier="groupOptionById(groupId)!.rate"
+                    :user-rate-multiplier="groupOptionById(groupId)!.userRate"
+                    :peak-rate-enabled="groupOptionById(groupId)!.peakRateEnabled"
+                    :peak-start="groupOptionById(groupId)!.peakStart"
+                    :peak-end="groupOptionById(groupId)!.peakEnd"
+                    :peak-rate-multiplier="groupOptionById(groupId)!.peakRateMultiplier"
+                  />
+                  <span v-else class="text-sm text-gray-400">#{{ groupId }}</span>
+                </div>
+                <button type="button" class="text-gray-400 hover:text-red-600" :title="t('common.delete')" @click="removeSmartRoute(index)">
+                  <Icon name="x" size="sm" />
+                </button>
+              </div>
+            </VueDraggable>
+            <Select
+              v-if="formData.group_ids.length < 10"
+              :model-value="null"
+              :options="smartRoutingAddOptions"
+              :placeholder="t('keys.smartRoutingAdd')"
+              :searchable="true"
+              :search-placeholder="t('keys.searchGroup')"
+              @update:model-value="addSmartRoute"
+            />
+            <p v-if="formData.group_ids.length === 0" class="text-xs text-gray-400">{{ t('keys.smartRoutingEmpty') }}</p>
+            <p v-else-if="formData.group_ids.length >= 10" class="text-xs text-gray-400">{{ t('keys.smartRoutingMax') }}</p>
+          </div>
           <Select
+            v-else
             v-model="formData.group_id"
             :options="groupOptions"
             :placeholder="t('keys.selectGroup')"
@@ -528,41 +600,6 @@
         <div>
           <label class="input-label">{{ t('keys.maxRateMultiplier') }}</label>
           <input v-model.number="formData.max_rate_multiplier" type="number" min="0" step="0.001" class="input" :placeholder="t('keys.maxRateMultiplierPlaceholder')" />
-        </div>
-
-                <div v-if="formData.route_mode === 'smart'" class="space-y-2">
-          <label class="input-label">{{ t('keys.smartRouteGroups') }}</label>
-          <p class="text-xs text-gray-500">{{ t('keys.smartRouteHint') }}</p>
-          <VueDraggable v-model="formData.custom_group_ids" class="space-y-2" handle=".route-drag-handle">
-            <div v-for="groupId in formData.custom_group_ids" :key="'on-' + groupId" class="flex h-10 items-center gap-2 rounded-md border border-gray-200 px-3 dark:border-dark-600">
-              <button type="button" class="route-drag-handle cursor-grab text-gray-400" :title="t('keys.dragToReorder')"><Icon name="menu" size="sm" /></button>
-              <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="routingStatusClass(groupHealthMap[groupId]?.status || 'unknown')" :title="routingStatusLabel(groupHealthMap[groupId]?.status || 'unknown')" />
-              <span class="min-w-0 flex-1 truncate text-sm">{{ groups.find(g => g.id === groupId)?.name || `#${groupId}` }}</span>
-              <span class="text-xs tabular-nums text-gray-500">{{ effectiveGroupRate(groups.find(g => g.id === groupId)!) }}x</span>
-              <button
-                type="button"
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary-600 transition-colors focus:outline-none"
-                :title="t('common.enabled')"
-                @click="toggleSmartGroup(groupId)"
-              >
-                <span class="pointer-events-none inline-block h-4 w-4 translate-x-4 transform rounded-full bg-white shadow transition" />
-              </button>
-            </div>
-          </VueDraggable>
-          <div v-for="group in groups.filter(g => !formData.custom_group_ids.includes(g.id))" :key="'off-' + group.id" class="flex h-10 items-center gap-2 rounded-md border border-dashed border-gray-200 px-3 dark:border-dark-600">
-            <span class="w-4" />
-            <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="routingStatusClass(groupHealthMap[group.id]?.status || 'unknown')" :title="routingStatusLabel(groupHealthMap[group.id]?.status || 'unknown')" />
-            <span class="min-w-0 flex-1 truncate text-sm text-gray-500">{{ group.name }}</span>
-            <span class="text-xs tabular-nums text-gray-400">{{ effectiveGroupRate(group) }}x</span>
-            <button
-              type="button"
-              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors focus:outline-none dark:bg-dark-600"
-              :title="t('common.disabled')"
-              @click="toggleSmartGroup(group.id)"
-            >
-              <span class="pointer-events-none inline-block h-4 w-4 translate-x-0 transform rounded-full bg-white shadow transition" />
-            </button>
-          </div>
         </div>
 
 <!-- Custom Key Section (only for create) -->
@@ -1010,20 +1047,6 @@
       </template>
     </BaseDialog>
 
-    <BaseDialog :show="routingPreview !== null" :title="t('keys.routingPreviewTitle')" width="normal" @close="closeRoutingPreview">
-      <div v-if="routingPreview" class="space-y-3">
-        <p class="text-sm text-gray-500">{{ t('keys.routingPreviewMode', { mode: t('keys.routeModes.' + routingPreview.route_mode) }) }}</p>
-        <div v-for="group in routingPreview.groups" :key="group.group_id" class="flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-dark-700">
-          <span class="w-6 text-center text-xs font-semibold tabular-nums text-gray-400">{{ group.position || '-' }}</span>
-          <span class="h-2.5 w-2.5 rounded-full" :class="routingStatusClass(group.status)" />
-          <span class="min-w-0 flex-1 truncate text-sm">{{ group.name }}</span>
-          <span class="text-xs tabular-nums text-gray-500">{{ formatRateMultiplier(group.rate_multiplier) }}x</span>
-          <span v-if="group.position === 1" class="badge badge-primary">{{ t('keys.nextGroup') }}</span>
-          <span v-else-if="!group.eligible" class="text-xs text-gray-400">{{ routingExcludedReasonLabel(group.excluded_reason) }}</span>
-        </div>
-      </div>
-    </BaseDialog>
-
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       :show="showDeleteDialog"
@@ -1189,7 +1212,7 @@
 </template>
 
 <script setup lang="ts">
-	import { ref, reactive, computed, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+	import { ref, reactive, computed, watch, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
 	import { useI18n } from 'vue-i18n'
 	import { VueDraggable } from 'vue-draggable-plus'
 	import { useAppStore } from '@/stores/app'
@@ -1199,8 +1222,6 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
-import type { RoutingPreview } from '@/api/keys'
-import { listGroupHealth, type GroupHealthItem } from '@/api/groupHealth'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import DataTable from '@/components/common/DataTable.vue'
@@ -1219,8 +1240,6 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
-import { formatMultiplier as formatRateMultiplier } from '@/utils/formatters'
-import { extractApiErrorMessage } from '@/utils/apiError'
 import { maskApiKey } from '@/utils/maskApiKey'
 import {
   buildCcSwitchImportDeeplink,
@@ -1354,10 +1373,6 @@ const now = ref(new Date())
 let resetTimer: ReturnType<typeof setInterval> | null = null
 const usageStats = ref<Record<string, BatchApiKeyUsageStats>>({})
 const userGroupRates = ref<Record<number, number>>({})
-const groupHealthMap = reactive<Record<number, GroupHealthItem>>({})
-const routingPreviews = ref<Record<number, RoutingPreview>>({})
-const routingPreview = ref<RoutingPreview | null>(null)
-const routingPreviewKeyID = ref<number | null>(null)
 
 const pagination = ref({
   page: 1,
@@ -1411,10 +1426,9 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 const formData = ref({
   name: '',
   group_id: null as number | null,
-	route_mode: 'fixed' as 'fixed' | 'smart',
-	route_platform: 'openai' as 'openai' | 'anthropic' | 'grok',
-	max_rate_multiplier: null as number | null,
-	custom_group_ids: [] as number[],
+  group_ids: [] as number[],
+  smart_routing: false,
+  max_rate_multiplier: null as number | null,
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1455,78 +1469,47 @@ const statusOptions = computed(() => [
   { value: 'inactive', label: t('common.inactive') }
 ])
 
-const routeModeOptions = computed(() => [
-  { value: 'fixed', label: t('keys.routeModes.fixed') },
-  { value: 'smart', label: t('keys.routeModes.smart') },
-])
-
 const normalizeRouteMode = (mode?: string): 'fixed' | 'smart' => {
   if (mode === 'smart' || mode === 'custom' || mode === 'cheapest' || mode === 'fastest') return 'smart'
   return 'fixed'
 }
 
-const toggleSmartGroup = (groupId: number) => {
-  const ids = formData.value.custom_group_ids
-  const index = ids.indexOf(groupId)
-  if (index >= 0) ids.splice(index, 1)
-  else ids.push(groupId)
-}
+const isSmartRoutingKey = (key: ApiKey) => normalizeRouteMode(key.route_mode) === 'smart'
 
-const routePlatformOptions = computed(() => [
-  { value: 'openai', label: t('keys.routePlatforms.openai') },
-  { value: 'anthropic', label: t('keys.routePlatforms.anthropic') },
-  { value: 'grok', label: t('keys.routePlatforms.grok') },
-])
+const groupOptionById = (id: number) => groupOptions.value.find((opt) => opt.value === id)
 
-const normalizeRoutePlatform = (platform?: string): 'openai' | 'anthropic' | 'grok' => {
-  if (platform === 'anthropic' || platform === 'grok') return platform
-  return 'openai'
-}
-
-const effectiveGroupRate = (group: Group) => userGroupRates.value[group.id] ?? group.rate_multiplier
-
-const routingPreviewFor = (key: ApiKey) => routingPreviews.value[key.id]
-const activeRouteGroupName = (key: ApiKey) => {
-  const preview = routingPreviewFor(key)
-  const groupID = preview?.next_group_id
-  return preview?.groups.find((group) => group.group_id === groupID)?.name || t('keys.noGroup')
-}
-const activeRouteStatus = (key: ApiKey) => {
-  const preview = routingPreviewFor(key)
-  const groupID = preview?.next_group_id
-  return preview?.groups.find((group) => group.group_id === groupID)?.status || 'unknown'
-}
-const routingStatusClass = (status: string) => ({ healthy: 'bg-emerald-500', unavailable: 'bg-red-500', balance_insufficient: 'bg-red-500', not_enabled: 'bg-amber-400', unknown: 'bg-gray-400' }[status] || 'bg-gray-400')
-const routingStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    healthy: '可用',
-    unavailable: '不可用',
-    balance_insufficient: '余额不足',
-    not_enabled: '未开启探测',
-    unknown: '未知',
+watch(
+  () => formData.value.smart_routing,
+  (enabled) => {
+    if (enabled) {
+      if (formData.value.group_ids.length === 0 && formData.value.group_id != null) {
+        formData.value.group_ids = [formData.value.group_id]
+      }
+      return
+    }
+    formData.value.group_ids = formData.value.group_id != null ? [formData.value.group_id] : []
   }
-  return labels[status] || t(`groupHealth.statuses.${status}`, status)
-}
-const routingExcludedReasonLabel = (reason?: string) => {
-  const labels: Record<string, string> = {
-    unavailable: '不可用',
-    max_rate_exceeded: '超过倍率上限',
-    not_in_smart_route: '未加入智能路由',
-    filtered_by_health: '健康检查未通过',
+)
+
+const smartRoutingAddOptions = computed(() => {
+  const selected = new Set(formData.value.group_ids)
+  return groupOptions.value.filter((opt) => !selected.has(opt.value))
+})
+
+const addSmartRoute = (value: string | number | boolean | null) => {
+  if (typeof value !== 'number') return
+  if (formData.value.group_ids.includes(value)) return
+  if (formData.value.group_ids.length >= 10) {
+    appStore.showError(t('keys.smartRoutingMax'))
+    return
   }
-  return labels[reason || ''] || reason || '不可用'
+  formData.value.group_ids = [...formData.value.group_ids, value]
+  formData.value.group_id = formData.value.group_ids[0] ?? null
 }
-const openRoutingPreview = async (key: ApiKey) => {
-  try {
-    const preview = await keysAPI.getRoutingPreview(key.id)
-    routingPreviews.value[key.id] = preview
-    routingPreview.value = preview
-    routingPreviewKeyID.value = key.id
-  } catch (error) { appStore.showError(extractApiErrorMessage(error, t('keys.routingPreviewError'))) }
-}
-const closeRoutingPreview = () => {
-  routingPreview.value = null
-  routingPreviewKeyID.value = null
+
+const removeSmartRoute = (index: number) => {
+  formData.value.group_ids = formData.value.group_ids.filter((_, i) => i !== index)
+  formData.value.group_id = formData.value.group_ids[0] ?? null
 }
 
 const shouldSubmitEditStatus = (key: ApiKey, status: 'active' | 'inactive') => {
@@ -1639,15 +1622,6 @@ const loadApiKeys = async () => {
     pagination.value.total = response.total
     pagination.value.pages = response.pages
 
-    try {
-      const health = await listGroupHealth(signal, { trend: 'none' })
-      for (const key of Object.keys(groupHealthMap)) delete groupHealthMap[Number(key)]
-      for (const item of health.items || []) groupHealthMap[item.group_id] = item
-      await Promise.all(response.items.filter((key) => key.route_mode !== 'fixed').map(async (key) => {
-        try { routingPreviews.value[key.id] = await keysAPI.getRoutingPreview(key.id) } catch { /* list remains usable */ }
-      }))
-    } catch (e) { if (!isAbortError(e)) console.warn('Failed to load routing health', e) }
-
     // Load usage stats for all API keys in the list
     if (response.items.length > 0) {
       const keyIds = response.items.map((k) => k.id)
@@ -1732,15 +1706,14 @@ const editKey = (key: ApiKey) => {
   formData.value = {
     name: key.name,
     group_id: key.group_id,
+    group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
+    smart_routing: normalizeRouteMode(key.route_mode) === 'smart',
+    max_rate_multiplier: key.max_rate_multiplier,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
     custom_key: '',
     enable_ip_restriction: hasIPRestriction,
     ip_whitelist: (key.ip_whitelist || []).join('\n'),
-		route_mode: normalizeRouteMode(key.route_mode),
-		route_platform: normalizeRoutePlatform(key.route_platform),
-		max_rate_multiplier: key.max_rate_multiplier,
-		custom_group_ids: (key.group_preferences || []).filter(item => !item.disabled).sort((a, b) => a.position - b.position).map(item => item.group_id),
     ip_blacklist: (key.ip_blacklist || []).join('\n'),
     enable_quota: key.quota > 0,
     quota: key.quota > 0 ? key.quota : null,
@@ -1836,12 +1809,14 @@ const confirmDelete = (key: ApiKey) => {
 const handleSubmit = async () => {
   // Only fixed routing binds the key to one mandatory group. Dynamic modes
   // resolve their candidate groups at request time.
-  if (formData.value.route_mode === 'fixed' && formData.value.group_id === null) {
+  if (formData.value.smart_routing) {
+    if (formData.value.group_ids.length === 0) {
+      appStore.showError(t('keys.smartRouteRequired'))
+      return
+    }
+    formData.value.group_id = formData.value.group_ids[0] ?? null
+  } else if (formData.value.group_id === null) {
     appStore.showError(t('keys.groupRequired'))
-    return
-  }
-  if (formData.value.route_mode === 'smart' && formData.value.custom_group_ids.length === 0) {
-    appStore.showError(t('keys.smartRouteRequired'))
     return
   }
 
@@ -1898,10 +1873,9 @@ const handleSubmit = async () => {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
         group_id: formData.value.group_id,
-		route_mode: formData.value.route_mode,
-		route_platform: formData.value.route_mode === 'fixed' ? 'openai' : formData.value.route_platform,
-		max_rate_multiplier: formData.value.max_rate_multiplier,
-		custom_group_ids: formData.value.custom_group_ids,
+        route_mode: formData.value.smart_routing ? 'smart' : 'fixed',
+        max_rate_multiplier: formData.value.max_rate_multiplier,
+        custom_group_ids: formData.value.smart_routing ? formData.value.group_ids : [],
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1926,12 +1900,11 @@ const handleSubmit = async () => {
         quota,
         expiresInDays,
 		rateLimitData,
-		{
-			route_mode: formData.value.route_mode,
-			route_platform: formData.value.route_mode === 'fixed' ? 'openai' : formData.value.route_platform,
-				max_rate_multiplier: formData.value.max_rate_multiplier,
-				custom_group_ids: formData.value.custom_group_ids
-		}
+        {
+          route_mode: formData.value.smart_routing ? 'smart' : 'fixed',
+          max_rate_multiplier: formData.value.max_rate_multiplier,
+          custom_group_ids: formData.value.smart_routing ? formData.value.group_ids : []
+        }
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded
@@ -1977,10 +1950,9 @@ const closeModals = () => {
   formData.value = {
     name: '',
     group_id: null,
-		route_mode: 'fixed',
-		route_platform: 'openai',
-			max_rate_multiplier: null,
-		custom_group_ids: [],
+    group_ids: [],
+    smart_routing: false,
+    max_rate_multiplier: null,
     status: 'active',
     use_custom_key: false,
     custom_key: '',

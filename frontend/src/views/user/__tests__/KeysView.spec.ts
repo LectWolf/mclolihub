@@ -193,7 +193,7 @@ const DataTableStub = {
 
 const SelectStub = {
   name: 'Select',
-  props: ['modelValue', 'options'],
+  props: ['modelValue', 'options', 'placeholder'],
   emits: ['update:modelValue'],
   template: '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"></select>',
 }
@@ -462,11 +462,9 @@ describe('user KeysView column settings', () => {
     await getButtonByText(wrapper, 'Create API Key').trigger('click')
     await nextTick()
 
-    const routeSelect = wrapper.findAllComponents({ name: 'Select' }).find((select) =>
-      (select.props('options') as Array<{ value?: string }> | undefined)?.some((option) => option.value === 'smart')
-    )
-    expect(routeSelect).toBeDefined()
-    await routeSelect!.vm.$emit('update:modelValue', 'smart')
+    const smartToggle = wrapper.findAll('button').find((button) => button.attributes('title') === 'common.disabled')
+    expect(smartToggle).toBeDefined()
+    await smartToggle!.trigger('click')
     await nextTick()
     await wrapper.get('#key-form').trigger('submit')
     await flushPromises()
@@ -474,7 +472,9 @@ describe('user KeysView column settings', () => {
     expect(createKey).not.toHaveBeenCalled()
 
     showError.mockClear()
-    await wrapper.get('button[title="common.disabled"]').trigger('click')
+    const addSelect = wrapper.findAllComponents({ name: 'Select' }).find((select) => select.props('placeholder') === 'keys.smartRoutingAdd')
+    expect(addSelect).toBeDefined()
+    await addSelect!.vm.$emit('update:modelValue', 11)
     await nextTick()
     await wrapper.get('#key-form').trigger('submit')
     await flushPromises()
@@ -482,7 +482,7 @@ describe('user KeysView column settings', () => {
     expect(showError).not.toHaveBeenCalledWith('keys.groupRequired')
     expect(createKey).toHaveBeenCalledWith(
       '',
-      null,
+      11,
       undefined,
       [],
       [],

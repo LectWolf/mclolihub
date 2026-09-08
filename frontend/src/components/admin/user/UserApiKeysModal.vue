@@ -45,58 +45,44 @@
             <div class="flex items-center gap-1"><span>{{ t('admin.users.columns.created') }}: {{ formatDateTime(key.created_at) }}</span></div>
           </div>
           <div class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700">
-            <div class="flex flex-wrap items-end gap-2">
-              <label class="min-w-32 flex-1">
-                <span class="mb-1 block text-[11px] text-gray-400">路由方式</span>
-                <select v-model="drafts[key.id].route_mode" class="input input-sm w-full">
-                  <option value="fixed">固定分组</option>
-                  <option value="smart">智能路由</option>
-                </select>
-              </label>
-              <label v-if="drafts[key.id].route_mode !== 'fixed'" class="min-w-32 flex-1">
-                <span class="mb-1 block text-[11px] text-gray-400">平台范围</span>
-                <select v-model="drafts[key.id].route_platform" class="input input-sm w-full">
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="grok">Grok</option>
-                </select>
-              </label>
+            <div class="mb-3 flex items-center justify-between">
+              <span class="text-sm text-gray-700 dark:text-gray-200">{{ t('keys.smartRouting') }}</span>
+              <button
+                type="button"
+                :class="[
+                  'relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+                  drafts[key.id].smart_routing ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+                ]"
+                @click="drafts[key.id].smart_routing = !drafts[key.id].smart_routing"
+              >
+                <span :class="['pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition', drafts[key.id].smart_routing ? 'translate-x-4' : 'translate-x-0']" />
+              </button>
+            </div>
+            <div v-if="drafts[key.id].smart_routing" class="space-y-1">
+              <div v-for="(groupId, index) in drafts[key.id].custom_group_ids" :key="`custom-${key.id}-${groupId}`" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === 0" title="上移" @click="moveCustomGroup(key.id, index, -1)">↑</button>
+                <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === drafts[key.id].custom_group_ids.length - 1" title="下移" @click="moveCustomGroup(key.id, index, 1)">↓</button>
+                <span class="min-w-0 flex-1 truncate">{{ allGroups.find((group) => group.id === groupId)?.name || `#${groupId}` }}</span>
+                <button type="button" class="text-gray-400 hover:text-red-600" title="删除" @click="toggleSmartGroup(key.id, groupId)">×</button>
+              </div>
+              <select
+                v-if="drafts[key.id].custom_group_ids.length < 10"
+                class="input input-sm w-full"
+                :value="''"
+                @change="addAdminSmartRoute(key.id, ($event.target as HTMLSelectElement).value)"
+              >
+                <option value="" disabled>{{ t('keys.smartRoutingAdd') }}</option>
+                <option v-for="group in allGroups.filter((group) => !drafts[key.id].custom_group_ids.includes(group.id))" :key="group.id" :value="group.id">{{ group.name }}</option>
+              </select>
+            </div>
+            <div class="mt-2 flex flex-wrap items-end gap-2">
               <label class="w-28">
-                <span class="mb-1 block text-[11px] text-gray-400">最大倍率</span>
+                <span class="mb-1 block text-[11px] text-gray-400">{{ t('keys.maxRateMultiplier') }}</span>
                 <input v-model.number="drafts[key.id].max_rate_multiplier" type="number" min="0" step="0.001" class="input input-sm w-full" placeholder="不限" />
               </label>
               <button type="button" class="btn btn-primary btn-sm" :disabled="savingKeyIds.has(key.id)" @click="saveRouting(key)">
                 {{ savingKeyIds.has(key.id) ? '保存中…' : '保存路由' }}
               </button>
-            </div>
-            <div v-if="drafts[key.id].route_mode === 'smart'" class="mt-2 space-y-1">
-              <div class="text-[11px] text-gray-400">智能路由分组</div>
-              <div v-for="(groupId, index) in drafts[key.id].custom_group_ids" :key="`custom-${key.id}-${groupId}`" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                <span class="w-4 text-center tabular-nums text-gray-400">{{ index + 1 }}</span>
-                <span class="min-w-0 flex-1 truncate">{{ allGroups.find((group) => group.id === groupId)?.name || `#${groupId}` }}</span>
-                <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === 0" title="上移" @click="moveCustomGroup(key.id, index, -1)">↑</button>
-                <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === drafts[key.id].custom_group_ids.length - 1" title="下移" @click="moveCustomGroup(key.id, index, 1)">↓</button>
-                <button
-                  type="button"
-                  class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary-600 transition-colors"
-                  title="启用"
-                  @click="toggleSmartGroup(key.id, groupId)"
-                >
-                  <span class="pointer-events-none inline-block h-4 w-4 translate-x-4 transform rounded-full bg-white shadow transition" />
-                </button>
-              </div>
-              <div v-for="group in allGroups.filter((group) => !drafts[key.id].custom_group_ids.includes(group.id))" :key="`off-${key.id}-${group.id}`" class="flex items-center gap-2 text-xs text-gray-500">
-                <span class="w-4" />
-                <span class="min-w-0 flex-1 truncate">{{ group.name }}</span>
-                <button
-                  type="button"
-                  class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors dark:bg-dark-600"
-                  title="关闭"
-                  @click="toggleSmartGroup(key.id, group.id)"
-                >
-                  <span class="pointer-events-none inline-block h-4 w-4 translate-x-0 transform rounded-full bg-white shadow transition" />
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -182,8 +168,7 @@ const loading = ref(false)
 const updatingKeyIds = ref(new Set<number>())
 const savingKeyIds = ref(new Set<number>())
 const drafts = ref<Record<number, {
-  route_mode: ApiKey['route_mode']
-  route_platform: ApiKey['route_platform']
+  smart_routing: boolean
   max_rate_multiplier: number | null
   custom_group_ids: number[]
 }>>({})
@@ -201,11 +186,6 @@ const selectedKeyForGroup = computed(() => {
 const normalizeRouteMode = (mode?: string): ApiKey['route_mode'] => {
   if (mode === 'smart' || mode === 'custom' || mode === 'cheapest' || mode === 'fastest') return 'smart'
   return 'fixed'
-}
-
-const normalizeRoutePlatform = (platform?: string): ApiKey['route_platform'] => {
-  if (platform === 'anthropic' || platform === 'grok') return platform
-  return 'openai'
 }
 
 const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance | null) => {
@@ -233,8 +213,7 @@ const load = async () => {
     const res = await adminAPI.users.getUserApiKeys(props.user.id)
     apiKeys.value = res.items || []
     drafts.value = Object.fromEntries(apiKeys.value.map((key) => [key.id, {
-      route_mode: normalizeRouteMode(key.route_mode),
-      route_platform: normalizeRoutePlatform(key.route_platform),
+      smart_routing: normalizeRouteMode(key.route_mode) === 'smart',
       max_rate_multiplier: key.max_rate_multiplier ?? null,
       custom_group_ids: (key.group_preferences || []).filter((item) => !item.disabled).sort((a, b) => a.position - b.position).map((item) => item.group_id),
     }]))
@@ -262,16 +241,23 @@ const toggleSmartGroup = (keyId: number, groupId: number) => {
   else draft.custom_group_ids.push(groupId)
 }
 
+const addAdminSmartRoute = (keyId: number, raw: string) => {
+  const groupId = Number(raw)
+  const draft = drafts.value[keyId]
+  if (!draft || !Number.isFinite(groupId) || groupId <= 0) return
+  if (draft.custom_group_ids.includes(groupId) || draft.custom_group_ids.length >= 10) return
+  draft.custom_group_ids = [...draft.custom_group_ids, groupId]
+}
+
 const saveRouting = async (key: ApiKey) => {
   const draft = drafts.value[key.id]
   if (!draft) return
   savingKeyIds.value.add(key.id)
   try {
     const updated = await adminAPI.apiKeys.updateApiKeyRouting(key.id, {
-      route_mode: draft.route_mode,
-      route_platform: draft.route_mode === 'fixed' ? 'openai' : draft.route_platform,
+      route_mode: draft.smart_routing ? 'smart' : 'fixed',
       max_rate_multiplier: draft.max_rate_multiplier,
-      custom_group_ids: draft.custom_group_ids,
+      custom_group_ids: draft.smart_routing ? draft.custom_group_ids : [],
     })
     const index = apiKeys.value.findIndex((item) => item.id === key.id)
     if (index >= 0) apiKeys.value[index] = updated

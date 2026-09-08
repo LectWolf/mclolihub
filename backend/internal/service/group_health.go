@@ -72,7 +72,7 @@ const (
 	RouteModeCustom                = "custom"   // legacy alias of smart
 	RouteModeCheapest              = "cheapest" // legacy alias of smart
 	RouteModeFastest               = "fastest"  // legacy alias of smart
-	RoutePlatformAuto              = "auto" // Legacy stored value; normalized to OpenAI.
+	RoutePlatformAuto              = "auto"     // Legacy stored value; normalized to OpenAI.
 	RoutePlatformOpenAI            = PlatformOpenAI
 	RoutePlatformAnthropic         = PlatformAnthropic
 	RoutePlatformGrok              = PlatformGrok
@@ -272,17 +272,19 @@ func ValidateRoutePlatform(platform string) error {
 	}
 }
 
-func routePlatformMatches(scope, platform string) bool {
-	scope = NormalizeRoutePlatform(scope)
-	return strings.EqualFold(scope, strings.TrimSpace(platform))
-}
-
 // effectiveMaxRateMultiplier treats a missing or zero max rate as unlimited.
 func effectiveMaxRateMultiplier(maxRate *float64) *float64 {
 	if maxRate == nil || *maxRate == 0 {
 		return nil
 	}
 	return maxRate
+}
+
+// rateExceedsMax reports whether a group rate is strictly above the key cap.
+// Rates are stored as decimal(10,4); equal values such as 0.09 vs 0.09 stay eligible.
+func rateExceedsMax(rate, max float64) bool {
+	const places = 10000.0
+	return math.Round(rate*places)/places > math.Round(max*places)/places
 }
 
 // RankGroupCandidates applies health, disabled and max-rate gates, then deterministically sorts candidates.
@@ -297,7 +299,7 @@ func RankGroupCandidates(mode string, maxRate *float64, candidates []GroupRouteC
 	mode = NormalizeRouteMode(mode)
 	out := make([]GroupRouteCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if maxRate != nil && candidate.RateMultiplier > *maxRate {
+		if maxRate != nil && rateExceedsMax(candidate.RateMultiplier, *maxRate) {
 			continue
 		}
 		if mode != RouteModeFixed {
