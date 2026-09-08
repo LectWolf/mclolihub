@@ -50,9 +50,7 @@
                 <span class="mb-1 block text-[11px] text-gray-400">路由方式</span>
                 <select v-model="drafts[key.id].route_mode" class="input input-sm w-full">
                   <option value="fixed">固定分组</option>
-                  <option value="cheapest">低价优先</option>
-                  <option value="fastest">响应优先</option>
-                  <option value="custom">自定义顺序</option>
+                  <option value="smart">智能路由</option>
                 </select>
               </label>
               <label v-if="drafts[key.id].route_mode !== 'fixed'" class="min-w-32 flex-1">
@@ -71,22 +69,33 @@
                 {{ savingKeyIds.has(key.id) ? '保存中…' : '保存路由' }}
               </button>
             </div>
-            <div v-if="drafts[key.id].route_mode === 'cheapest' || drafts[key.id].route_mode === 'fastest'" class="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-              <label v-for="group in allGroups" :key="`disabled-${key.id}-${group.id}`" class="inline-flex items-center gap-1 text-xs text-gray-500">
-                <input v-model="drafts[key.id].disabled_group_ids" type="checkbox" :value="group.id" class="checkbox checkbox-xs" />
-                {{ group.name }}
-              </label>
-            </div>
-            <div v-if="drafts[key.id].route_mode === 'custom'" class="mt-2 space-y-1">
-              <div class="text-[11px] text-gray-400">自定义顺序</div>
+            <div v-if="drafts[key.id].route_mode === 'smart'" class="mt-2 space-y-1">
+              <div class="text-[11px] text-gray-400">智能路由分组</div>
               <div v-for="(groupId, index) in drafts[key.id].custom_group_ids" :key="`custom-${key.id}-${groupId}`" class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
                 <span class="w-4 text-center tabular-nums text-gray-400">{{ index + 1 }}</span>
                 <span class="min-w-0 flex-1 truncate">{{ allGroups.find((group) => group.id === groupId)?.name || `#${groupId}` }}</span>
                 <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === 0" title="上移" @click="moveCustomGroup(key.id, index, -1)">↑</button>
                 <button type="button" class="btn btn-ghost btn-icon h-6 w-6" :disabled="index === drafts[key.id].custom_group_ids.length - 1" title="下移" @click="moveCustomGroup(key.id, index, 1)">↓</button>
+                <button
+                  type="button"
+                  class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-primary-600 transition-colors"
+                  title="启用"
+                  @click="toggleSmartGroup(key.id, groupId)"
+                >
+                  <span class="pointer-events-none inline-block h-4 w-4 translate-x-4 transform rounded-full bg-white shadow transition" />
+                </button>
               </div>
-              <div class="flex flex-wrap gap-1">
-                <button v-for="group in allGroups.filter((group) => !drafts[key.id].custom_group_ids.includes(group.id))" :key="`add-${key.id}-${group.id}`" type="button" class="btn btn-secondary btn-xs" @click="drafts[key.id].custom_group_ids.push(group.id)">+ {{ group.name }}</button>
+              <div v-for="group in allGroups.filter((group) => !drafts[key.id].custom_group_ids.includes(group.id))" :key="`off-${key.id}-${group.id}`" class="flex items-center gap-2 text-xs text-gray-500">
+                <span class="w-4" />
+                <span class="min-w-0 flex-1 truncate">{{ group.name }}</span>
+                <button
+                  type="button"
+                  class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-gray-200 transition-colors dark:bg-dark-600"
+                  title="关闭"
+                  @click="toggleSmartGroup(key.id, group.id)"
+                >
+                  <span class="pointer-events-none inline-block h-4 w-4 translate-x-0 transform rounded-full bg-white shadow transition" />
+                </button>
               </div>
             </div>
           </div>
@@ -176,7 +185,6 @@ const drafts = ref<Record<number, {
   route_mode: ApiKey['route_mode']
   route_platform: ApiKey['route_platform']
   max_rate_multiplier: number | null
-  disabled_group_ids: number[]
   custom_group_ids: number[]
 }>>({})
 const groupSelectorKeyId = ref<number | null>(null)
@@ -189,6 +197,11 @@ const selectedKeyForGroup = computed(() => {
   if (groupSelectorKeyId.value === null) return null
   return apiKeys.value.find((k) => k.id === groupSelectorKeyId.value) || null
 })
+
+const normalizeRouteMode = (mode?: string): ApiKey['route_mode'] => {
+  if (mode === 'smart' || mode === 'custom' || mode === 'cheapest' || mode === 'fastest') return 'smart'
+  return 'fixed'
+}
 
 const normalizeRoutePlatform = (platform?: string): ApiKey['route_platform'] => {
   if (platform === 'anthropic' || platform === 'grok') return platform
@@ -220,10 +233,9 @@ const load = async () => {
     const res = await adminAPI.users.getUserApiKeys(props.user.id)
     apiKeys.value = res.items || []
     drafts.value = Object.fromEntries(apiKeys.value.map((key) => [key.id, {
-      route_mode: key.route_mode || 'fixed',
+      route_mode: normalizeRouteMode(key.route_mode),
       route_platform: normalizeRoutePlatform(key.route_platform),
-              max_rate_multiplier: key.max_rate_multiplier ?? null,
-      disabled_group_ids: (key.group_preferences || []).filter((item) => item.disabled).map((item) => item.group_id),
+      max_rate_multiplier: key.max_rate_multiplier ?? null,
       custom_group_ids: (key.group_preferences || []).filter((item) => !item.disabled).sort((a, b) => a.position - b.position).map((item) => item.group_id),
     }]))
   } catch (error) {
@@ -242,6 +254,14 @@ const moveCustomGroup = (keyId: number, index: number, delta: number) => {
   ids.splice(next, 0, item)
 }
 
+const toggleSmartGroup = (keyId: number, groupId: number) => {
+  const draft = drafts.value[keyId]
+  if (!draft) return
+  const index = draft.custom_group_ids.indexOf(groupId)
+  if (index >= 0) draft.custom_group_ids.splice(index, 1)
+  else draft.custom_group_ids.push(groupId)
+}
+
 const saveRouting = async (key: ApiKey) => {
   const draft = drafts.value[key.id]
   if (!draft) return
@@ -251,7 +271,6 @@ const saveRouting = async (key: ApiKey) => {
       route_mode: draft.route_mode,
       route_platform: draft.route_mode === 'fixed' ? 'openai' : draft.route_platform,
       max_rate_multiplier: draft.max_rate_multiplier,
-      disabled_group_ids: draft.disabled_group_ids,
       custom_group_ids: draft.custom_group_ids,
     })
     const index = apiKeys.value.findIndex((item) => item.id === key.id)

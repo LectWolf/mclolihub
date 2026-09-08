@@ -52,9 +52,8 @@ type OpenAIGatewayHandler struct {
 }
 
 type openAIDynamicRoutingState struct {
-	groups                []service.Group
-	index                 int
-	naturalRouteSessionID string
+	groups []service.Group
+	index  int
 }
 
 func (h *OpenAIGatewayHandler) resolveDynamicRouting(c *gin.Context, apiKey *service.APIKey, model string) (*service.APIKey, *openAIDynamicRoutingState, error) {
@@ -65,9 +64,7 @@ func (h *OpenAIGatewayHandler) resolveDynamicRouting(c *gin.Context, apiKey *ser
 	if err != nil {
 		return apiKey, nil, err
 	}
-	naturalRouteSessionID := service.ExtractClientSessionID(c)
-	groups, _ = h.apiKeyService.ApplyNaturalRoute(c.Request.Context(), apiKey, model, naturalRouteSessionID, groups)
-	state := &openAIDynamicRoutingState{groups: groups, naturalRouteSessionID: naturalRouteSessionID}
+	state := &openAIDynamicRoutingState{groups: groups}
 	selected := cloneAPIKeyWithGroup(apiKey, &state.groups[0])
 	applyDynamicGroupRequestContext(c, selected, model)
 	return selected, state, nil
@@ -88,13 +85,9 @@ func (h *OpenAIGatewayHandler) advanceDynamicRoutingGroup(c *gin.Context, state 
 	if !ok {
 		return apiKey, nil, false, nil
 	}
-	h.apiKeyService.ClearNaturalRoute(apiKey.ID, model, state.naturalRouteSessionID)
 	subscription, err := h.subscriptionForRoutingGroup(c.Request.Context(), userID, selected)
 	if err != nil {
 		return apiKey, nil, false, err
-	}
-	if selected.GroupID != nil {
-		h.apiKeyService.RememberNaturalRoute(selected, model, state.naturalRouteSessionID, *selected.GroupID)
 	}
 	return selected, subscription, true, nil
 }

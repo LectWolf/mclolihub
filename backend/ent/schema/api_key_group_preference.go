@@ -10,7 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 )
 
-// APIKeyGroupPreference stores per-key disabled groups and custom ordering.
+// APIKeyGroupPreference stores the ordered smart-routing group list for an API key.
 type APIKeyGroupPreference struct{ ent.Schema }
 
 func (APIKeyGroupPreference) Annotations() []schema.Annotation {

@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 25 // v25: model_allowlist enforcing semantics
+const apiKeyAuthSnapshotVersion = 26 // v26: smart routing replaces cheapest/fastest/custom
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -350,7 +350,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		RateLimit5h:       apiKey.RateLimit5h,
 		RateLimit1d:       apiKey.RateLimit1d,
 		RateLimit7d:       apiKey.RateLimit7d,
-		RouteMode:         apiKey.RouteMode,
+		RouteMode:         NormalizeRouteMode(apiKey.RouteMode),
 		RoutePlatform:     NormalizeRoutePlatform(apiKey.RoutePlatform),
 		MaxRateMultiplier: apiKey.MaxRateMultiplier,
 		GroupPreferences:  apiKey.GroupPreferences,
@@ -467,7 +467,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		RateLimit5h:       snapshot.RateLimit5h,
 		RateLimit1d:       snapshot.RateLimit1d,
 		RateLimit7d:       snapshot.RateLimit7d,
-		RouteMode:         snapshot.RouteMode,
+		RouteMode:         NormalizeRouteMode(snapshot.RouteMode),
 		RoutePlatform:     NormalizeRoutePlatform(snapshot.RoutePlatform),
 		MaxRateMultiplier: snapshot.MaxRateMultiplier,
 		GroupPreferences:  snapshot.GroupPreferences,

@@ -503,7 +503,6 @@ type AdminUpdateAPIKeyRoutingInput struct {
 	RouteMode         *string
 	RoutePlatform     *string
 	MaxRateMultiplier *float64
-	DisabledGroupIDs  *[]int64
 	CustomGroupIDs    *[]int64
 }
 

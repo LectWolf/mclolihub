@@ -260,15 +260,15 @@ func TestGroupPolicyDispatchErrorDoesNotBecomeHealthFailure(t *testing.T) {
 
 func TestRankGroupCandidates(t *testing.T) {
 	candidates := []GroupRouteCandidate{
-		{GroupID: 1, RateMultiplier: 1, Healthy: true, ProbeEnabled: true, RealTTFTP50MS: 6000, RealTTFTSamples: 2, ProbeTTFTMS: 100},
-		{GroupID: 2, RateMultiplier: .5, Healthy: true, ProbeEnabled: true, ProbeTTFTMS: 50},
-		{GroupID: 3, RateMultiplier: .2, Healthy: false, ProbeEnabled: true},
+		{GroupID: 1, RateMultiplier: 1, Healthy: true, ProbeEnabled: true, CustomPosition: 1},
+		{GroupID: 2, RateMultiplier: .5, Healthy: true, ProbeEnabled: true, CustomPosition: 0},
+		{GroupID: 3, RateMultiplier: .2, Healthy: false, ProbeEnabled: true, CustomPosition: 2},
 	}
-	got, err := RankGroupCandidates(RouteModeFastest, nil, candidates)
+	got, err := RankGroupCandidates(RouteModeSmart, nil, candidates)
 	require.NoError(t, err)
-	require.Equal(t, []int64{1, 2}, []int64{got[0].GroupID, got[1].GroupID}, "real samples must always precede probe-only candidates")
+	require.Equal(t, []int64{2, 1}, []int64{got[0].GroupID, got[1].GroupID}, "smart routing follows position and skips unhealthy probed groups")
 	max := .75
-	got, err = RankGroupCandidates(RouteModeCheapest, &max, candidates)
+	got, err = RankGroupCandidates(RouteModeSmart, &max, candidates)
 	require.NoError(t, err)
 	require.Equal(t, []int64{2}, []int64{got[0].GroupID})
 }
@@ -289,9 +289,9 @@ func TestZeroMaxRateMultiplierIsUnlimited(t *testing.T) {
 		{GroupID: 1, RateMultiplier: 1.5, Healthy: true, ProbeEnabled: true},
 		{GroupID: 2, RateMultiplier: .2, Healthy: true, ProbeEnabled: true},
 	}
-	got, err := RankGroupCandidates(RouteModeCheapest, &zero, candidates)
+	got, err := RankGroupCandidates(RouteModeSmart, &zero, candidates)
 	require.NoError(t, err)
-	require.Equal(t, []int64{2, 1}, []int64{got[0].GroupID, got[1].GroupID})
+	require.Equal(t, []int64{1, 2}, []int64{got[0].GroupID, got[1].GroupID})
 	got, err = RankGroupCandidates(RouteModeFixed, &zero, []GroupRouteCandidate{{GroupID: 3, RateMultiplier: 9}})
 	require.NoError(t, err)
 	require.Equal(t, []int64{3}, []int64{got[0].GroupID})

@@ -77,7 +77,6 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 	}
 	reqModel := modelResult.String()
 	bindRequestedReasoningEffort(c, body, reqModel)
-	naturalRouteSessionID := service.ExtractClientSessionID(c)
 	dynamicGroups := []service.Group(nil)
 	dynamicGroupIndex := 0
 	dynamicNoAccounts := dynamicNoAccountState{}
@@ -87,7 +86,6 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 			h.responsesErrorResponse(c, http.StatusServiceUnavailable, "api_error", err.Error())
 			return
 		}
-		dynamicGroups, _ = h.apiKeyService.ApplyNaturalRoute(c.Request.Context(), apiKey, reqModel, naturalRouteSessionID, dynamicGroups)
 		apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[0])
 		applyDynamicGroupRequestContext(c, apiKey, reqModel)
 	}
@@ -204,10 +202,8 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					dynamicNoAccounts.Observe(classifyNoAccountError(requestCtx, h.gatewayService, apiKey, reqModel, reqModel, effectiveAPIKeyPlatform(c, apiKey)))
 				}
 				if dynamicGroupIndex+1 < len(dynamicGroups) {
-					h.apiKeyService.ClearNaturalRoute(apiKey.ID, reqModel, naturalRouteSessionID)
 					dynamicGroupIndex++
 					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
-					h.apiKeyService.RememberNaturalRoute(apiKey, reqModel, naturalRouteSessionID, *apiKey.GroupID)
 					subscription, err = h.subscriptionForRoutingGroup(requestCtx, subject.UserID, apiKey)
 					if err != nil {
 						h.responsesErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())
@@ -347,7 +343,6 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					}
 				}
 				if len(dynamicGroups) > 0 {
-					h.apiKeyService.ClearNaturalRoute(apiKey.ID, reqModel, naturalRouteSessionID)
 					dynamicNoAccounts.MarkCompatibleUnavailable()
 					h.reportDynamicGroupFailure(apiKey, account, failoverErr, false)
 					h.gatewayService.TempUnscheduleRetryableError(requestCtx, account.ID, failoverErr)
@@ -357,7 +352,6 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					}
 					dynamicGroupIndex++
 					apiKey = cloneAPIKeyWithGroup(apiKey, &dynamicGroups[dynamicGroupIndex])
-					h.apiKeyService.RememberNaturalRoute(apiKey, reqModel, naturalRouteSessionID, *apiKey.GroupID)
 					subscription, err = h.subscriptionForRoutingGroup(requestCtx, subject.UserID, apiKey)
 					if err != nil {
 						h.responsesErrorResponse(c, http.StatusForbidden, "subscription_error", err.Error())

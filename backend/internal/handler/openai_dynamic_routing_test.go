@@ -38,9 +38,13 @@ func TestOpenAIDynamicRoutingSelectsCheapestGroupAndUpdatesRequestAttribution(t 
 		UserID:        42,
 		GroupID:       &boundGroupID,
 		Group:         &boundGroup,
-		RouteMode:     service.RouteModeCheapest,
+		RouteMode:     service.RouteModeSmart,
 		RoutePlatform: service.RoutePlatformOpenAI,
 		User:          &service.User{ID: 42, Status: service.StatusActive},
+		GroupPreferences: []service.APIKeyGroupPreference{
+			{GroupID: 30, Position: 0},
+			{GroupID: 20, Position: 1},
+		},
 	}
 	c.Set(string(middleware2.ContextKeyAPIKey), key)
 

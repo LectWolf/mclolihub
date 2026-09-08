@@ -36,9 +36,7 @@ type CreateAPIKeyRequest struct {
 	GroupID              *int64   `json:"group_id"` // nullable
 	RouteMode            string   `json:"route_mode"`
 	RoutePlatform        string   `json:"route_platform"`
-	NaturalRevertEnabled *bool    `json:"natural_revert_enabled"`
 	MaxRateMultiplier    *float64 `json:"max_rate_multiplier"`
-	DisabledGroupIDs     []int64  `json:"disabled_group_ids"`
 	CustomGroupIDs       []int64  `json:"custom_group_ids"`
 	CustomKey            *string  `json:"custom_key"`      // 可选的自定义key
 	IPWhitelist          []string `json:"ip_whitelist"`    // IP 白名单
@@ -58,9 +56,7 @@ type UpdateAPIKeyRequest struct {
 	GroupID              *int64                   `json:"group_id"`
 	RouteMode            *string                  `json:"route_mode"`
 	RoutePlatform        *string                  `json:"route_platform"`
-	NaturalRevertEnabled *bool                    `json:"natural_revert_enabled"`
 	MaxRateMultiplier    dto.NullableFloat64Field `json:"max_rate_multiplier"`
-	DisabledGroupIDs     *[]int64                 `json:"disabled_group_ids"`
 	CustomGroupIDs       *[]int64                 `json:"custom_group_ids"`
 	Status               string                   `json:"status" binding:"omitempty,oneof=active inactive"`
 	IPWhitelist          *[]string                `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
@@ -251,37 +247,9 @@ func (h *APIKeyHandler) RoutingPreview(c *gin.Context) {
 		next = out[0].GroupID
 	}
 	response.Success(c, gin.H{
-		"route_mode": key.RouteMode, "route_platform": service.NormalizeRoutePlatform(key.RoutePlatform),
+		"route_mode": service.NormalizeRouteMode(key.RouteMode), "route_platform": service.NormalizeRoutePlatform(key.RoutePlatform),
 		"next_group_id": next, "groups": out,
-		"natural_route": h.apiKeyService.LatestNaturalRoute(key.ID),
 	})
-}
-
-// ResetNaturalRoute clears temporary fallback affinity so the next request uses
-// the normal low-price or response-priority winner immediately.
-// POST /api/v1/keys/:id/natural-route/reset
-func (h *APIKeyHandler) ResetNaturalRoute(c *gin.Context) {
-	subject, ok := middleware2.GetAuthSubjectFromContext(c)
-	if !ok {
-		response.Unauthorized(c, "User not authenticated")
-		return
-	}
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id <= 0 {
-		response.BadRequest(c, "Invalid key ID")
-		return
-	}
-	key, err := h.apiKeyService.GetByID(c.Request.Context(), id)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	if key.UserID != subject.UserID {
-		response.NotFound(c, "API key not found")
-		return
-	}
-	h.apiKeyService.ClearNaturalRoutes(key.ID)
-	response.Success(c, gin.H{"message": "natural route cleared"})
 }
 
 // Create handles creating a new API key
@@ -308,9 +276,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 		GroupID:              req.GroupID,
 		RouteMode:            req.RouteMode,
 		RoutePlatform:        req.RoutePlatform,
-		NaturalRevertEnabled: req.NaturalRevertEnabled,
 		MaxRateMultiplier:    req.MaxRateMultiplier,
-		DisabledGroupIDs:     req.DisabledGroupIDs,
 		CustomGroupIDs:       req.CustomGroupIDs,
 		CustomKey:            req.CustomKey,
 		IPWhitelist:          req.IPWhitelist,
@@ -380,10 +346,8 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 	svcReq.GroupID = req.GroupID
 	svcReq.RouteMode = req.RouteMode
 	svcReq.RoutePlatform = req.RoutePlatform
-	svcReq.NaturalRevertEnabled = req.NaturalRevertEnabled
 	svcReq.MaxRateMultiplier = req.MaxRateMultiplier.Value
 	svcReq.MaxRateMultiplierSet = req.MaxRateMultiplier.Set
-	svcReq.DisabledGroupIDs = req.DisabledGroupIDs
 	svcReq.CustomGroupIDs = req.CustomGroupIDs
 	if req.Status != "" {
 		svcReq.Status = &req.Status

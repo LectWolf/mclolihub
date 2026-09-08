@@ -66,14 +66,14 @@ func TestGetGroupPlatformUsesDynamicRoutePlatform(t *testing.T) {
 	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
 		GroupID:       &groupID,
 		Group:         &service.Group{ID: groupID, Platform: service.PlatformAnthropic},
-		RouteMode:     service.RouteModeCheapest,
+		RouteMode:     service.RouteModeSmart,
 		RoutePlatform: service.RoutePlatformOpenAI,
 	})
 
 	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c))
 
 	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
-		RouteMode:     service.RouteModeCheapest,
+		RouteMode:     service.RouteModeSmart,
 		RoutePlatform: service.RoutePlatformOpenAI,
 	})
 	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c), "an explicit dynamic platform must not depend on a legacy bound group")
@@ -81,7 +81,7 @@ func TestGetGroupPlatformUsesDynamicRoutePlatform(t *testing.T) {
 	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
 		GroupID:       &groupID,
 		Group:         &service.Group{ID: groupID, Platform: service.PlatformAnthropic},
-		RouteMode:     service.RouteModeCheapest,
+		RouteMode:     service.RouteModeSmart,
 		RoutePlatform: service.RoutePlatformAuto,
 	})
 	require.Equal(t, service.PlatformOpenAI, getGroupPlatform(c), "legacy auto scope must migrate to the OpenAI protocol")

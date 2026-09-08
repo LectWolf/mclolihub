@@ -31,7 +31,6 @@ type AdminUpdateAPIKeyGroupRequest struct {
 	RouteMode           *string  `json:"route_mode"`
 	RoutePlatform       *string  `json:"route_platform"`
 	MaxRateMultiplier   *float64 `json:"max_rate_multiplier"`
-	DisabledGroupIDs    *[]int64 `json:"disabled_group_ids"`
 	CustomGroupIDs      *[]int64 `json:"custom_group_ids"`
 }
 
@@ -67,7 +66,7 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 	if resetKey != nil && req.GroupID == nil {
 		result.APIKey = resetKey
 	}
-	if req.RouteMode != nil || req.RoutePlatform != nil || req.MaxRateMultiplier != nil || req.DisabledGroupIDs != nil || req.CustomGroupIDs != nil {
+	if req.RouteMode != nil || req.RoutePlatform != nil || req.MaxRateMultiplier != nil || req.CustomGroupIDs != nil {
 		updater, ok := h.adminService.(interface {
 			AdminUpdateAPIKeyRouting(context.Context, int64, service.AdminUpdateAPIKeyRoutingInput) (*service.APIKey, error)
 		})
@@ -77,7 +76,7 @@ func (h *AdminAPIKeyHandler) UpdateGroup(c *gin.Context) {
 		}
 		updated, updateErr := updater.AdminUpdateAPIKeyRouting(c.Request.Context(), keyID, service.AdminUpdateAPIKeyRoutingInput{
 			RouteMode: req.RouteMode, RoutePlatform: req.RoutePlatform, MaxRateMultiplier: req.MaxRateMultiplier,
-			DisabledGroupIDs: req.DisabledGroupIDs, CustomGroupIDs: req.CustomGroupIDs,
+			CustomGroupIDs: req.CustomGroupIDs,
 		})
 		if updateErr != nil {
 			response.ErrorFrom(c, updateErr)

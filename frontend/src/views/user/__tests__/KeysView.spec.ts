@@ -64,6 +64,7 @@ vi.mock('@/api', () => ({
     update: vi.fn(),
     delete: vi.fn(),
     toggleStatus: vi.fn(),
+    getRoutingPreview: vi.fn().mockResolvedValue({ route_mode: 'fixed', route_platform: 'openai', next_group_id: 0, groups: [] }),
   },
   authAPI: {
     getPublicSettings,
@@ -118,6 +119,9 @@ const createApiKey = (): ApiKey => ({
   ip_blacklist: [],
   last_used_at: null,
   last_used_ip: null,
+  route_mode: 'fixed',
+  route_platform: 'openai',
+  max_rate_multiplier: null,
   quota: 0,
   quota_used: 0,
   expires_at: null,
@@ -232,6 +236,11 @@ const mountView = async () => {
         Select: SelectStub,
         SearchInput: SearchInputStub,
         Icon: IconStub,
+        VueDraggable: {
+          name: 'VueDraggable',
+          props: ['modelValue'],
+          template: '<div><slot /></div>',
+        },
         UseKeyModal: true,
         EndpointPopover: true,
         GroupBadge: true,
@@ -444,17 +453,28 @@ describe('user KeysView column settings', () => {
     )
   })
 
-  it('creates a response-priority key without requiring a fixed group', async () => {
+  it('creates a smart-routing key without requiring a fixed group', async () => {
+    getAvailableGroups.mockResolvedValue([
+      { id: 11, name: 'A3', platform: 'openai', rate_multiplier: 0.2, status: 'active' },
+    ])
     const wrapper = await mountView()
 
     await getButtonByText(wrapper, 'Create API Key').trigger('click')
     await nextTick()
 
     const routeSelect = wrapper.findAllComponents({ name: 'Select' }).find((select) =>
-      (select.props('options') as Array<{ value?: string }> | undefined)?.some((option) => option.value === 'fastest')
+      (select.props('options') as Array<{ value?: string }> | undefined)?.some((option) => option.value === 'smart')
     )
     expect(routeSelect).toBeDefined()
-    await routeSelect!.vm.$emit('update:modelValue', 'fastest')
+    await routeSelect!.vm.$emit('update:modelValue', 'smart')
+    await nextTick()
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('keys.smartRouteRequired')
+    expect(createKey).not.toHaveBeenCalled()
+
+    showError.mockClear()
+    await wrapper.get('button[title="common.disabled"]').trigger('click')
     await nextTick()
     await wrapper.get('#key-form').trigger('submit')
     await flushPromises()
@@ -469,7 +489,7 @@ describe('user KeysView column settings', () => {
       0,
       undefined,
       expect.any(Object),
-      expect.objectContaining({ route_mode: 'fastest' })
+      expect.objectContaining({ route_mode: 'smart', custom_group_ids: [11] })
     )
   })
 })

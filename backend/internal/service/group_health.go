@@ -12,8 +12,8 @@ import (
 type groupHealthAccountGateKey struct{}
 
 // WithGroupHealthAccountGate marks a request so probe-quarantined accounts
-// are excluded from scheduling. Dynamic API-key routing (cheapest / fastest /
-// custom) enables this; fixed single-group keys leave it off.
+// are excluded from scheduling. Smart API-key routing enables this; fixed
+// single-group keys leave it off.
 func WithGroupHealthAccountGate(ctx context.Context, enabled bool) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -68,9 +68,10 @@ const (
 	AccountRuntimeLegacyFailed     = "failed"
 	AccountRuntimeBalance          = "balance_insufficient"
 	RouteModeFixed                 = "fixed"
-	RouteModeCheapest              = "cheapest"
-	RouteModeFastest               = "fastest"
-	RouteModeCustom                = "custom"
+	RouteModeSmart                 = "smart"
+	RouteModeCustom                = "custom"   // legacy alias of smart
+	RouteModeCheapest              = "cheapest" // legacy alias of smart
+	RouteModeFastest               = "fastest"  // legacy alias of smart
 	RoutePlatformAuto              = "auto" // Legacy stored value; normalized to OpenAI.
 	RoutePlatformOpenAI            = PlatformOpenAI
 	RoutePlatformAnthropic         = PlatformAnthropic
@@ -229,12 +230,28 @@ type GroupRouteUsageStats struct {
 }
 
 func ValidateRouteMode(mode string) error {
-	switch mode {
-	case RouteModeFixed, RouteModeCheapest, RouteModeFastest, RouteModeCustom:
+	switch NormalizeRouteMode(mode) {
+	case RouteModeFixed, RouteModeSmart:
 		return nil
 	default:
 		return errors.New("invalid API key route mode")
 	}
+}
+
+// NormalizeRouteMode maps omitted and legacy dynamic modes onto fixed/smart.
+func NormalizeRouteMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", RouteModeFixed:
+		return RouteModeFixed
+	case RouteModeSmart, RouteModeCustom, RouteModeCheapest, RouteModeFastest:
+		return RouteModeSmart
+	default:
+		return strings.ToLower(strings.TrimSpace(mode))
+	}
+}
+
+func IsDynamicRouteMode(mode string) bool {
+	return NormalizeRouteMode(mode) == RouteModeSmart
 }
 
 // NormalizeRoutePlatform maps legacy or omitted scopes to the OpenAI protocol.
@@ -277,6 +294,7 @@ func RankGroupCandidates(mode string, maxRate *float64, candidates []GroupRouteC
 		return nil, errors.New("max rate multiplier must be finite and non-negative")
 	}
 	maxRate = effectiveMaxRateMultiplier(maxRate)
+	mode = NormalizeRouteMode(mode)
 	out := make([]GroupRouteCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		if maxRate != nil && candidate.RateMultiplier > *maxRate {
@@ -294,32 +312,8 @@ func RankGroupCandidates(mode string, maxRate *float64, candidates []GroupRouteC
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		switch mode {
-		case RouteModeCheapest:
-			if a.RateMultiplier != b.RateMultiplier {
-				return a.RateMultiplier < b.RateMultiplier
-			}
-		case RouteModeCustom:
-			if a.CustomPosition != b.CustomPosition {
-				return a.CustomPosition < b.CustomPosition
-			}
-		case RouteModeFastest:
-			aReal, bReal := a.RealTTFTSamples > 0, b.RealTTFTSamples > 0
-			if aReal != bReal {
-				return aReal
-			}
-			if aReal && a.RealTTFTP50MS != b.RealTTFTP50MS {
-				return a.RealTTFTP50MS < b.RealTTFTP50MS
-			}
-			if !aReal && !bReal {
-				aProbe, bProbe := a.ProbeTTFTMS > 0, b.ProbeTTFTMS > 0
-				if aProbe != bProbe {
-					return aProbe
-				}
-				if aProbe && a.ProbeTTFTMS != b.ProbeTTFTMS {
-					return a.ProbeTTFTMS < b.ProbeTTFTMS
-				}
-			}
+		if a.CustomPosition != b.CustomPosition {
+			return a.CustomPosition < b.CustomPosition
 		}
 		if a.AdminSortOrder != b.AdminSortOrder {
 			return a.AdminSortOrder < b.AdminSortOrder

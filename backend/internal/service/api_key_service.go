@@ -78,7 +78,6 @@ type APIKeyUpdateFields struct {
 	// RouteMode, RoutePlatform and MaxRateMultiplier control multi-group routing.
 	RouteMode            bool
 	RoutePlatform        bool
-	NaturalRevertEnabled bool
 	MaxRateMultiplier    bool
 }
 
@@ -159,10 +158,7 @@ func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) 
 	if key == nil {
 		return nil, ErrAPIKeyNotFound
 	}
-	mode := key.RouteMode
-	if mode == "" {
-		mode = RouteModeFixed
-	}
+	mode := NormalizeRouteMode(key.RouteMode)
 	if mode == RouteModeFixed {
 		if key.Group == nil {
 			return nil, ErrGroupNotFound
@@ -211,9 +207,9 @@ func (s *APIKeyService) ResolveRoutingPreview(ctx context.Context, key *APIKey) 
 		p, configured := prefs[g.ID]
 		reason := ""
 		eligible := true
-		if mode == RouteModeCustom && !configured {
+		if IsDynamicRouteMode(mode) && !configured {
 			eligible = false
-			reason = "not_in_custom_order"
+			reason = "not_in_smart_route"
 		}
 		if p.Disabled {
 			eligible = false
@@ -269,10 +265,7 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 	if key == nil {
 		return nil, ErrAPIKeyNotFound
 	}
-	mode := key.RouteMode
-	if mode == "" {
-		mode = RouteModeFixed
-	}
+	mode := NormalizeRouteMode(key.RouteMode)
 	if mode == RouteModeFixed {
 		if key.Group == nil {
 			return nil, ErrGroupNotFound
@@ -320,7 +313,7 @@ func (s *APIKeyService) ResolveRoutingGroups(ctx context.Context, key *APIKey) (
 			continue
 		}
 		pref, configured := preference[group.ID]
-		if mode == RouteModeCustom && !configured {
+		if IsDynamicRouteMode(mode) && !configured {
 			continue
 		}
 		rate := group.RateMultiplier
@@ -355,9 +348,9 @@ func effectiveRoutePlatform(key *APIKey) string {
 	return NormalizeRoutePlatform(key.RoutePlatform)
 }
 
-func buildAPIKeyPreferences(disabled, custom []int64) []APIKeyGroupPreference {
-	seen := make(map[int64]struct{}, len(disabled)+len(custom))
-	out := make([]APIKeyGroupPreference, 0, len(disabled)+len(custom))
+func buildAPIKeyPreferences(custom []int64) []APIKeyGroupPreference {
+	seen := make(map[int64]struct{}, len(custom))
+	out := make([]APIKeyGroupPreference, 0, len(custom))
 	for _, id := range custom {
 		if id <= 0 {
 			continue
@@ -368,32 +361,19 @@ func buildAPIKeyPreferences(disabled, custom []int64) []APIKeyGroupPreference {
 		seen[id] = struct{}{}
 		out = append(out, APIKeyGroupPreference{GroupID: id, Position: len(out)})
 	}
-	for _, id := range disabled {
-		if id <= 0 {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, APIKeyGroupPreference{GroupID: id, Disabled: true, Position: len(out)})
-	}
 	return out
 }
 
-func (s *APIKeyService) validateRoutingPreferences(ctx context.Context, user *User, mode string, disabled, custom []int64) error {
-	if mode == "" {
-		mode = RouteModeFixed
+func (s *APIKeyService) validateRoutingPreferences(ctx context.Context, user *User, mode string, custom []int64) error {
+	mode = NormalizeRouteMode(mode)
+	if mode == RouteModeSmart && len(custom) == 0 {
+		return infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "smart routing requires at least one group")
 	}
-	if mode == RouteModeCustom && len(custom) == 0 {
-		return infraerrors.BadRequest("API_KEY_CUSTOM_GROUPS_REQUIRED", "custom routing requires at least one group")
+	if mode != RouteModeSmart {
+		return nil
 	}
-	ids := disabled
-	if mode == RouteModeCustom {
-		ids = custom
-	}
-	seen := make(map[int64]struct{}, len(ids))
-	for _, id := range ids {
+	seen := make(map[int64]struct{}, len(custom))
+	for _, id := range custom {
 		if id <= 0 {
 			return infraerrors.BadRequest("API_KEY_ROUTE_GROUP_INVALID", "routing group id must be positive")
 		}
@@ -497,9 +477,7 @@ type CreateAPIKeyRequest struct {
 	GroupID              *int64   `json:"group_id"`
 	RouteMode            string   `json:"route_mode"`
 	RoutePlatform        string   `json:"route_platform"`
-	NaturalRevertEnabled *bool    `json:"natural_revert_enabled"`
 	MaxRateMultiplier    *float64 `json:"max_rate_multiplier"`
-	DisabledGroupIDs     []int64  `json:"disabled_group_ids"`
 	CustomGroupIDs       []int64  `json:"custom_group_ids"`
 	CustomKey            *string  `json:"custom_key"`   // 可选的自定义key
 	IPWhitelist          []string `json:"ip_whitelist"` // IP 白名单
@@ -521,10 +499,8 @@ type UpdateAPIKeyRequest struct {
 	GroupID              *int64    `json:"group_id"`
 	RouteMode            *string   `json:"route_mode"`
 	RoutePlatform        *string   `json:"route_platform"`
-	NaturalRevertEnabled *bool     `json:"natural_revert_enabled"`
 	MaxRateMultiplier    *float64  `json:"max_rate_multiplier"`
 	MaxRateMultiplierSet bool      `json:"-"`
-	DisabledGroupIDs     *[]int64  `json:"disabled_group_ids"`
 	CustomGroupIDs       *[]int64  `json:"custom_group_ids"`
 	Status               *string   `json:"status"`
 	IPWhitelist          *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
@@ -627,13 +603,6 @@ type APIKeyService struct {
 	authLookupInFlight        atomic.Int64
 	invalidAuthAbuse          *invalidAuthAbuseLimiter
 	authInvalidationStart     sync.Once
-	naturalRouteMu            sync.Mutex
-	naturalRoutes             map[string]naturalRouteState
-	naturalRouteLatest        map[int64]string
-	naturalRouteUsageMu       sync.Mutex
-	naturalRouteUsageCache    map[string]naturalRouteUsageCacheEntry
-	naturalRouteBilling       *BillingService
-	naturalRoutePricing       *ModelPricingResolver
 	authInvalidationStop      sync.Once
 	authInvalidationCancel    context.CancelFunc
 	authInvalidationWG        sync.WaitGroup
@@ -673,16 +642,13 @@ func NewAPIKeyService(
 	cfg *config.Config,
 ) *APIKeyService {
 	svc := &APIKeyService{
-		apiKeyRepo:             apiKeyRepo,
-		userRepo:               userRepo,
-		groupRepo:              groupRepo,
-		userSubRepo:            userSubRepo,
-		userGroupRateRepo:      userGroupRateRepo,
-		cache:                  cache,
-		cfg:                    cfg,
-		naturalRoutes:          make(map[string]naturalRouteState),
-		naturalRouteLatest:     make(map[int64]string),
-		naturalRouteUsageCache: make(map[string]naturalRouteUsageCacheEntry),
+		apiKeyRepo:        apiKeyRepo,
+		userRepo:          userRepo,
+		groupRepo:         groupRepo,
+		userSubRepo:       userSubRepo,
+		userGroupRateRepo: userGroupRateRepo,
+		cache:             cache,
+		cfg:               cfg,
 	}
 	svc.initAuthCache(cfg)
 	lookupConcurrency := defaultAuthLookupConcurrency
@@ -692,21 +658,6 @@ func NewAPIKeyService(
 	svc.authLookupSlots = make(chan struct{}, lookupConcurrency)
 	svc.invalidAuthAbuse = newInvalidAuthAbuseLimiter(cfg)
 	return svc
-}
-
-// SetNaturalRouteBillingService enables cache-versus-multiplier comparisons
-// for temporary fallback routing. It is optional so isolated service tests and
-// deployments without pricing data continue to use the conservative thresholds.
-func (s *APIKeyService) SetNaturalRouteBillingService(billing *BillingService) {
-	if s == nil {
-		return
-	}
-	s.naturalRouteBilling = billing
-	if billing != nil {
-		s.naturalRoutePricing = NewModelPricingResolver(nil, billing)
-	} else {
-		s.naturalRoutePricing = nil
-	}
 }
 
 // SetRateLimitCacheInvalidator sets the optional rate limit cache invalidator.
@@ -817,7 +768,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
 	}
-	if err := s.validateRoutingPreferences(ctx, user, req.RouteMode, req.DisabledGroupIDs, req.CustomGroupIDs); err != nil {
+	if err := s.validateRoutingPreferences(ctx, user, req.RouteMode, req.CustomGroupIDs); err != nil {
 		return nil, err
 	}
 
@@ -890,10 +841,9 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		Name:                 html.EscapeString(req.Name),
 		GroupID:              req.GroupID,
 		Status:               StatusActive,
-		RouteMode:            req.RouteMode,
-		RoutePlatform:        NormalizeRoutePlatform(req.RoutePlatform),
-		NaturalRevertEnabled: true,
-		MaxRateMultiplier:    req.MaxRateMultiplier,
+		RouteMode:         NormalizeRouteMode(req.RouteMode),
+		RoutePlatform:     NormalizeRoutePlatform(req.RoutePlatform),
+		MaxRateMultiplier: req.MaxRateMultiplier,
 		IPWhitelist:          req.IPWhitelist,
 		IPBlacklist:          req.IPBlacklist,
 		Quota:                req.Quota,
@@ -901,12 +851,6 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		RateLimit5h:          req.RateLimit5h,
 		RateLimit1d:          req.RateLimit1d,
 		RateLimit7d:          req.RateLimit7d,
-	}
-	if apiKey.RouteMode == "" {
-		apiKey.RouteMode = RouteModeFixed
-	}
-	if req.NaturalRevertEnabled != nil {
-		apiKey.NaturalRevertEnabled = *req.NaturalRevertEnabled
 	}
 	if apiKey.RouteMode == RouteModeFixed {
 		apiKey.RoutePlatform = RoutePlatformOpenAI
@@ -921,7 +865,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	if err := s.apiKeyRepo.Create(ctx, apiKey); err != nil {
 		return nil, fmt.Errorf("create api key: %w", err)
 	}
-	apiKey.GroupPreferences = buildAPIKeyPreferences(req.DisabledGroupIDs, req.CustomGroupIDs)
+	apiKey.GroupPreferences = buildAPIKeyPreferences(req.CustomGroupIDs)
 	if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok && len(apiKey.GroupPreferences) > 0 {
 		if err := repo.SyncGroupPreferences(ctx, apiKey.ID, apiKey.GroupPreferences); err != nil {
 			return nil, fmt.Errorf("save API key group preferences: %w", err)
@@ -1141,7 +1085,7 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if apiKey.UserID != userID {
 		return nil, ErrInsufficientPerms
 	}
-	if req.RouteMode != nil || req.DisabledGroupIDs != nil || req.CustomGroupIDs != nil {
+	if req.RouteMode != nil || req.CustomGroupIDs != nil {
 		user, userErr := s.userRepo.GetByID(ctx, userID)
 		if userErr != nil {
 			return nil, fmt.Errorf("get user: %w", userErr)
@@ -1150,21 +1094,16 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		if req.RouteMode != nil {
 			mode = *req.RouteMode
 		}
-		disabled, custom := make([]int64, 0), make([]int64, 0)
+		custom := make([]int64, 0, len(apiKey.GroupPreferences))
 		for _, pref := range apiKey.GroupPreferences {
-			if pref.Disabled {
-				disabled = append(disabled, pref.GroupID)
-			} else {
+			if !pref.Disabled {
 				custom = append(custom, pref.GroupID)
 			}
-		}
-		if req.DisabledGroupIDs != nil {
-			disabled = *req.DisabledGroupIDs
 		}
 		if req.CustomGroupIDs != nil {
 			custom = *req.CustomGroupIDs
 		}
-		if err := s.validateRoutingPreferences(ctx, user, mode, disabled, custom); err != nil {
+		if err := s.validateRoutingPreferences(ctx, user, mode, custom); err != nil {
 			return nil, err
 		}
 	}
@@ -1216,17 +1155,12 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		fields.GroupID = true
 	}
 	if req.RouteMode != nil {
-		apiKey.RouteMode = *req.RouteMode
+		apiKey.RouteMode = NormalizeRouteMode(*req.RouteMode)
 		fields.RouteMode = true
 	}
 	if req.RoutePlatform != nil {
 		apiKey.RoutePlatform = NormalizeRoutePlatform(*req.RoutePlatform)
 		fields.RoutePlatform = true
-	}
-	if req.NaturalRevertEnabled != nil {
-		apiKey.NaturalRevertEnabled = *req.NaturalRevertEnabled
-		fields.NaturalRevertEnabled = true
-		s.ClearNaturalRoutes(apiKey.ID)
 	}
 	if apiKey.RouteMode == RouteModeFixed && apiKey.RoutePlatform != RoutePlatformOpenAI {
 		apiKey.RoutePlatform = RoutePlatformOpenAI
@@ -1321,15 +1255,8 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	if err := s.apiKeyRepo.Update(ctx, apiKey, fields); err != nil {
 		return nil, fmt.Errorf("update api key: %w", err)
 	}
-	if req.DisabledGroupIDs != nil || req.CustomGroupIDs != nil {
-		disabled, custom := []int64{}, []int64{}
-		if req.DisabledGroupIDs != nil {
-			disabled = *req.DisabledGroupIDs
-		}
-		if req.CustomGroupIDs != nil {
-			custom = *req.CustomGroupIDs
-		}
-		apiKey.GroupPreferences = buildAPIKeyPreferences(disabled, custom)
+	if req.CustomGroupIDs != nil {
+		apiKey.GroupPreferences = buildAPIKeyPreferences(*req.CustomGroupIDs)
 		if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok {
 			if err := repo.SyncGroupPreferences(ctx, apiKey.ID, apiKey.GroupPreferences); err != nil {
 				return nil, fmt.Errorf("save API key group preferences: %w", err)

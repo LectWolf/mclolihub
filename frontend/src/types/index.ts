@@ -732,9 +732,8 @@ export interface ApiKey {
   key: string
   name: string
   group_id: number | null
-  route_mode: 'fixed' | 'cheapest' | 'fastest' | 'custom'
+  route_mode: 'fixed' | 'smart'
   route_platform: 'openai' | 'anthropic' | 'grok'
-  natural_revert_enabled: boolean
   max_rate_multiplier: number | null
 	group_preferences?: Array<{ group_id: number; disabled: boolean; position: number }>
   status: 'active' | 'inactive' | 'quota_exhausted' | 'expired'
@@ -766,11 +765,9 @@ export interface ApiKey {
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
-  route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'
+  route_mode?: 'fixed' | 'smart'
   route_platform?: 'openai' | 'anthropic' | 'grok'
-  natural_revert_enabled?: boolean
   max_rate_multiplier?: number | null
-	disabled_group_ids?: number[]
 	custom_group_ids?: number[]
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
@@ -785,11 +782,9 @@ export interface CreateApiKeyRequest {
 export interface UpdateApiKeyRequest {
   name?: string
   group_id?: number | null
-  route_mode?: 'fixed' | 'cheapest' | 'fastest' | 'custom'
+  route_mode?: 'fixed' | 'smart'
   route_platform?: 'openai' | 'anthropic' | 'grok'
-  natural_revert_enabled?: boolean
   max_rate_multiplier?: number | null
-	disabled_group_ids?: number[]
 	custom_group_ids?: number[]
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]

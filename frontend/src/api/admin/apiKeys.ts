@@ -30,7 +30,6 @@ export async function updateApiKeyRouting(id: number, input: {
   route_mode?: ApiKey['route_mode']
   route_platform?: ApiKey['route_platform']
   max_rate_multiplier?: number | null
-  disabled_group_ids?: number[]
   custom_group_ids?: number[]
 }): Promise<ApiKey> {
   const { data } = await apiClient.put<{ api_key: ApiKey }>(`/admin/api-keys/${id}`, input)

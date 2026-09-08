@@ -29,15 +29,12 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID i
 	if err != nil {
 		return nil, err
 	}
-	mode := key.RouteMode
-	if mode == "" {
-		mode = RouteModeFixed
-	}
+	mode := NormalizeRouteMode(key.RouteMode)
 	if input.RouteMode != nil {
 		if err := ValidateRouteMode(*input.RouteMode); err != nil {
 			return nil, infraerrors.BadRequest("API_KEY_ROUTE_MODE_INVALID", err.Error())
 		}
-		mode = *input.RouteMode
+		mode = NormalizeRouteMode(*input.RouteMode)
 		key.RouteMode = mode
 	}
 	if input.RoutePlatform != nil {
@@ -55,6 +52,20 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID i
 		}
 		key.MaxRateMultiplier = input.MaxRateMultiplier
 	}
+	if mode == RouteModeSmart && (input.RouteMode != nil || input.CustomGroupIDs != nil) {
+		custom := make([]int64, 0, len(key.GroupPreferences))
+		for _, pref := range key.GroupPreferences {
+			if !pref.Disabled {
+				custom = append(custom, pref.GroupID)
+			}
+		}
+		if input.CustomGroupIDs != nil {
+			custom = *input.CustomGroupIDs
+		}
+		if len(custom) == 0 {
+			return nil, infraerrors.BadRequest("API_KEY_SMART_GROUPS_REQUIRED", "smart routing requires at least one group")
+		}
+	}
 	fields := APIKeyUpdateFields{
 		RouteMode:         input.RouteMode != nil,
 		RoutePlatform:     input.RoutePlatform != nil || mode == RouteModeFixed,
@@ -65,22 +76,8 @@ func (s *adminServiceImpl) AdminUpdateAPIKeyRouting(ctx context.Context, keyID i
 			return nil, fmt.Errorf("update API key routing: %w", err)
 		}
 	}
-	if input.DisabledGroupIDs != nil || input.CustomGroupIDs != nil {
-		disabled, custom := []int64{}, []int64{}
-		for _, pref := range key.GroupPreferences {
-			if pref.Disabled {
-				disabled = append(disabled, pref.GroupID)
-			} else {
-				custom = append(custom, pref.GroupID)
-			}
-		}
-		if input.DisabledGroupIDs != nil {
-			disabled = *input.DisabledGroupIDs
-		}
-		if input.CustomGroupIDs != nil {
-			custom = *input.CustomGroupIDs
-		}
-		key.GroupPreferences = buildAPIKeyPreferences(disabled, custom)
+	if input.CustomGroupIDs != nil {
+		key.GroupPreferences = buildAPIKeyPreferences(*input.CustomGroupIDs)
 		if repo, ok := s.apiKeyRepo.(apiKeyPreferenceRepository); ok {
 			if err := repo.SyncGroupPreferences(ctx, key.ID, key.GroupPreferences); err != nil {
 				return nil, fmt.Errorf("save API key group preferences: %w", err)

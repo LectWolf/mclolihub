@@ -47,14 +47,11 @@ func (APIKey) Fields() []ent.Field {
 		field.String("route_mode").
 			MaxLen(20).
 			Default("fixed").
-			Comment("fixed/cheapest/fastest/custom"),
+			Comment("fixed/smart"),
 		field.String("route_platform").
 			MaxLen(20).
 			Default("openai").
 			Comment("dynamic routing platform scope: openai/anthropic/grok"),
-		field.Bool("natural_revert_enabled").
-			Default(true).
-			Comment("keep a short-lived fallback route to preserve cache locality before returning to the preferred group"),
 		field.Float("max_rate_multiplier").
 			Optional().
 			Nillable().
