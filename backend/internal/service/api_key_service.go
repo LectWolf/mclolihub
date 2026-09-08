@@ -76,9 +76,9 @@ type APIKeyUpdateFields struct {
 	// IPRules 覆盖 ip_whitelist 与 ip_blacklist。
 	IPRules bool
 	// RouteMode, RoutePlatform and MaxRateMultiplier control multi-group routing.
-	RouteMode            bool
-	RoutePlatform        bool
-	MaxRateMultiplier    bool
+	RouteMode         bool
+	RoutePlatform     bool
+	MaxRateMultiplier bool
 }
 
 // IsEmpty 报告该次 Update 是否不写任何列。
@@ -135,10 +135,6 @@ type apiKeyPreferenceRepository interface {
 
 type groupRouteHealthReader interface {
 	GetRouteHealth(context.Context, []int64) (map[int64]GroupRouteHealth, error)
-}
-
-type groupRouteUsageStatsReader interface {
-	GetUserRouteUsageStats(context.Context, int64, string, []int64) (map[int64]GroupRouteUsageStats, error)
 }
 
 type RoutingGroupPreview struct {
@@ -473,15 +469,15 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
-	Name                 string   `json:"name"`
-	GroupID              *int64   `json:"group_id"`
-	RouteMode            string   `json:"route_mode"`
-	RoutePlatform        string   `json:"route_platform"`
-	MaxRateMultiplier    *float64 `json:"max_rate_multiplier"`
-	CustomGroupIDs       []int64  `json:"custom_group_ids"`
-	CustomKey            *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist          []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist          []string `json:"ip_blacklist"` // IP 黑名单
+	Name              string   `json:"name"`
+	GroupID           *int64   `json:"group_id"`
+	RouteMode         string   `json:"route_mode"`
+	RoutePlatform     string   `json:"route_platform"`
+	MaxRateMultiplier *float64 `json:"max_rate_multiplier"`
+	CustomGroupIDs    []int64  `json:"custom_group_ids"`
+	CustomKey         *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist       []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist       []string `json:"ip_blacklist"` // IP 黑名单
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -836,21 +832,21 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:               userID,
-		Key:                  key,
-		Name:                 html.EscapeString(req.Name),
-		GroupID:              req.GroupID,
-		Status:               StatusActive,
+		UserID:            userID,
+		Key:               key,
+		Name:              html.EscapeString(req.Name),
+		GroupID:           req.GroupID,
+		Status:            StatusActive,
 		RouteMode:         NormalizeRouteMode(req.RouteMode),
 		RoutePlatform:     NormalizeRoutePlatform(req.RoutePlatform),
 		MaxRateMultiplier: req.MaxRateMultiplier,
-		IPWhitelist:          req.IPWhitelist,
-		IPBlacklist:          req.IPBlacklist,
-		Quota:                req.Quota,
-		QuotaUsed:            0,
-		RateLimit5h:          req.RateLimit5h,
-		RateLimit1d:          req.RateLimit1d,
-		RateLimit7d:          req.RateLimit7d,
+		IPWhitelist:       req.IPWhitelist,
+		IPBlacklist:       req.IPBlacklist,
+		Quota:             req.Quota,
+		QuotaUsed:         0,
+		RateLimit5h:       req.RateLimit5h,
+		RateLimit1d:       req.RateLimit1d,
+		RateLimit7d:       req.RateLimit7d,
 	}
 	if apiKey.RouteMode == RouteModeFixed {
 		apiKey.RoutePlatform = RoutePlatformOpenAI
