@@ -114,6 +114,8 @@ func DetectModelPlatform(model string) (string, bool) {
 			return PlatformDeepseek, true
 		case "minimax":
 			return PlatformMiniMax, true
+		case "codebuddy", "workbuddy":
+			return PlatformCodeBuddy, true
 		}
 		if rest != "" {
 			normalized = strings.TrimPrefix(rest, "models/")

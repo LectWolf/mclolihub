@@ -28,10 +28,11 @@ const (
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
 	// 国产 OpenAI 兼容供应商（经 OpenAI 网关转发，按 Chat Completions 协议）。
-	PlatformKimi      = "kimi"     // Kimi (月之暗面 / Moonshot)
-	PlatformZhipu     = "zhipu"    // 智谱 GLM (bigmodel)
-	PlatformDeepseek  = "deepseek" // DeepSeek
-	PlatformMiniMax   = "minimax"  // MiniMax (M 系列)
+	PlatformKimi      = "kimi"      // Kimi (月之暗面 / Moonshot)
+	PlatformZhipu     = "zhipu"     // 智谱 GLM (bigmodel)
+	PlatformDeepseek  = "deepseek"  // DeepSeek
+	PlatformMiniMax   = "minimax"   // MiniMax (M 系列)
+	PlatformCodeBuddy = "codebuddy" // WorkBuddy / CodeBuddy (Tencent)
 	PlatformComposite = "composite"
 )
 

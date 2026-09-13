@@ -160,6 +160,19 @@
             <PlatformIcon platform="grok" size="sm" />
             Grok
           </button>
+          <button
+            type="button"
+            @click="form.platform = 'codebuddy'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'codebuddy'
+                ? 'bg-white text-sky-600 shadow-sm dark:bg-dark-600 dark:text-sky-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="codebuddy" size="sm" />
+            CodeBuddy
+          </button>
         </div>
         <!-- CN providers row: Kimi / Zhipu GLM / DeepSeek -->
         <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
@@ -3465,7 +3478,65 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <div v-if="form.platform === 'codebuddy'" class="space-y-4">
+        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {{ t('admin.accounts.codebuddyOAuth.title') }}
+        </h3>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.codebuddyOAuth.site') }}</label>
+          <div class="mt-2 flex gap-3">
+            <button
+              type="button"
+              class="rounded-md border px-3 py-2 text-sm"
+              :class="codebuddySite === 'cn' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+              @click="codebuddySite = 'cn'"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.siteCN') }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md border px-3 py-2 text-sm"
+              :class="codebuddySite === 'intl' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+              @click="codebuddySite = 'intl'"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.siteIntl') }}
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="codebuddyOAuth.loading.value || codebuddyOAuth.polling.value"
+          @click="codebuddyOAuth.start(codebuddySite, form.proxy_id)"
+        >
+          {{ t('admin.accounts.codebuddyOAuth.start') }}
+        </button>
+        <p v-if="codebuddyOAuth.verificationUri.value" class="text-sm text-gray-600 dark:text-gray-300">
+          {{ t('admin.accounts.codebuddyOAuth.waiting') }}
+          <a
+            class="ml-2 text-sky-600 underline"
+            :href="codebuddyOAuth.verificationUri.value"
+            target="_blank"
+            rel="noopener"
+          >
+            {{ t('admin.accounts.codebuddyOAuth.openUrl') }}
+          </a>
+        </p>
+        <p v-if="codebuddyOAuth.polling.value" class="text-sm text-gray-500">
+          {{ t('admin.accounts.codebuddyOAuth.polling') }}
+        </p>
+        <p v-if="codebuddyOAuth.done.value" class="text-sm text-emerald-600">
+          {{ t('admin.accounts.codebuddyOAuth.done') }}
+          <span v-if="codebuddyOAuth.nickname.value"> · {{ codebuddyOAuth.nickname.value }}</span>
+        </p>
+        <p v-if="codebuddyOAuth.error.value" class="text-sm text-red-500">{{ codebuddyOAuth.error.value }}</p>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.codebuddyOAuth.importJson') }}</label>
+          <textarea v-model="codebuddyInfoJson" class="input font-mono" rows="6" :placeholder="t('admin.accounts.codebuddyOAuth.importPlaceholder')" />
+        </div>
+      </div>
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3548,7 +3619,16 @@
           {{ t('common.back') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="form.platform === 'codebuddy'"
+          type="button"
+          class="btn btn-primary"
+          :disabled="!canCreateCodeBuddy"
+          @click="handleCreateCodeBuddy"
+        >
+          {{ t('admin.accounts.codebuddyOAuth.create') }}
+        </button>
+        <button
+          v-else-if="isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -3839,6 +3919,7 @@ import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
+import { useCodeBuddyOAuth } from '@/composables/useCodeBuddyOAuth'
 import type {
   Proxy,
   AdminGroup,
@@ -3927,6 +4008,7 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
   if (form.platform === 'grok') return t('admin.accounts.oauth.grok.title')
+  if (form.platform === 'codebuddy') return t('admin.accounts.codebuddyOAuth.title')
   return t('admin.accounts.oauth.title')
 })
 
@@ -4015,6 +4097,9 @@ const openaiOAuth = useOpenAIOAuth() // For OpenAI OAuth
 const geminiOAuth = useGeminiOAuth() // For Gemini OAuth
 const antigravityOAuth = useAntigravityOAuth() // For Antigravity OAuth
 const grokOAuth = useGrokOAuth() // For Grok OAuth
+const codebuddyOAuth = useCodeBuddyOAuth()
+const codebuddySite = ref<'cn' | 'intl'>('cn')
+const codebuddyInfoJson = ref('')
 
 // Computed: current OAuth state for template binding
 const currentAuthUrl = computed(() => {
@@ -4678,7 +4763,10 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
-    // Antigravity upstream 类型（实际创建为 apikey）
+    if (form.platform === 'codebuddy') {
+      form.type = 'oauth'
+      return
+    }
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
       return
@@ -4703,6 +4791,9 @@ watch(
 watch(
   () => form.platform,
   (newPlatform) => {
+    if (newPlatform === 'codebuddy') {
+      accountCategory.value = 'oauth-based'
+    }
     // Reset base URL based on platform
     if (isCNProviderPlatform(newPlatform)) {
       apiKeyBaseUrl.value = defaultCNBaseUrl(newPlatform, accountMode.value, apiProtocol.value)
@@ -5746,7 +5837,39 @@ const goBackToBasicInfo = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  codebuddyOAuth.resetState()
   oauthFlowRef.value?.reset()
+}
+
+const canCreateCodeBuddy = computed(() => {
+  if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) return true
+  return Boolean(codebuddyInfoJson.value.trim())
+})
+
+const handleCreateCodeBuddy = async () => {
+  try {
+    const payload: Record<string, unknown> = {
+      name: form.name,
+      proxy_id: form.proxy_id,
+      concurrency: form.concurrency,
+      priority: form.priority,
+      group_ids: form.group_ids
+    }
+    if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) {
+      payload.login_id = codebuddyOAuth.loginId.value
+    } else if (codebuddyInfoJson.value.trim()) {
+      payload.credentials = JSON.parse(codebuddyInfoJson.value)
+    } else {
+      appStore.showError(t('admin.accounts.codebuddyOAuth.failedToCreate'))
+      return
+    }
+    await adminAPI.codebuddy.createFromOAuth(payload as any)
+    appStore.showSuccess(t('admin.accounts.accountCreated'))
+    emit('created')
+    handleClose()
+  } catch (err: any) {
+    appStore.showError(err.response?.data?.detail || err.response?.data?.message || err.message || t('admin.accounts.codebuddyOAuth.failedToCreate'))
+  }
 }
 
 const handleGenerateUrl = async () => {

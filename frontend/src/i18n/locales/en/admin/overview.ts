@@ -983,6 +983,7 @@ export default {
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
         minimax: 'MiniMax',
+        codebuddy: 'CodeBuddy',
         composite: 'Composite',
       },
       deleteConfirm:

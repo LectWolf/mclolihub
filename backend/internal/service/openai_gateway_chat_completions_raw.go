@@ -165,6 +165,14 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	upstreamBody = applyOllamaCloudRawChatCompletionsRequest(account, upstreamBody)
 	upstreamBody = clampOllamaCloudUpstreamMaxTokens(account, upstreamBody)
 
+	if account.IsCodeBuddy() {
+		prepared, prepErr := prepareCodeBuddyChatBody(upstreamBody)
+		if prepErr != nil {
+			return nil, fmt.Errorf("prepare codebuddy chat body: %w", prepErr)
+		}
+		upstreamBody = prepared
+	}
+
 	logger.L().Debug("openai chat_completions raw: forwarding without protocol conversion",
 		zap.Int64("account_id", account.ID),
 		zap.String("original_model", originalModel),
@@ -256,6 +264,9 @@ func (s *OpenAIGatewayService) rawChatCompletionsURL(account *Account) (string, 
 			return "", fmt.Errorf("invalid grok base_url: %w", err)
 		}
 		return targetURL, nil
+	}
+	if account.IsCodeBuddy() {
+		return codeBuddyChatCompletionsURL(account)
 	}
 
 	return s.openAIChatCompletionsTargetURL(account)
