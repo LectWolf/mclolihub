@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -116,31 +117,119 @@ func decodeCodeBuddyExtra(account *Account, key string, out any) bool {
 	return json.Unmarshal(body, out) == nil
 }
 
+// codeBuddyFallbackModelIDs is advertised only when nothing is known about the
+// account: no manual whitelist and no synced catalog.
+var codeBuddyFallbackModelIDs = []string{"auto", "glm-5.2", "deepseek-v4-pro", "kimi-k2.7"}
+
+// CodeBuddyAvailableModels resolves the models this account advertises.
+//
+// Precedence is deliberate. The operator's manual whitelist decides *which*
+// models are offered and is never silently widened — an entry absent from the
+// catalog is still honoured, because an operator may whitelist a model before
+// syncing. The synced catalog only supplies credit metadata. The credit policy
+// is a final rail that can remove models but never add them, so it stays
+// consistent with codeBuddyCreditPolicyDenial on the request path.
 func (a *Account) CodeBuddyAvailableModels() []codebuddy.CatalogModel {
-	models := a.GetCodeBuddyCatalog()
-	if len(models) == 0 {
-		for _, id := range []string{"auto", "glm-5.2", "deepseek-v4-pro", "kimi-k2.7"} {
-			models = append(models, codebuddy.CatalogModel{ID: id, Name: id})
-		}
-	}
-	models = codebuddy.FilterCatalog(models, a.CodeBuddyCreditPolicy())
-	if mapping := a.GetModelMapping(); len(mapping) > 0 {
-		allowed := map[string]struct{}{}
-		for from, to := range mapping {
-			allowed[strings.TrimSpace(from)] = struct{}{}
-			allowed[strings.TrimSpace(to)] = struct{}{}
-		}
-		filtered := make([]codebuddy.CatalogModel, 0, len(models))
-		for _, model := range models {
-			if _, ok := allowed[model.ID]; ok {
-				filtered = append(filtered, model)
+	catalog := a.GetCodeBuddyCatalog()
+	models := codeBuddyWhitelistedModels(a, catalog)
+	if models == nil {
+		models = catalog
+		if len(models) == 0 {
+			models = make([]codebuddy.CatalogModel, 0, len(codeBuddyFallbackModelIDs))
+			for _, id := range codeBuddyFallbackModelIDs {
+				models = append(models, codebuddy.CatalogModel{ID: id, Name: id})
 			}
 		}
-		if len(filtered) > 0 {
-			models = filtered
+	}
+	return codebuddy.FilterCatalog(models, a.CodeBuddyCreditPolicy())
+}
+
+// codeBuddyWhitelistedModels renders the account's manual whitelist as a model
+// list, or nil when the account has no usable whitelist.
+//
+// Clients must request the mapping's keys, so those are what gets advertised;
+// credit metadata is looked up from the catalog entry for the mapped target.
+func codeBuddyWhitelistedModels(a *Account, catalog []codebuddy.CatalogModel) []codebuddy.CatalogModel {
+	mapping := a.GetModelMapping()
+	if len(mapping) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(mapping))
+	for from := range mapping {
+		from = strings.TrimSpace(from)
+		// A wildcard pattern matches models, it is not a model clients can request.
+		if from == "" || strings.Contains(from, "*") {
+			continue
+		}
+		names = append(names, from)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	// Map iteration order would make the advertised list shuffle between calls.
+	sort.Strings(names)
+	out := make([]codebuddy.CatalogModel, 0, len(names))
+	for _, name := range names {
+		target := strings.TrimSpace(mapping[name])
+		if target == "" {
+			target = name
+		}
+		entry := codebuddy.CatalogModel{ID: name, Name: name}
+		// Aliases are deliberately not copied: only the whitelist key is accepted.
+		if model, ok := codebuddy.FindModel(catalog, target); ok {
+			if model.Name != "" {
+				entry.Name = model.Name
+			}
+			entry.Credits = model.Credits
+			entry.CreditsValue = model.CreditsValue
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+// CodeBuddyGroupModels aggregates what every schedulable CodeBuddy account in
+// the group advertises, de-duplicated by model ID.
+//
+// GetAvailableModels cannot answer this: it only knows model_mapping keys, so a
+// CodeBuddy account that draws its models from the synced catalog would
+// advertise nothing at all. Credit metadata survives into DisplayName so the
+// listing can show each model's multiplier.
+func (s *GatewayService) CodeBuddyGroupModels(ctx context.Context, groupID *int64) []openai.Model {
+	if s == nil || s.accountRepo == nil {
+		return nil
+	}
+	var accounts []Account
+	var err error
+	if groupID != nil {
+		accounts, err = s.accountRepo.ListSchedulableByGroupID(ctx, *groupID)
+	} else {
+		accounts, err = s.accountRepo.ListSchedulable(ctx)
+	}
+	if err != nil {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	models := make([]codebuddy.CatalogModel, 0)
+	for i := range accounts {
+		account := &accounts[i]
+		if !account.IsCodeBuddy() {
+			continue
+		}
+		for _, model := range account.CodeBuddyAvailableModels() {
+			id := strings.TrimSpace(model.ID)
+			if id == "" {
+				continue
+			}
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			models = append(models, model)
 		}
 	}
-	return models
+	sort.Slice(models, func(a, b int) bool { return models[a].ID < models[b].ID })
+	return codeBuddyModelsAsOpenAI(models)
 }
 
 // codeBuddyProbe carries what an admin-side upstream probe needs: credentials
@@ -375,23 +464,44 @@ func codeBuddyModelsAsOpenAI(models []codebuddy.CatalogModel) []openai.Model {
 	return out
 }
 
-func codeBuddyModelAllowed(account *Account, modelID string) bool {
+// codeBuddyCreditPolicyDenial reports why the account's zero-credit policy
+// rejects modelID, or returns "" when the request may proceed.
+//
+// The two denial causes need different messages because they need different
+// fixes: a priced model means the policy is doing its job, while a model absent
+// from the stored catalog means the catalog is stale and the operator cannot
+// tell what the model costs. The absent case fails closed — the whole point of
+// the zero-credit policy is to never spend credits unintentionally.
+func codeBuddyCreditPolicyDenial(account *Account, modelID string) string {
 	if account == nil || !account.IsCodeBuddy() {
-		return true
+		return ""
 	}
 	if account.CodeBuddyCreditPolicy() != codebuddy.CreditPolicyZeroOnly {
-		return true
+		return ""
 	}
 	catalog := account.GetCodeBuddyCatalog()
-	if model, ok := codebuddy.FindModel(catalog, modelID); ok {
-		return codebuddy.IsZeroCredit(model.Credits)
+	// Nothing synced yet: there is no pricing to enforce against, so enforcing
+	// would block every model on the account.
+	if len(catalog) == 0 {
+		return ""
 	}
-	// Unknown model with zero-only policy: allow through if catalog is empty.
-	return len(catalog) == 0
-}
-
-// codeBuddyCreditPolicyRejection describes why the zero-credit policy blocked a
-// model, shaped for the client-facing error body of every gateway endpoint.
-func codeBuddyCreditPolicyRejection(modelID string) string {
-	return fmt.Sprintf("model %s is not available under the account's zero-credit CodeBuddy policy", strings.TrimSpace(modelID))
+	modelID = strings.TrimSpace(modelID)
+	model, found := codebuddy.FindModel(catalog, modelID)
+	if !found {
+		return fmt.Sprintf(
+			"model %s is missing from this CodeBuddy account's synced catalog, so its credit cost is unknown and the account's zero-credit policy cannot admit it; sync the account's models, or set its credit policy to all models",
+			modelID,
+		)
+	}
+	if codebuddy.IsZeroCredit(model.Credits) {
+		return ""
+	}
+	cost := strings.TrimSpace(model.Credits)
+	if cost == "" {
+		cost = "an unreported amount of"
+	}
+	return fmt.Sprintf(
+		"model %s costs %s credits and this CodeBuddy account is restricted to zero-credit models; set its credit policy to all models to allow it",
+		modelID, cost,
+	)
 }

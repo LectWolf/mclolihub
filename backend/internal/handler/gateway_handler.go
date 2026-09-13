@@ -1309,6 +1309,13 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		return
 	}
 
+	// CodeBuddy draws its models from each account's synced catalog rather than
+	// from model_mapping alone, and it serves both the OpenAI and the Anthropic
+	// protocol, so it needs its own source and its own shape selection.
+	if platform == service.PlatformCodeBuddy && h.writeCodeBuddyModels(c, apiKey, groupID) {
+		return
+	}
+
 	// Get available models from account configurations for the selected group platform.
 	availableModels := h.gatewayService.GetAvailableModels(c.Request.Context(), groupID, platform)
 	if apiKey != nil && apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
@@ -1412,6 +1419,16 @@ func (h *GatewayHandler) codexModelIDsForGroup(ctx context.Context, group *servi
 	}
 
 	availableModels := h.gatewayService.GetAvailableModels(ctx, groupID, platform)
+	if platform == service.PlatformCodeBuddy {
+		// Same reason as the /v1/models branch: model_mapping alone would hide a
+		// CodeBuddy account whose models come from the synced catalog.
+		if models := h.gatewayService.CodeBuddyGroupModels(ctx, groupID); len(models) > 0 {
+			availableModels = make([]string, 0, len(models))
+			for _, model := range models {
+				availableModels = append(availableModels, model.ID)
+			}
+		}
+	}
 	fallbackModels := defaultCodexModelIDsForPlatform(platform)
 	if group.ModelAllowlistEnabled() {
 		return group.ModelAllowlist.FilterForListing(modelListingSource(platform, availableModels, fallbackModels))
@@ -1431,6 +1448,16 @@ func (h *GatewayHandler) compositeAvailableModels(ctx context.Context, groupID *
 	schedulablePlatforms := h.gatewayService.GetSchedulablePlatforms(ctx, groupID)
 	for _, platform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGrok, service.PlatformCodeBuddy, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax} {
 		platformModels := h.gatewayService.GetAvailableModels(ctx, groupID, platform)
+		if platform == service.PlatformCodeBuddy {
+			// CodeBuddy models live in each account's synced catalog, which
+			// GetAvailableModels cannot see.
+			if codeBuddyModels := h.gatewayService.CodeBuddyGroupModels(ctx, groupID); len(codeBuddyModels) > 0 {
+				platformModels = make([]string, 0, len(codeBuddyModels))
+				for _, model := range codeBuddyModels {
+					platformModels = append(platformModels, model.ID)
+				}
+			}
+		}
 		if len(platformModels) == 0 {
 			// CN 供应商没有静态默认模型列表（defaultModelIDsForPlatform 的
 			// default 分支是 Claude 列表），composite 下只暴露账号映射键。
@@ -1546,6 +1573,81 @@ func grokModelSupportsConfigurableReasoning(modelID string) bool {
 	default:
 		return false
 	}
+}
+
+// writeCodeBuddyModels answers /v1/models for a CodeBuddy group from the
+// accounts' advertised catalogs. It reports false when nothing is known yet, so
+// the caller can fall through to the shared default-list path.
+func (h *GatewayHandler) writeCodeBuddyModels(c *gin.Context, apiKey *service.APIKey, groupID *int64) bool {
+	if h == nil || h.gatewayService == nil {
+		return false
+	}
+	models := h.gatewayService.CodeBuddyGroupModels(c.Request.Context(), groupID)
+	if len(models) == 0 {
+		return false
+	}
+	if apiKey != nil && apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
+		ids := make([]string, 0, len(models))
+		for _, model := range models {
+			ids = append(ids, model.ID)
+		}
+		allowed := make(map[string]struct{})
+		for _, id := range apiKey.Group.ModelAllowlist.FilterForListing(ids) {
+			allowed[id] = struct{}{}
+		}
+		filtered := make([]openai.Model, 0, len(allowed))
+		for _, model := range models {
+			if _, ok := allowed[model.ID]; ok {
+				filtered = append(filtered, model)
+			}
+		}
+		models = filtered
+	}
+	if clientSpeaksAnthropic(c) {
+		writeAnthropicModelsList(c, models)
+		return true
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"object": "list",
+		"data":   models,
+	})
+	return true
+}
+
+// clientSpeaksAnthropic reports whether the caller is an Anthropic SDK. Those
+// always send anthropic-version, and they expect Claude's model list shape; the
+// OpenAI shape is the default because CodeBuddy is natively an OpenAI-protocol
+// upstream.
+func clientSpeaksAnthropic(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+	return strings.TrimSpace(c.GetHeader("anthropic-version")) != ""
+}
+
+// writeAnthropicModelsList emits Claude's model list, including the pagination
+// fields the Anthropic SDKs read. The list is never paginated here, so has_more
+// is always false and the cursors just bracket the full set.
+func writeAnthropicModelsList(c *gin.Context, models []openai.Model) {
+	out := make([]claude.Model, 0, len(models))
+	for _, model := range models {
+		displayName := model.DisplayName
+		if displayName == "" {
+			displayName = model.ID
+		}
+		out = append(out, claude.Model{
+			ID:          model.ID,
+			Type:        "model",
+			DisplayName: displayName,
+			CreatedAt:   "2024-01-01T00:00:00Z",
+		})
+	}
+	body := gin.H{"object": "list", "data": out, "has_more": false}
+	if len(out) > 0 {
+		body["first_id"] = out[0].ID
+		body["last_id"] = out[len(out)-1].ID
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {

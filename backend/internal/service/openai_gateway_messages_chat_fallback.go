@@ -60,9 +60,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 
 	billingModel := resolveOpenAIForwardModel(account, anthropicReq.Model, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
-	if !codeBuddyModelAllowed(account, upstreamModel) {
-		writeAnthropicError(c, http.StatusNotFound, "invalid_request_error", codeBuddyCreditPolicyRejection(upstreamModel))
-		return nil, fmt.Errorf("codebuddy credit policy rejected model %s", upstreamModel)
+	if denial := codeBuddyCreditPolicyDenial(account, upstreamModel); denial != "" {
+		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+		writeAnthropicError(c, http.StatusNotFound, "invalid_request_error", denial)
+		return nil, fmt.Errorf("codebuddy credit policy denied model %s", upstreamModel)
 	}
 	chatReq.Model = upstreamModel
 	chatReq.ReasoningEffort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, chatReq.ReasoningEffort)

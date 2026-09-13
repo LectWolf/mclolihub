@@ -385,7 +385,12 @@ func (s *OpenAIGatewayService) readCCUpstreamJSONResponse(
 
 // writeOpenAIResponsesFallbackError 以 /v1/responses 回退路径的既有错误格式回写
 // （裸 error 对象；不调用 MarkResponseCommitted，与原内联写法保持一致）。
+// writeOpenAIResponsesFallbackError writes the final client-facing error for the
+// /v1/responses → CC fallback path. It marks the response committed (as
+// writeChatCompletionsError does) because appending the handler's fallback
+// response.failed event after a complete JSON body would corrupt it.
 func writeOpenAIResponsesFallbackError(c *gin.Context, statusCode int, errType, message string) {
+	MarkResponseCommitted(c)
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,

@@ -379,6 +379,9 @@ export default {
       subscriptionExpires: 'Expires',
       // Capacity status tooltips
       capacity: {
+        concurrency: {
+          untracked: 'This account has no concurrency limit, so the gateway takes no slot for it and in-flight requests cannot be counted. Set a limit above 0 to see live concurrency.'
+        },
         windowCost: {
           blocked: '5h window cost exceeded, account scheduling paused',
           stickyOnly: '5h window cost at threshold, only sticky sessions allowed',

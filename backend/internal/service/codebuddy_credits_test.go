@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/codebuddy"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,7 +143,7 @@ func TestMarkCodeBuddyCreditsExhaustedZeroesCachedBalance(t *testing.T) {
 	repo.awaitKeys(t, codeBuddyCreditsExtraKey)
 }
 
-func TestCodeBuddyModelAllowedUnderZeroCreditPolicy(t *testing.T) {
+func TestCodeBuddyCreditPolicyDenialUnderZeroCreditPolicy(t *testing.T) {
 	catalog := []codebuddy.CatalogModel{
 		{ID: "auto", Credits: "x0.00"},
 		{ID: "glm-5.2", Credits: "x1.00", Aliases: []string{"glm"}},
@@ -148,14 +151,55 @@ func TestCodeBuddyModelAllowedUnderZeroCreditPolicy(t *testing.T) {
 	account := codeBuddyTestAccount(catalog, nil)
 	account.Credentials = map[string]any{codeBuddyCreditPolicyKey: codebuddy.CreditPolicyZeroOnly}
 
-	require.True(t, codeBuddyModelAllowed(account, "auto"))
-	require.False(t, codeBuddyModelAllowed(account, "glm-5.2"))
+	require.Empty(t, codeBuddyCreditPolicyDenial(account, "auto"))
+
+	priced := codeBuddyCreditPolicyDenial(account, "glm-5.2")
+	require.NotEmpty(t, priced)
+	require.Contains(t, priced, "x1.00", "a priced model's denial should name its cost")
+
 	// Aliases must be gated too, or the policy is bypassed by renaming the model.
-	require.False(t, codeBuddyModelAllowed(account, "glm"))
-	// An unknown model stays blocked while the catalog is known.
-	require.False(t, codeBuddyModelAllowed(account, "surprise"))
+	require.NotEmpty(t, codeBuddyCreditPolicyDenial(account, "glm"))
+
+	// An unsynced model fails closed, but the message must point at the catalog
+	// rather than claiming the model is priced.
+	absent := codeBuddyCreditPolicyDenial(account, "deepseek-v4.1-flash")
+	require.Contains(t, absent, "missing from this CodeBuddy account's synced catalog")
+	require.NotContains(t, absent, "costs")
 
 	empty := codeBuddyTestAccount(nil, nil)
 	empty.Credentials = account.Credentials
-	require.True(t, codeBuddyModelAllowed(empty, "surprise"), "no catalog means nothing to enforce against")
+	require.Empty(t, codeBuddyCreditPolicyDenial(empty, "surprise"), "no catalog means nothing to enforce against")
+}
+
+func TestCodeBuddyCreditPolicyDenialAllowsEverythingUnderDefaultPolicy(t *testing.T) {
+	account := codeBuddyTestAccount([]codebuddy.CatalogModel{{ID: "glm-5.2", Credits: "x9.00"}}, nil)
+	require.Empty(t, codeBuddyCreditPolicyDenial(account, "glm-5.2"))
+	require.Empty(t, codeBuddyCreditPolicyDenial(account, "anything"))
+}
+
+// A local denial writes the whole client-facing body itself. Without the
+// committed marker the handler appends its own "Upstream request failed"
+// fallback, so the client receives two stacked errors.
+func TestLocalErrorWritersMarkResponseCommitted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for name, write := range map[string]func(*gin.Context){
+		"chat_completions": func(c *gin.Context) {
+			writeChatCompletionsError(c, http.StatusNotFound, "invalid_request_error", "denied")
+		},
+		"anthropic_messages": func(c *gin.Context) {
+			writeAnthropicError(c, http.StatusNotFound, "invalid_request_error", "denied")
+		},
+		"responses_fallback": func(c *gin.Context) {
+			writeOpenAIResponsesFallbackError(c, http.StatusNotFound, "invalid_request_error", "denied")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			write(c)
+			require.True(t, IsResponseCommitted(c))
+			require.Equal(t, http.StatusNotFound, recorder.Code)
+			require.Contains(t, recorder.Body.String(), "denied")
+		})
+	}
 }

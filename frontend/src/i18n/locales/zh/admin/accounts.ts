@@ -266,6 +266,9 @@ export default {
       subscriptionExpires: '到期',
       // 容量状态提示
       capacity: {
+        concurrency: {
+          untracked: '该账号未设并发上限（不限流），网关不会占用并发槽位，因此在途请求数无法统计。需要看实时并发请把并发上限设为大于 0。'
+        },
         windowCost: {
           blocked: '5h窗口费用超限，账号暂停调度',
           stickyOnly: '5h窗口费用达阈值，仅允许粘性会话',

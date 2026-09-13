@@ -1321,7 +1321,12 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 }
 
 // writeAnthropicError writes an error response in Anthropic Messages API format.
+// writeAnthropicError writes the final client-facing Anthropic error body. It
+// marks the response committed (as writeChatCompletionsError does) because the
+// handler would otherwise append its fallback error onto an already complete
+// JSON body.
 func writeAnthropicError(c *gin.Context, statusCode int, errType, message string) {
+	MarkResponseCommitted(c)
 	c.JSON(statusCode, gin.H{
 		"type": "error",
 		"error": gin.H{

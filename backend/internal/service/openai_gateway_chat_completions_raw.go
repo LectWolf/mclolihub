@@ -73,9 +73,10 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	// 2. Resolve model mapping (same as ForwardAsChatCompletions)
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
-	if !codeBuddyModelAllowed(account, upstreamModel) {
-		writeChatCompletionsError(c, http.StatusNotFound, "invalid_request_error", codeBuddyCreditPolicyRejection(upstreamModel))
-		return nil, fmt.Errorf("codebuddy credit policy rejected model %s", upstreamModel)
+	if denial := codeBuddyCreditPolicyDenial(account, upstreamModel); denial != "" {
+		MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
+		writeChatCompletionsError(c, http.StatusNotFound, "invalid_request_error", denial)
+		return nil, fmt.Errorf("codebuddy credit policy denied model %s", upstreamModel)
 	}
 	SetOpsUpstreamModel(c, upstreamModel)
 	grokCacheIdentity := ""
