@@ -109,7 +109,22 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	)
 
 	// 3. Build and send upstream request via the shared CC pipeline
-	apiKey, targetURL, err := s.resolveCCFallbackTarget(account)
+	if account.IsCodeBuddy() {
+		prepared, prepErr := prepareCodeBuddyChatBody(chatBody)
+		if prepErr != nil {
+			return nil, fmt.Errorf("prepare codebuddy chat body: %w", prepErr)
+		}
+		chatBody = prepared
+	}
+	var apiKey, targetURL string
+	if account.IsCodeBuddy() {
+		apiKey, _, err = s.getRequestCredential(ctx, c, account)
+		if err == nil {
+			targetURL, err = s.rawChatCompletionsURL(account)
+		}
+	} else {
+		apiKey, targetURL, err = s.resolveCCFallbackTarget(account)
+	}
 	if err != nil {
 		return nil, err
 	}

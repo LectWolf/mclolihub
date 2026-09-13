@@ -18,6 +18,7 @@ export const PROVIDER_KIMI: Provider = 'kimi'
 export const PROVIDER_ZHIPU: Provider = 'zhipu'
 export const PROVIDER_DEEPSEEK: Provider = 'deepseek'
 export const PROVIDER_MINIMAX: Provider = 'minimax'
+export const PROVIDER_CODEBUDDY: Provider = 'codebuddy'
 
 export const DEFAULT_GROK_ENDPOINT = 'https://api.x.ai'
 export const DEFAULT_GROK_MODEL = 'grok-4.5'
@@ -45,6 +46,7 @@ export const PROVIDERS: readonly Provider[] = [
   PROVIDER_ZHIPU,
   PROVIDER_DEEPSEEK,
   PROVIDER_MINIMAX,
+  PROVIDER_CODEBUDDY,
 ]
 
 /** 仅支持配额模式（无探活 adapter）的 provider。 */

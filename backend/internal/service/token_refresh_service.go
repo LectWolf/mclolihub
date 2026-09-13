@@ -142,6 +142,17 @@ func NewTokenRefreshService(
 	return s
 }
 
+func (s *TokenRefreshService) RegisterPlatform(platform string, refresher TokenRefresher, executor OAuthRefreshExecutor) {
+	if s == nil || platform == "" || refresher == nil {
+		return
+	}
+	s.registrations = append(s.registrations, tokenRefreshRegistration{
+		platform:  platform,
+		refresher: refresher,
+		executor:  executor,
+	})
+}
+
 func (s *TokenRefreshService) eligiblePlatforms() []string {
 	platforms := make([]string, 0, len(s.registrations))
 	for _, registration := range s.registrations {

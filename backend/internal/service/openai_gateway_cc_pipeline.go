@@ -154,6 +154,17 @@ func (s *OpenAIGatewayService) openAIChatCompletionsTargetURL(account *Account) 
 // resolveCCFallbackTarget 解析两条 CC 回退路径共用的账号凭证与上游端点
 // （回退路径仅面向 APIKey 账号，凭证恒为 openai api_key）。
 func (s *OpenAIGatewayService) resolveCCFallbackTarget(account *Account) (apiKey string, targetURL string, err error) {
+	if account != nil && account.IsCodeBuddy() {
+		apiKey = strings.TrimSpace(account.GetCodeBuddyAccessToken())
+		if apiKey == "" {
+			return "", "", fmt.Errorf("account %d missing access_token", account.ID)
+		}
+		targetURL, err = s.rawChatCompletionsURL(account)
+		if err != nil {
+			return "", "", err
+		}
+		return apiKey, targetURL, nil
+	}
 	apiKey = strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
 	if apiKey == "" {
 		return "", "", fmt.Errorf("account %d missing api_key", account.ID)
@@ -219,6 +230,9 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 			applyGrokCLIHeaders(upstreamReq.Header)
 		}
 		applyGrokCacheHeaders(upstreamReq.Header, grokCacheIdentity)
+	}
+	if account.IsCodeBuddy() {
+		applyCodeBuddyUpstreamHeaders(upstreamReq.Header, account, bearerToken)
 	}
 	// 账号级请求头覆写：放在所有内置默认头（含 Grok CLI 身份头）之后应用，
 	// 使配置值获得除共享传输层强制头之外的最高优先级。

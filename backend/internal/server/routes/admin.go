@@ -60,6 +60,7 @@ func RegisterAdminRoutes(
 
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
+		registerCodeBuddyOAuthRoutes(admin, h)
 
 		// 国产供应商（kimi/zhipu/deepseek）额度与余额
 		registerCNProviderRoutes(admin, h)
@@ -476,6 +477,17 @@ func registerAntigravityOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers)
 		antigravity.POST("/oauth/auth-url", h.Admin.AntigravityOAuth.GenerateAuthURL)
 		antigravity.POST("/oauth/exchange-code", h.Admin.AntigravityOAuth.ExchangeCode)
 		antigravity.POST("/oauth/refresh-token", h.Admin.AntigravityOAuth.RefreshToken)
+	}
+}
+
+func registerCodeBuddyOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	cb := admin.Group("/codebuddy")
+	{
+		cb.POST("/oauth/start", h.Admin.CodeBuddyOAuth.Start)
+		cb.POST("/oauth/poll", h.Admin.CodeBuddyOAuth.Poll)
+		cb.GET("/oauth/poll", h.Admin.CodeBuddyOAuth.Poll)
+		cb.POST("/oauth/create-from-oauth", h.Admin.CodeBuddyOAuth.CreateAccountFromOAuth)
+		cb.POST("/accounts/:id/refresh", h.Admin.CodeBuddyOAuth.RefreshAccountToken)
 	}
 }
 

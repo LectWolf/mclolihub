@@ -38,7 +38,7 @@ export type SchedulingThresholdPlatformType =
   | "grok"
   | "kimi"
   | "zhipu"
-  | "minimax"
+  | "minimax" | "codebuddy"
 
 export type AccountSchedulingThresholdsMap = Record<SchedulingThresholdPlatformType, number>
 
@@ -51,6 +51,7 @@ export const SCHEDULING_THRESHOLD_PLATFORMS: SchedulingThresholdPlatformType[] =
   "kimi",
   "zhipu",
   "minimax",
+  "codebuddy",
 ]
 
 export function normalizeAccountSchedulingThresholdsMap(

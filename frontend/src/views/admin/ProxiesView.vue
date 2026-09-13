@@ -1794,6 +1794,8 @@ const qualityTargetLabel = (target: string) => {
       return 'DeepSeek'
     case 'minimax':
       return 'MiniMax'
+    case 'codebuddy':
+      return 'CodeBuddy'
     default:
       return target
   }

@@ -916,6 +916,7 @@ export default {
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
         minimax: 'MiniMax',
+        codebuddy: 'CodeBuddy',
         composite: 'Composite',
       },
       saving: '保存中...',

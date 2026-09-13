@@ -305,6 +305,14 @@ func (a *Account) IsMiniMax() bool {
 	return a.Platform == PlatformMiniMax
 }
 
+func (a *Account) IsCodeBuddy() bool {
+	return a != nil && a.Platform == PlatformCodeBuddy
+}
+
+func (a *Account) IsCodeBuddyOAuth() bool {
+	return a.IsCodeBuddy() && a.Type == AccountTypeOAuth
+}
+
 // IsCNProvider 报告是否为国产 OpenAI 兼容供应商（kimi/zhipu/deepseek/minimax）。
 func (a *Account) IsCNProvider() bool {
 	return a != nil && IsCNProvider(a.Platform)
@@ -314,7 +322,7 @@ func (a *Account) IsCNProvider() bool {
 // openai/grok 原生走 OpenAI 网关；国产供应商同为 OpenAI Chat Completions
 // 兼容上游，也经 OpenAI 网关转发。
 func (a *Account) IsOpenAICompatible() bool {
-	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.IsCNProvider())
+	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok || a.Platform == PlatformCodeBuddy || a.IsCNProvider())
 }
 
 func (a *Account) GeminiOAuthType() string {
@@ -1714,6 +1722,30 @@ func (a *Account) GetGrokRefreshToken() string {
 		return ""
 	}
 	return a.GetCredential("refresh_token")
+}
+
+func (a *Account) GetCodeBuddyAccessToken() string {
+	if !a.IsCodeBuddy() {
+		return ""
+	}
+	return a.GetCredential("access_token")
+}
+
+func (a *Account) GetCodeBuddyRefreshToken() string {
+	if !a.IsCodeBuddyOAuth() {
+		return ""
+	}
+	return a.GetCredential("refresh_token")
+}
+
+func (a *Account) CodeBuddyProfile() string {
+	if !a.IsCodeBuddy() {
+		return ""
+	}
+	if profile := a.GetCredential("profile"); profile != "" {
+		return profile
+	}
+	return ""
 }
 
 func (a *Account) GetOpenAIIDToken() string {
