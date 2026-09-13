@@ -108,7 +108,7 @@ func (s *AccountTestService) fetchCodeBuddyUpstreamModels(ctx context.Context, a
 	if err != nil {
 		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to request CodeBuddy catalog", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to read CodeBuddy catalog", err)

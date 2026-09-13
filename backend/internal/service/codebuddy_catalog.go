@@ -227,7 +227,7 @@ func (s *CodeBuddyOAuthService) FetchCatalog(ctx context.Context, account *Accou
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEBUDDY_CATALOG_FAILED", "%v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEBUDDY_CATALOG_FAILED", "%v", err)
