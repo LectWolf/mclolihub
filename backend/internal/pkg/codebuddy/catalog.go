@@ -14,6 +14,7 @@ const (
 	CreditPolicyZeroOnly = "zero_only"
 	ResourceProductCode  = "p_tcaca"
 	ResourcePath         = "/v2/billing/meter/get-user-resource"
+	RequestUsagePath     = "/billing/meter/get-user-request-usage"
 )
 
 var multiplierRE = regexp.MustCompile(`(?i)^x\s*([0-9]+(?:\.[0-9]+)?)\s*(?:credits?)?$`)
@@ -227,6 +228,46 @@ func ParseMultiplier(credits string) *float64 {
 func IsZeroCredit(credits string) bool {
 	value := ParseMultiplier(credits)
 	return value != nil && *value == 0
+}
+
+// FindModel resolves a catalog entry by canonical ID, falling back to aliases.
+// IDs win over aliases across the whole catalog so an alias on one model can
+// never shadow another model's real ID.
+func FindModel(models []CatalogModel, modelID string) (CatalogModel, bool) {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return CatalogModel{}, false
+	}
+	for _, model := range models {
+		if strings.EqualFold(strings.TrimSpace(model.ID), modelID) {
+			return model, true
+		}
+	}
+	for _, model := range models {
+		for _, alias := range model.Aliases {
+			if strings.EqualFold(strings.TrimSpace(alias), modelID) {
+				return model, true
+			}
+		}
+	}
+	return CatalogModel{}, false
+}
+
+// ModelMultiplier resolves how many credits one request against modelID costs.
+// The second return reports whether the catalog priced the model at all, which
+// callers need to distinguish a genuinely free model from an unknown one.
+func ModelMultiplier(models []CatalogModel, modelID string) (float64, bool) {
+	model, ok := FindModel(models, modelID)
+	if !ok {
+		return 0, false
+	}
+	if model.CreditsValue != nil {
+		return *model.CreditsValue, true
+	}
+	if value := ParseMultiplier(model.Credits); value != nil {
+		return *value, true
+	}
+	return 0, false
 }
 
 func FilterCatalog(models []CatalogModel, policy string) []CatalogModel {

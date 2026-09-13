@@ -3531,29 +3531,55 @@
         </div>
         <button
           type="button"
-          class="btn-primary"
+          class="btn btn-primary"
           :disabled="codebuddyOAuth.loading.value || codebuddyOAuth.polling.value"
           @click="codebuddyOAuth.start(codebuddySite, form.proxy_id)"
         >
-          {{ t('admin.accounts.codebuddyOAuth.start') }}
+          {{
+            codebuddyOAuth.verificationUri.value && !codebuddyOAuth.polling.value
+              ? t('admin.accounts.codebuddyOAuth.restart')
+              : t('admin.accounts.codebuddyOAuth.start')
+          }}
         </button>
-        <p v-if="codebuddyOAuth.verificationUri.value" class="text-sm text-gray-600 dark:text-gray-300">
-          {{ t('admin.accounts.codebuddyOAuth.waiting') }}
-          <a
-            class="ml-2 text-sky-600 underline"
-            :href="codebuddyOAuth.verificationUri.value"
-            target="_blank"
-            rel="noopener"
-          >
-            {{ t('admin.accounts.codebuddyOAuth.openUrl') }}
-          </a>
-        </p>
+        <div v-if="codebuddyOAuth.verificationUri.value" class="space-y-2">
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {{ t('admin.accounts.codebuddyOAuth.waiting') }}
+          </p>
+          <div class="flex flex-wrap items-center gap-2">
+            <a
+              class="btn btn-secondary btn-sm"
+              :href="codebuddyOAuth.verificationUri.value"
+              target="_blank"
+              rel="noopener"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.openUrl') }}
+            </a>
+            <button type="button" class="btn btn-secondary btn-sm" @click="codebuddyOAuth.copyVerificationUri()">
+              {{ t('admin.accounts.codebuddyOAuth.copyUrl') }}
+            </button>
+            <button
+              v-if="codebuddyOAuth.polling.value"
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="codebuddyOAuth.stopPolling()"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.cancel') }}
+            </button>
+          </div>
+          <p class="break-all font-mono text-[11px] text-gray-400 dark:text-gray-500">
+            {{ codebuddyOAuth.verificationUri.value }}
+          </p>
+        </div>
         <p v-if="codebuddyOAuth.polling.value" class="text-sm text-gray-500">
           {{ t('admin.accounts.codebuddyOAuth.polling') }}
+          <span v-if="codebuddyCountdown" class="ml-1 font-mono text-xs">{{ codebuddyCountdown }}</span>
         </p>
         <p v-if="codebuddyOAuth.done.value" class="text-sm text-emerald-600">
           {{ t('admin.accounts.codebuddyOAuth.done') }}
           <span v-if="codebuddyOAuth.nickname.value"> · {{ codebuddyOAuth.nickname.value }}</span>
+          <span v-if="codebuddyOAuth.uid.value" class="ml-1 font-mono text-xs text-gray-500">
+            uid {{ codebuddyOAuth.uid.value }}
+          </span>
         </p>
         <p v-if="codebuddyOAuth.error.value" class="text-sm text-red-500">{{ codebuddyOAuth.error.value }}</p>
         <div>
@@ -3651,7 +3677,7 @@
           :disabled="!canCreateCodeBuddy"
           @click="handleCreateCodeBuddy"
         >
-          {{ t('admin.accounts.codebuddyOAuth.create') }}
+          {{ submitting ? t('admin.accounts.creating') : t('admin.accounts.codebuddyOAuth.create') }}
         </button>
         <button
           v-else-if="isManualInputMethod"
@@ -3997,6 +4023,7 @@ import {
   parseDateTimeLocalInput
 } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import { getAccountExpiryTimestamp } from '@/components/account/accountExpiry'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
@@ -4127,6 +4154,16 @@ const codebuddyOAuth = useCodeBuddyOAuth()
 const codebuddySite = ref<'cn' | 'intl'>('cn')
 const codebuddyInfoJson = ref('')
 const codebuddyCreditPolicy = ref<'all' | 'zero_only'>('all')
+
+// Remaining time in the scan window, so the user can tell a slow authorization
+// apart from one that has already lapsed.
+const codebuddyCountdown = computed(() => {
+  const total = codebuddyOAuth.remainingSeconds.value
+  if (total <= 0) return ''
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+})
 
 // Computed: current OAuth state for template binding
 const currentAuthUrl = computed(() => {
@@ -5869,36 +5906,47 @@ const goBackToBasicInfo = () => {
 }
 
 const canCreateCodeBuddy = computed(() => {
+  if (submitting.value) return false
   if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) return true
   return Boolean(codebuddyInfoJson.value.trim())
 })
 
 const handleCreateCodeBuddy = async () => {
-  try {
-    const payload: Record<string, unknown> = {
-      name: form.name,
-      proxy_id: form.proxy_id,
-      concurrency: form.concurrency,
-      priority: form.priority,
-      group_ids: form.group_ids
-    }
-    if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) {
-      payload.login_id = codebuddyOAuth.loginId.value
-    } else if (codebuddyInfoJson.value.trim()) {
+  if (submitting.value) return
+  const payload: Record<string, unknown> = {
+    name: form.name,
+    proxy_id: form.proxy_id,
+    concurrency: form.concurrency,
+    priority: form.priority,
+    group_ids: form.group_ids
+  }
+  if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) {
+    payload.login_id = codebuddyOAuth.loginId.value
+  } else if (codebuddyInfoJson.value.trim()) {
+    try {
       payload.credentials = JSON.parse(codebuddyInfoJson.value)
-    } else {
-      appStore.showError(t('admin.accounts.codebuddyOAuth.failedToCreate'))
+    } catch {
+      appStore.showError(t('admin.accounts.codebuddyOAuth.invalidJson'))
       return
     }
-    payload.credit_policy = codebuddyCreditPolicy.value
-    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-    if (modelMapping) payload.model_mapping = modelMapping
+  } else {
+    appStore.showError(t('admin.accounts.codebuddyOAuth.failedToCreate'))
+    return
+  }
+  payload.credit_policy = codebuddyCreditPolicy.value
+  const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+  if (modelMapping) payload.model_mapping = modelMapping
+
+  submitting.value = true
+  try {
     await adminAPI.codebuddy.createFromOAuth(payload as any)
     appStore.showSuccess(t('admin.accounts.accountCreated'))
     emit('created')
     handleClose()
   } catch (err: any) {
-    appStore.showError(err.response?.data?.detail || err.response?.data?.message || err.message || t('admin.accounts.codebuddyOAuth.failedToCreate'))
+    appStore.showError(extractApiErrorMessage(err, t('admin.accounts.codebuddyOAuth.failedToCreate')))
+  } finally {
+    submitting.value = false
   }
 }
 

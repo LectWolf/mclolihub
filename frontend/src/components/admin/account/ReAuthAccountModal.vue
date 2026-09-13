@@ -18,11 +18,13 @@
                 ? 'from-green-500 to-green-600'
                 : isGemini
                   ? 'from-blue-500 to-blue-600'
-                  : isAntigravity
-                    ? 'from-purple-500 to-purple-600'
-                    : isGrok
-                      ? 'from-zinc-700 to-zinc-900'
-                      : 'from-orange-500 to-orange-600'
+                    : isAntigravity
+                      ? 'from-purple-500 to-purple-600'
+                      : isGrok
+                        ? 'from-zinc-700 to-zinc-900'
+                        : isCodeBuddy
+                          ? 'from-sky-500 to-sky-600'
+                          : 'from-orange-500 to-orange-600'
             ]"
           >
             <Icon name="sparkles" size="md" class="text-white" />
@@ -41,7 +43,9 @@
                       ? t('admin.accounts.antigravityAccount')
                       : isGrok
                         ? t('admin.accounts.grokAccount')
-                        : t('admin.accounts.claudeCodeAccount')
+                        : isCodeBuddy
+                          ? t('admin.accounts.codebuddyAccount')
+                          : t('admin.accounts.claudeCodeAccount')
               }}
             </span>
           </div>
@@ -120,7 +124,93 @@
         </div>
       </div>
 
+      <!-- CodeBuddy re-authorizes through its own QR/poll flow rather than a
+           code exchange, so it replaces the shared authorization panel. -->
+      <div v-if="isCodeBuddy" class="space-y-4">
+        <div>
+          <label class="input-label">{{ t('admin.accounts.codebuddyOAuth.site') }}</label>
+          <div class="mt-2 flex gap-3">
+            <button
+              type="button"
+              class="rounded-md border px-3 py-2 text-sm"
+              :class="codebuddySite === 'cn' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+              @click="codebuddySite = 'cn'"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.siteCN') }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md border px-3 py-2 text-sm"
+              :class="codebuddySite === 'intl' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+              @click="codebuddySite = 'intl'"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.siteIntl') }}
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="codebuddyOAuth.loading.value || codebuddyOAuth.polling.value"
+          @click="codebuddyOAuth.start(codebuddySite, account.proxy_id)"
+        >
+          {{
+            codebuddyOAuth.verificationUri.value && !codebuddyOAuth.polling.value
+              ? t('admin.accounts.codebuddyOAuth.restart')
+              : t('admin.accounts.codebuddyOAuth.start')
+          }}
+        </button>
+        <div v-if="codebuddyOAuth.verificationUri.value" class="space-y-2">
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {{ t('admin.accounts.codebuddyOAuth.waiting') }}
+          </p>
+          <div class="flex flex-wrap items-center gap-2">
+            <a
+              class="btn btn-secondary btn-sm"
+              :href="codebuddyOAuth.verificationUri.value"
+              target="_blank"
+              rel="noopener"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.openUrl') }}
+            </a>
+            <button type="button" class="btn btn-secondary btn-sm" @click="codebuddyOAuth.copyVerificationUri()">
+              {{ t('admin.accounts.codebuddyOAuth.copyUrl') }}
+            </button>
+            <button
+              v-if="codebuddyOAuth.polling.value"
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="codebuddyOAuth.stopPolling()"
+            >
+              {{ t('admin.accounts.codebuddyOAuth.cancel') }}
+            </button>
+          </div>
+        </div>
+        <p v-if="codebuddyOAuth.polling.value" class="text-sm text-gray-500">
+          {{ t('admin.accounts.codebuddyOAuth.polling') }}
+          <span v-if="codebuddyCountdown" class="ml-1 font-mono text-xs">{{ codebuddyCountdown }}</span>
+        </p>
+        <p v-if="codebuddyOAuth.done.value" class="text-sm text-emerald-600">
+          {{ t('admin.accounts.codebuddyOAuth.done') }}
+          <span v-if="codebuddyOAuth.nickname.value"> · {{ codebuddyOAuth.nickname.value }}</span>
+          <span v-if="codebuddyOAuth.uid.value" class="ml-1 font-mono text-xs text-gray-500">
+            uid {{ codebuddyOAuth.uid.value }}
+          </span>
+        </p>
+        <p v-if="codebuddyOAuth.error.value" class="text-sm text-red-500">{{ codebuddyOAuth.error.value }}</p>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.codebuddyOAuth.importJson') }}</label>
+          <textarea
+            v-model="codebuddyInfoJson"
+            class="input font-mono"
+            rows="5"
+            :placeholder="t('admin.accounts.codebuddyOAuth.importPlaceholder')"
+          />
+        </div>
+      </div>
+
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="addMethod"
         :auth-url="currentAuthUrl"
@@ -152,7 +242,20 @@
           {{ t('common.cancel') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="isCodeBuddy"
+          type="button"
+          class="btn btn-primary"
+          :disabled="!canReAuthCodeBuddy"
+          @click="handleReAuthCodeBuddy"
+        >
+          {{
+            codebuddySubmitting
+              ? t('admin.accounts.oauth.verifying')
+              : t('admin.accounts.oauth.completeAuth')
+          }}
+        </button>
+        <button
+          v-else-if="isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -203,6 +306,8 @@ import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
+import { useCodeBuddyOAuth } from '@/composables/useCodeBuddyOAuth'
+import { extractApiErrorMessage } from '@/utils/apiError'
 import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -239,6 +344,7 @@ const openaiOAuth = useOpenAIOAuth()
 const geminiOAuth = useGeminiOAuth()
 const antigravityOAuth = useAntigravityOAuth()
 const grokOAuth = useGrokOAuth()
+const codebuddyOAuth = useCodeBuddyOAuth()
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
@@ -254,6 +360,52 @@ const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
+const isCodeBuddy = computed(() => props.account?.platform === 'codebuddy')
+
+const codebuddySite = ref<'cn' | 'intl'>('cn')
+const codebuddyInfoJson = ref('')
+const codebuddySubmitting = ref(false)
+
+const codebuddyCountdown = computed(() => {
+  const total = codebuddyOAuth.remainingSeconds.value
+  if (total <= 0) return ''
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+})
+
+const canReAuthCodeBuddy = computed(() => {
+  if (codebuddySubmitting.value) return false
+  if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) return true
+  return Boolean(codebuddyInfoJson.value.trim())
+})
+
+const handleReAuthCodeBuddy = async () => {
+  if (!props.account || codebuddySubmitting.value) return
+  const payload: { login_id?: string; credentials?: Record<string, unknown> } = {}
+  if (codebuddyOAuth.done.value && codebuddyOAuth.loginId.value) {
+    payload.login_id = codebuddyOAuth.loginId.value
+  } else if (codebuddyInfoJson.value.trim()) {
+    try {
+      payload.credentials = JSON.parse(codebuddyInfoJson.value)
+    } catch {
+      appStore.showError(t('admin.accounts.codebuddyOAuth.invalidJson'))
+      return
+    }
+  } else {
+    return
+  }
+
+  codebuddySubmitting.value = true
+  try {
+    const updated = await adminAPI.codebuddy.reAuthAccount(props.account.id, payload)
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    emit('reauthorized', updated as Account)
+    handleClose()
+  } catch (err: any) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.accounts.oauth.authFailed')))
+  } finally {
+    codebuddySubmitting.value = false
+  }
+}
 
 /**
  * Grok reauth default tab (password auth is hidden):
@@ -359,6 +511,9 @@ const resetState = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  codebuddyOAuth.resetState()
+  codebuddyInfoJson.value = ''
+  codebuddySubmitting.value = false
   oauthFlowRef.value?.reset()
 }
 

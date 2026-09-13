@@ -1,23 +1,60 @@
 <template>
   <div v-if="visible" class="space-y-1" data-test="codebuddy-credits">
-    <div v-if="snapshot" class="space-y-0.5">
-      <div class="text-[11px] font-medium text-sky-700 dark:text-sky-300">
-        {{ t('admin.accounts.codebuddyOAuth.creditsRemaining', { count: snapshot.credits }) }}
+    <div v-if="snapshot" class="space-y-1">
+      <div class="flex items-center gap-1">
+        <span
+          class="text-[11px] font-medium"
+          :class="balanceClass"
+          :title="balanceTitle"
+        >
+          {{ t('admin.accounts.codebuddyOAuth.creditsRemaining', { count: formatCredits(snapshot.credits) }) }}
+        </span>
+        <span v-if="snapshot.exhausted" class="rounded bg-red-100 px-1 text-[9px] text-red-700 dark:bg-red-900/40 dark:text-red-300">
+          {{ t('admin.accounts.codebuddyOAuth.creditsExhausted') }}
+        </span>
+        <span
+          v-else-if="snapshot.estimated"
+          class="rounded bg-amber-100 px-1 text-[9px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+          :title="t('admin.accounts.codebuddyOAuth.creditsEstimatedHint')"
+        >
+          {{ t('admin.accounts.codebuddyOAuth.creditsEstimated') }}
+        </span>
       </div>
-      <div
-        v-if="expiryLabel"
-        class="text-[10px] text-gray-500 dark:text-gray-400"
-      >
+
+      <div v-if="totalCredits > 0" class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
+        <div class="h-full rounded-full transition-all" :class="barClass" :style="{ width: `${usedPercent}%` }" />
+      </div>
+
+      <div v-if="expiryLabel" class="text-[10px] text-gray-500 dark:text-gray-400">
         {{ t('admin.accounts.codebuddyOAuth.creditsExpiry', { time: expiryLabel }) }}
       </div>
+
       <div
-        v-if="snapshot.segments?.length"
-        class="text-[10px] text-gray-500 dark:text-gray-400"
+        v-if="segmentSummary"
+        class="truncate text-[10px] text-gray-500 dark:text-gray-400"
+        :title="segmentDetail"
       >
         {{ segmentSummary }}
       </div>
+
+      <div v-if="todayUsage" class="text-[10px] text-gray-500 dark:text-gray-400" :title="usageTitle">
+        {{
+          t('admin.accounts.codebuddyOAuth.creditsUsedToday', {
+            credits: formatCredits(todayUsage.credits),
+            requests: todayUsage.requests
+          })
+        }}
+        <span v-if="!todayUsage.official" class="text-gray-400">
+          {{ t('admin.accounts.codebuddyOAuth.creditsGatewayOnly') }}
+        </span>
+      </div>
+
+      <div v-if="fetchedLabel" class="text-[10px]" :class="stale ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'">
+        {{ fetchedLabel }}
+      </div>
     </div>
     <div v-else-if="!loading" class="text-xs text-gray-400">-</div>
+
     <div class="flex flex-wrap items-center gap-1.5">
       <button
         type="button"
@@ -42,6 +79,7 @@
         {{ t('admin.accounts.codebuddyOAuth.probeCredits') }}
       </button>
     </div>
+
     <div v-if="error" class="truncate text-[10px] text-red-600 dark:text-red-400" :title="error">
       {{ error }}
     </div>
@@ -52,23 +90,17 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
+import { extractApiErrorMessage } from '@/utils/apiError'
+import type {
+  CodeBuddyCreditSegment,
+  CodeBuddyCreditsSnapshot,
+  CodeBuddyCreditsUsage,
+  CodeBuddyRequestUsage
+} from '@/api/admin/codebuddy'
 import type { Account } from '@/types'
 
-interface CreditSegment {
-  remaining: number
-  total: number
-  expires_at?: number
-  source?: string
-}
-
-interface CreditsSnapshot {
-  credits: number
-  count?: number
-  segments?: CreditSegment[]
-  soonest_expiry?: number
-  intl?: boolean
-  fetched_at?: number
-}
+/** Matches the backend probe TTL so both sides agree on what "stale" means. */
+const SNAPSHOT_TTL_SECONDS = 10 * 60
 
 const props = defineProps<{ account: Account }>()
 const { t } = useI18n()
@@ -76,39 +108,175 @@ const { t } = useI18n()
 const visible = computed(() => props.account.platform === 'codebuddy')
 const loading = ref(false)
 const error = ref('')
-const snapshot = ref<CreditsSnapshot | null>(null)
+const snapshot = ref<CodeBuddyCreditsSnapshot | null>(null)
+const usage = ref<CodeBuddyCreditsUsage | null>(null)
+const official = ref<CodeBuddyRequestUsage | null>(null)
 
+// The account row carries the last persisted probe and tally, so the cell shows
+// a balance without an upstream round trip on every page load.
 const loadFromExtra = () => {
   const extra = props.account.extra as Record<string, unknown> | undefined
-  const raw = extra?.codebuddy_credits
-  if (raw && typeof raw === 'object') {
-    snapshot.value = raw as CreditsSnapshot
+  const rawCredits = extra?.codebuddy_credits
+  if (rawCredits && typeof rawCredits === 'object') {
+    snapshot.value = rawCredits as CodeBuddyCreditsSnapshot
+  }
+  const rawUsage = extra?.codebuddy_credits_usage
+  if (rawUsage && typeof rawUsage === 'object') {
+    usage.value = rawUsage as CodeBuddyCreditsUsage
+  }
+  const rawOfficial = extra?.codebuddy_request_usage
+  if (rawOfficial && typeof rawOfficial === 'object') {
+    official.value = rawOfficial as CodeBuddyRequestUsage
   }
 }
 
+const formatCredits = (value: number | undefined) => {
+  if (value == null || Number.isNaN(value)) return '0'
+  return Number.isInteger(value) ? String(value) : value.toFixed(2)
+}
+
+const segments = computed<CodeBuddyCreditSegment[]>(() => snapshot.value?.segments || [])
+
+// Segment totals only add up when the probe reported them, so the bar is hidden
+// rather than guessed when the upstream omits capacities.
+const totalCredits = computed(() =>
+  segments.value.reduce((sum, segment) => sum + (segment.total || 0), 0)
+)
+
+const usedPercent = computed(() => {
+  const total = totalCredits.value
+  if (total <= 0) return 0
+  const remaining = snapshot.value?.credits ?? 0
+  return Math.min(100, Math.max(0, ((total - remaining) / total) * 100))
+})
+
+const remainingRatio = computed(() => {
+  const total = totalCredits.value
+  if (total <= 0) return 1
+  return Math.max(0, (snapshot.value?.credits ?? 0) / total)
+})
+
+const balanceClass = computed(() => {
+  if (snapshot.value?.exhausted || (snapshot.value?.credits ?? 0) <= 0) {
+    return 'text-red-600 dark:text-red-400'
+  }
+  if (remainingRatio.value <= 0.1) return 'text-amber-600 dark:text-amber-400'
+  return 'text-sky-700 dark:text-sky-300'
+})
+
+const barClass = computed(() => {
+  if (remainingRatio.value <= 0.1) return 'bg-red-500'
+  if (remainingRatio.value <= 0.3) return 'bg-amber-500'
+  return 'bg-sky-500'
+})
+
+const balanceTitle = computed(() => {
+  if (totalCredits.value <= 0) return ''
+  return `${formatCredits(snapshot.value?.credits)} / ${formatCredits(totalCredits.value)}`
+})
+
+const segmentLabel = (segment: CodeBuddyCreditSegment) => {
+  // The backend emits a locale-neutral placeholder when the package has no name.
+  if (!segment.source || segment.source === 'credits') {
+    return t('admin.accounts.codebuddyOAuth.creditsSegmentDefault')
+  }
+  return segment.source
+}
+
+const segmentSummary = computed(() =>
+  segments.value
+    .slice(0, 3)
+    .map((segment) => `${segmentLabel(segment)} ${formatCredits(segment.remaining)}`)
+    .join(' · ')
+)
+
+const segmentDetail = computed(() =>
+  segments.value
+    .map((segment) => {
+      const expiry = segment.expires_at ? ` → ${new Date(segment.expires_at * 1000).toLocaleString()}` : ''
+      return `${segmentLabel(segment)} ${formatCredits(segment.remaining)}/${formatCredits(segment.total)}${expiry}`
+    })
+    .join('\n')
+)
+
 const expiryLabel = computed(() => {
-  const exp = snapshot.value?.soonest_expiry
-  if (!exp) return ''
-  const date = new Date(exp * 1000)
+  const expiry = snapshot.value?.soonest_expiry
+  if (!expiry) return ''
+  const date = new Date(expiry * 1000)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString()
 })
 
-const segmentSummary = computed(() => {
-  const segments = snapshot.value?.segments || []
-  return segments
-    .slice(0, 3)
-    .map((segment) => `${segment.source || '积分'} ${segment.remaining}`)
-    .join(' · ')
+const stale = computed(() => {
+  const fetchedAt = snapshot.value?.fetched_at
+  if (!fetchedAt) return true
+  return Date.now() / 1000 - fetchedAt > SNAPSHOT_TTL_SECONDS
+})
+
+const fetchedLabel = computed(() => {
+  const fetchedAt = snapshot.value?.fetched_at
+  if (!fetchedAt) return ''
+  const minutes = Math.floor((Date.now() / 1000 - fetchedAt) / 60)
+  if (minutes < 1) return t('admin.accounts.codebuddyOAuth.creditsFetchedJustNow')
+  if (minutes < 60) return t('admin.accounts.codebuddyOAuth.creditsFetchedMinutes', { minutes })
+  return t('admin.accounts.codebuddyOAuth.creditsFetchedHours', { hours: Math.floor(minutes / 60) })
+})
+
+const localDay = () => {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * CodeBuddy's own report wins when present: it counts every client on the
+ * account, while the gateway tally only sees traffic routed through here and
+ * prices it from catalog multipliers.
+ */
+const todayUsage = computed(() => {
+  const billed = official.value?.days?.find((entry) => entry.day === localDay())
+  if (billed) {
+    return { credits: billed.credits, requests: billed.requests, official: true }
+  }
+  if (!usage.value) return null
+  return { credits: usage.value.credits, requests: usage.value.requests, official: false }
+})
+
+const usageTitle = computed(() => {
+  const parts: string[] = []
+  if (official.value) {
+    parts.push(
+      t('admin.accounts.codebuddyOAuth.creditsOfficialWindow', {
+        days: official.value.range_days,
+        credits: formatCredits(official.value.total_credits),
+        requests: official.value.requests
+      })
+    )
+  }
+  if (usage.value) {
+    parts.push(
+      t('admin.accounts.codebuddyOAuth.creditsUsedTotal', {
+        credits: formatCredits(usage.value.total_credits),
+        requests: usage.value.total_requests
+      })
+    )
+    if (usage.value.unpriced) {
+      parts.push(t('admin.accounts.codebuddyOAuth.creditsUnpriced', { count: usage.value.unpriced }))
+    }
+  }
+  return parts.join('\n')
 })
 
 const handleProbe = async () => {
   loading.value = true
   error.value = ''
   try {
-    snapshot.value = await adminAPI.codebuddy.queryCredits(props.account.id)
+    const report = await adminAPI.codebuddy.queryCredits(props.account.id)
+    snapshot.value = report
+    usage.value = report.usage ?? null
+    official.value = report.official ?? null
   } catch (err: any) {
-    error.value = err.response?.data?.detail || err.response?.data?.message || err.message || t('common.error')
+    error.value = extractApiErrorMessage(err, t('common.error'))
   } finally {
     loading.value = false
   }
@@ -118,6 +286,8 @@ watch(
   () => props.account.id,
   () => {
     snapshot.value = null
+    usage.value = null
+    official.value = null
     error.value = ''
     loadFromExtra()
   }

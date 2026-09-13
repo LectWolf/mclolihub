@@ -74,7 +74,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
 	if !codeBuddyModelAllowed(account, upstreamModel) {
-		writeChatCompletionsError(c, http.StatusNotFound, "invalid_request_error", "model is not available under the current CodeBuddy credit policy")
+		writeChatCompletionsError(c, http.StatusNotFound, "invalid_request_error", codeBuddyCreditPolicyRejection(upstreamModel))
 		return nil, fmt.Errorf("codebuddy credit policy rejected model %s", upstreamModel)
 	}
 	SetOpsUpstreamModel(c, upstreamModel)

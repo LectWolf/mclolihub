@@ -60,6 +60,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 
 	billingModel := resolveOpenAIForwardModel(account, anthropicReq.Model, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
+	if !codeBuddyModelAllowed(account, upstreamModel) {
+		writeAnthropicError(c, http.StatusNotFound, "invalid_request_error", codeBuddyCreditPolicyRejection(upstreamModel))
+		return nil, fmt.Errorf("codebuddy credit policy rejected model %s", upstreamModel)
+	}
 	chatReq.Model = upstreamModel
 	chatReq.ReasoningEffort = openAICompatAnthropicReasoningEffort(&anthropicReq, upstreamModel, chatReq.ReasoningEffort)
 	chatReq.Stream = clientStream

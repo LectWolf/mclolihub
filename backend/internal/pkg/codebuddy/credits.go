@@ -4,12 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// SegmentLabelUnknown is the locale-neutral placeholder for packages the billing
+// API returns without any human-readable name. Callers localize it for display.
+const SegmentLabelUnknown = "credits"
 
 type CreditSegment struct {
 	Remaining   float64  `json:"remaining"`
@@ -26,6 +34,98 @@ type CreditsSnapshot struct {
 	SoonestExpiry *float64        `json:"soonest_expiry,omitempty"`
 	Intl          bool            `json:"intl"`
 	FetchedAt     int64           `json:"fetched_at"`
+	// Estimated reports that Deduct has drawn the balance down locally since the
+	// last billing probe, so the figure trails real consumption rather than
+	// matching the upstream ledger exactly.
+	Estimated bool `json:"estimated,omitempty"`
+	// Exhausted is set when the upstream rejected a request for lack of credits,
+	// which supersedes a stale positive balance.
+	Exhausted bool `json:"exhausted,omitempty"`
+}
+
+// Deduct draws a locally observed charge out of the cached balance so the admin
+// UI tracks consumption between billing probes. Segments expiring soonest are
+// drained first, matching CodeBuddy's use-it-or-lose-it ordering.
+func (s *CreditsSnapshot) Deduct(amount float64) {
+	if s == nil || amount <= 0 {
+		return
+	}
+	order := make([]int, 0, len(s.Segments))
+	for i := range s.Segments {
+		order = append(order, i)
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return expiryRank(s.Segments[order[a]]) < expiryRank(s.Segments[order[b]])
+	})
+	remaining := amount
+	for _, index := range order {
+		if remaining <= 0 {
+			break
+		}
+		segment := &s.Segments[index]
+		if segment.Remaining <= 0 {
+			continue
+		}
+		taken := math.Min(segment.Remaining, remaining)
+		segment.Remaining = round2(segment.Remaining - taken)
+		remaining -= taken
+	}
+	if len(s.Segments) == 0 {
+		s.Credits = round2(math.Max(0, s.Credits-amount))
+	} else {
+		total := 0.0
+		for _, segment := range s.Segments {
+			total += segment.Remaining
+		}
+		s.Credits = round2(total)
+	}
+	s.SoonestExpiry = soonestExpiry(s.Segments, time.Now().Unix())
+	s.Estimated = true
+}
+
+func expiryRank(segment CreditSegment) float64 {
+	if segment.ExpiresAt == nil {
+		return math.MaxFloat64
+	}
+	return *segment.ExpiresAt
+}
+
+// creditsExhaustedMarkers are the upstream phrases that blame an empty credit
+// balance. CodeBuddy reports this as a business error nested in an otherwise
+// ordinary 4xx, so the body has to be inspected rather than the status alone.
+var creditsExhaustedMarkers = []string{
+	"insufficient credit",
+	"insufficient_credit",
+	"insufficient balance",
+	"insufficient_balance",
+	"insufficient quota",
+	"credit not enough",
+	"credit_not_enough",
+	"quota exhausted",
+	"quota_exhausted",
+	"out of credits",
+	"积分不足",
+	"额度不足",
+	"余额不足",
+	"资源包已用完",
+}
+
+// CreditsExhausted reports whether an upstream rejection blames an empty credit
+// balance, which makes a cached positive balance stale regardless of its age.
+func CreditsExhausted(statusCode int, body []byte) bool {
+	if statusCode < 400 || len(body) == 0 {
+		return false
+	}
+	if len(body) > 16<<10 {
+		body = body[:16<<10]
+	}
+	lowered := strings.ToLower(string(body))
+	for _, marker := range creditsExhaustedMarkers {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func BillingHost(profile string) string {
@@ -65,6 +165,15 @@ func ResourceBody(now time.Time) map[string]any {
 	}
 }
 
+// ErrAuthExpired marks a 401 from a billing endpoint: the access token is dead,
+// so retrying the same request is pointless and the caller should refresh.
+var ErrAuthExpired = errors.New("codebuddy billing credentials expired")
+
+// creditsFetchAttempts covers an upstream quirk: the resource endpoint
+// intermittently answers 200 with an empty Accounts list, which is
+// indistinguishable from a genuinely empty balance without a retry.
+const creditsFetchAttempts = 3
+
 func FetchCredits(ctx context.Context, client HTTPDoer, creds Credentials) (*CreditsSnapshot, error) {
 	if client == nil {
 		client = http.DefaultClient
@@ -78,36 +187,69 @@ func FetchCredits(ctx context.Context, client HTTPDoer, creds Credentials) (*Cre
 		profile = parsed
 	}
 	host := BillingHost(profile)
-	body, err := json.Marshal(ResourceBody(time.Now()))
-	if err != nil {
-		return nil, err
+	headers := WebHeaders(host, creds.AccessToken, creds.UID, creds.Domain)
+	intl := IsInternationalHost(host)
+
+	var lastErr error
+	for attempt := range creditsFetchAttempts {
+		if attempt > 0 {
+			delay := time.Duration(attempt) * 300 * time.Millisecond
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+		raw, err := postBillingJSON(ctx, client, host+ResourcePath, headers, ResourceBody(time.Now()))
+		if err != nil {
+			if errors.Is(err, ErrAuthExpired) {
+				return nil, err
+			}
+			lastErr = err
+			continue
+		}
+		snapshot, err := ParseCredits(raw, intl)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if snapshot.Count == 0 && attempt < creditsFetchAttempts-1 {
+			lastErr = fmt.Errorf("credits response carried no accounts")
+			continue
+		}
+		snapshot.FetchedAt = time.Now().Unix()
+		return snapshot, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+ResourcePath, bytes.NewReader(body))
+	return nil, fmt.Errorf("query credits: %w", lastErr)
+}
+
+// IsInternationalHost reports whether a billing host belongs to the .ai estate.
+// The two estates are fully isolated: a domestic token always gets a 401 there,
+// and their credits carry different per-credit prices.
+func IsInternationalHost(host string) bool {
+	return strings.Contains(strings.ToLower(host), ".ai")
+}
+
+func doBillingRequest(ctx context.Context, client HTTPDoer, url string, headers map[string]string, body map[string]any) ([]byte, int, error) {
+	encoded, err := json.Marshal(body)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	ApplyHeadersToRequest(req, WebHeaders(host, creds.AccessToken, creds.UID, creds.Domain))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(encoded))
+	if err != nil {
+		return nil, 0, err
+	}
+	ApplyHeadersToRequest(req, headers)
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return nil, err
+		return nil, resp.StatusCode, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, fmt.Errorf("credits unauthorized")
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("credits HTTP %d", resp.StatusCode)
-	}
-	snapshot, err := ParseCredits(raw, strings.Contains(strings.ToLower(host), ".ai"))
-	if err != nil {
-		return nil, err
-	}
-	snapshot.FetchedAt = time.Now().Unix()
-	return snapshot, nil
+	return raw, resp.StatusCode, nil
 }
 
 func ParseCredits(payload []byte, intl bool) (*CreditsSnapshot, error) {
@@ -223,7 +365,7 @@ func extractSegments(accounts []map[string]any) []CreditSegment {
 				Remaining:   round2(remaining),
 				Total:       round2(total),
 				ExpiresAt:   firstTimestamp(item, expiryFields),
-				Source:      firstText(item, labelFields, "积分"),
+				Source:      firstText(item, labelFields, SegmentLabelUnknown),
 				PackageCode: asString(item["PackageCode"]),
 			})
 		}
@@ -267,6 +409,11 @@ func mergeSegments(segments []CreditSegment) []CreditSegment {
 		segment.Total = round2(segment.Total)
 		out = append(out, segment)
 	}
+	// Soonest expiry first (undated packages last), matching the order credits
+	// are actually spent in and the order the UI should present them.
+	sort.SliceStable(out, func(a, b int) bool {
+		return expiryRank(out[a]) < expiryRank(out[b])
+	})
 	return out
 }
 
@@ -339,23 +486,13 @@ func toFloat(v any) (float64, bool) {
 		f, err := n.Float64()
 		return f, err == nil
 	case string:
-		f, err := strconvParseFloat(n)
+		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
 		return f, err == nil
 	default:
 		return 0, false
 	}
 }
 
-func strconvParseFloat(s string) (float64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, fmt.Errorf("empty")
-	}
-	var n float64
-	_, err := fmt.Sscan(s, &n)
-	return n, err
-}
-
 func round2(n float64) float64 {
-	return float64(int(n*100+0.5)) / 100
+	return math.Round(n*100) / 100
 }

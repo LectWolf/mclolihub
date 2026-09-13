@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/codebuddy"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
 
@@ -99,6 +101,9 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 	}
 	if account != nil && account.Platform == PlatformGrok {
 		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+	}
+	if account != nil && account.IsCodeBuddy() && codebuddy.CreditsExhausted(resp.StatusCode, respBody) {
+		s.markCodeBuddyCreditsExhausted(ctx, account)
 	}
 	if !shouldFailover {
 		return nil
@@ -246,6 +251,12 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
+	}
+	// CodeBuddy charges credits per accepted call rather than per token, so the
+	// tally is driven from here — the single point every CC path funnels through
+	// — using the model already rewritten into the outbound body.
+	if account.IsCodeBuddy() && resp.StatusCode < http.StatusBadRequest {
+		s.recordCodeBuddyCreditsUsage(ctx, account, gjson.GetBytes(body, "model").String())
 	}
 	return resp, nil
 }
