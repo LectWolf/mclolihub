@@ -244,7 +244,7 @@ func doBillingRequest(ctx context.Context, client HTTPDoer, url string, headers 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, resp.StatusCode, err
