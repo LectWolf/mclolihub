@@ -209,7 +209,8 @@ const upstreamSyncPlatforms = new Set([
   'kimi',
   'zhipu',
   'deepseek',
-  'minimax'
+  'minimax',
+  'codebuddy'
 ])
 const canSyncUpstream = computed(() => {
   if (props.accountId) {

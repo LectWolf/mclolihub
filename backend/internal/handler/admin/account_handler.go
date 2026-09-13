@@ -2925,6 +2925,11 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
+	if account.IsCodeBuddy() {
+		response.Success(c, service.CodeBuddyAvailableOpenAIModels(account))
+		return
+	}
+
 	// Handle Claude/Anthropic accounts
 	// For OAuth and Setup-Token accounts: return default models
 	if account.IsOAuth() {

@@ -45,5 +45,25 @@ export async function createFromOAuth(payload: CodeBuddyCreateRequest) {
   return data
 }
 
-const codebuddyAPI = { startLogin, pollLogin, createFromOAuth }
+export interface CodeBuddyCreditsSnapshot {
+  credits: number
+  count?: number
+  segments?: Array<{
+    remaining: number
+    total: number
+    expires_at?: number
+    source?: string
+    package_code?: string
+  }>
+  soonest_expiry?: number
+  intl?: boolean
+  fetched_at?: number
+}
+
+export async function queryCredits(id: number): Promise<CodeBuddyCreditsSnapshot> {
+  const { data } = await apiClient.get<CodeBuddyCreditsSnapshot>(`/admin/codebuddy/accounts/${id}/credits`)
+  return data
+}
+
+const codebuddyAPI = { startLogin, pollLogin, createFromOAuth, queryCredits }
 export default codebuddyAPI

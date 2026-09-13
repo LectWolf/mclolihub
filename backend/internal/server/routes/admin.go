@@ -488,6 +488,7 @@ func registerCodeBuddyOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		cb.GET("/oauth/poll", h.Admin.CodeBuddyOAuth.Poll)
 		cb.POST("/oauth/create-from-oauth", h.Admin.CodeBuddyOAuth.CreateAccountFromOAuth)
 		cb.POST("/accounts/:id/refresh", h.Admin.CodeBuddyOAuth.RefreshAccountToken)
+		cb.GET("/accounts/:id/credits", h.Admin.CodeBuddyOAuth.QueryCredits)
 	}
 }
 

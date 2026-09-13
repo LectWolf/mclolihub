@@ -677,7 +677,7 @@
 
       <!-- OpenAI/Grok OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(account.platform === 'openai' || account.platform === 'grok') && account.type === 'oauth'"
+        v-if="(account.platform === 'openai' || account.platform === 'grok' || account.platform === 'codebuddy') && account.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -809,6 +809,32 @@
             </div>
           </div>
         </template>
+      </div>
+
+      <div
+        v-if="account.platform === 'codebuddy'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="input-label">{{ t('admin.accounts.codebuddyOAuth.creditPolicy') }}</label>
+        <p class="input-hint">{{ t('admin.accounts.codebuddyOAuth.creditPolicyHint') }}</p>
+        <div class="mt-2 flex gap-3">
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm"
+            :class="codebuddyCreditPolicy === 'all' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+            @click="codebuddyCreditPolicy = 'all'"
+          >
+            {{ t('admin.accounts.codebuddyOAuth.creditPolicyAll') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm"
+            :class="codebuddyCreditPolicy === 'zero_only' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+            @click="codebuddyCreditPolicy = 'zero_only'"
+          >
+            {{ t('admin.accounts.codebuddyOAuth.creditPolicyZero') }}
+          </button>
+        </div>
       </div>
 
       <!-- Upstream fields (only for upstream type) -->
@@ -3246,6 +3272,7 @@ const isBedrockAPIKeyMode = computed(() =>
 const modelMappings = ref<ModelMapping[]>([])
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
+const codebuddyCreditPolicy = ref<'all' | 'zero_only'>('all')
 const allowedModels = ref<string[]>([])
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
@@ -4063,6 +4090,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
   loadTempUnschedRules(credentials)
   loadAccountSchedulingThresholdOverride(newAccount.platform, credentials)
+  const policy = credentials?.credit_policy
+  codebuddyCreditPolicy.value = policy === 'zero_only' ? 'zero_only' : 'all'
 
   // Load header override state for eligible account platforms/types
   headerOverrideEnabled.value = false
@@ -5154,7 +5183,7 @@ const handleSubmit = async () => {
     }
 
     // OpenAI/Grok OAuth: persist model mapping to credentials
-    if ((props.account.platform === 'openai' || props.account.platform === 'grok') && props.account.type === 'oauth') {
+    if ((props.account.platform === 'openai' || props.account.platform === 'grok' || props.account.platform === 'codebuddy') && props.account.type === 'oauth') {
       const currentCredentials = isSparkShadow.value
         ? {}
         : (updatePayload.credentials as Record<string, unknown>) ||
@@ -5168,6 +5197,9 @@ const handleSubmit = async () => {
           newCredentials.model_mapping = modelMapping
         } else {
           delete newCredentials.model_mapping
+        }
+        if (props.account.platform === 'codebuddy') {
+          newCredentials.credit_policy = codebuddyCreditPolicy.value
         }
       }
 

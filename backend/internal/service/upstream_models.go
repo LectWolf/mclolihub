@@ -726,6 +726,9 @@ func (s *AccountTestService) fetchUpstreamModelList(ctx context.Context, account
 		models, err := s.fetchAntigravityOAuthUpstreamModels(ctx, account)
 		return models, nil, err
 	}
+	if account.IsCodeBuddy() {
+		return s.fetchCodeBuddyUpstreamModels(ctx, account)
+	}
 
 	if s.httpUpstream == nil {
 		return nil, nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)

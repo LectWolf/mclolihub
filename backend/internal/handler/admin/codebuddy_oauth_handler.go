@@ -59,13 +59,15 @@ func (h *CodeBuddyOAuthHandler) Poll(c *gin.Context) {
 
 func (h *CodeBuddyOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 	var req struct {
-		LoginID     string         `json:"login_id"`
-		Credentials map[string]any `json:"credentials"`
-		ProxyID     *int64         `json:"proxy_id"`
-		Name        string         `json:"name"`
-		Concurrency int            `json:"concurrency"`
-		Priority    int            `json:"priority"`
-		GroupIDs    []int64        `json:"group_ids"`
+		LoginID      string         `json:"login_id"`
+		Credentials  map[string]any `json:"credentials"`
+		CreditPolicy string         `json:"credit_policy"`
+		ModelMapping map[string]any `json:"model_mapping"`
+		ProxyID      *int64         `json:"proxy_id"`
+		Name         string         `json:"name"`
+		Concurrency  int            `json:"concurrency"`
+		Priority     int            `json:"priority"`
+		GroupIDs     []int64        `json:"group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
@@ -91,6 +93,12 @@ func (h *CodeBuddyOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 	default:
 		response.BadRequest(c, "login_id or credentials is required")
 		return
+	}
+	if policy := strings.TrimSpace(req.CreditPolicy); policy != "" {
+		credentials["credit_policy"] = policy
+	}
+	if len(req.ModelMapping) > 0 {
+		credentials["model_mapping"] = req.ModelMapping
 	}
 
 	name := strings.TrimSpace(req.Name)
@@ -118,7 +126,34 @@ func (h *CodeBuddyOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	if models, catalogErr := h.oauthService.FetchCatalog(c.Request.Context(), account); catalogErr == nil {
+		_ = h.oauthService.PersistCatalog(c.Request.Context(), account, models)
+	}
+	_, _ = h.oauthService.QueryCredits(c.Request.Context(), account)
 	response.Success(c, dto.AccountFromService(account))
+}
+
+func (h *CodeBuddyOAuthHandler) QueryCredits(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if account == nil || !account.IsCodeBuddy() {
+		response.BadRequest(c, "not a codebuddy account")
+		return
+	}
+	snapshot, err := h.oauthService.QueryCredits(c.Request.Context(), account)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, snapshot)
 }
 
 func (h *CodeBuddyOAuthHandler) RefreshAccountToken(c *gin.Context) {

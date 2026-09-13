@@ -68,3 +68,47 @@ func jwtWithISS(iss string) string {
 	payload, _ := json.Marshal(map[string]string{"iss": iss})
 	return "header." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
 }
+
+func TestParseMultiplierAndZeroCredit(t *testing.T) {
+	if got := ParseMultiplier("x0.00"); got == nil || *got != 0 {
+		t.Fatalf("zero multiplier: %v", got)
+	}
+	if !IsZeroCredit("x0 credits") {
+		t.Fatal("expected zero credit")
+	}
+	if IsZeroCredit("x1.00") {
+		t.Fatal("x1 should not be zero")
+	}
+}
+
+func TestParseCatalogAndFilter(t *testing.T) {
+	payload := []byte(`{"code":0,"data":{"models":[
+		{"id":"glm-5.2","name":"GLM","credits":"x1.00","aliases":["glm"]},
+		{"id":"auto","name":"Auto","credits":"x0.00"},
+		{"id":"hidden","disabled":true,"credits":"x0.00"}
+	],"availableModels":["glm-5.2","auto"]}}`)
+	models, err := ParseCatalog(payload, ProductCLI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 2 {
+		t.Fatalf("got %d models", len(models))
+	}
+	zero := FilterCatalog(models, CreditPolicyZeroOnly)
+	if len(zero) != 1 || zero[0].ID != "auto" {
+		t.Fatalf("zero filter: %+v", zero)
+	}
+}
+
+func TestParseCredits(t *testing.T) {
+	payload := []byte(`{"code":0,"data":{"Response":{"Data":{"Accounts":[
+		{"Remain": 12.5, "Capacity": 20, "PackageName": "试用", "PackageCode": "trial", "ExpiredTime": 1900000000}
+	]}}}}`)
+	snap, err := ParseCredits(payload, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Credits != 12.5 || len(snap.Segments) != 1 {
+		t.Fatalf("%+v", snap)
+	}
+}

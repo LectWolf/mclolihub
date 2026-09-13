@@ -454,6 +454,10 @@
       </div>
     </template>
 
+    <template v-else-if="account.platform === 'codebuddy'">
+      <CodeBuddyCreditsCell :account="account" />
+    </template>
+
     <!-- Gemini platform: show quota + local usage window -->
     <template v-else-if="account.platform === 'gemini'">
       <!-- Auth Type + Tier Badge (first line) -->
@@ -660,6 +664,7 @@ import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
 import GrokQuotaProbeCell from './GrokQuotaProbeCell.vue'
 import CNProviderQuotaCell from './CNProviderQuotaCell.vue'
 import CNProviderBalanceCell from './CNProviderBalanceCell.vue'
+import CodeBuddyCreditsCell from './CodeBuddyCreditsCell.vue'
 import OllamaCloudUsageCell from './OllamaCloudUsageCell.vue'
 import { cnQuotaCellVisible as cnQuotaCellVisibleFn, cnBalanceCellVisible as cnBalanceCellVisibleFn } from './credentialsBuilder'
 
@@ -729,7 +734,8 @@ const showUsageWindows = computed(() => {
     props.account.platform === 'kimi' ||
     props.account.platform === 'zhipu' ||
     props.account.platform === 'deepseek' ||
-    props.account.platform === 'minimax'
+    props.account.platform === 'minimax' ||
+    props.account.platform === 'codebuddy'
   ) {
     return true
   }

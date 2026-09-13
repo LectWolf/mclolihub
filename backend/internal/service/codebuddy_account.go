@@ -2,11 +2,13 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/codebuddy"
 	"github.com/gin-gonic/gin"
@@ -75,4 +77,61 @@ func (s *AccountTestService) testCodeBuddyAccountConnection(c *gin.Context, acco
 		return s.sendErrorAndEnd(c, fmt.Sprintf("CodeBuddy API returned %d: %s", resp.StatusCode, string(respBody)))
 	}
 	return s.processOpenAIChatCompletionsStream(c, resp.Body)
+}
+
+func (s *AccountTestService) fetchCodeBuddyUpstreamModels(ctx context.Context, account *Account) ([]string, []byte, error) {
+	creds, err := codebuddy.ParseCredentials(account.Credentials)
+	if err != nil {
+		return nil, nil, newUpstreamModelSyncConfigError("Invalid CodeBuddy credentials", err)
+	}
+	if s.openaiGatewayService != nil {
+		if token, _, tokenErr := s.openaiGatewayService.GetAccessToken(ctx, account); tokenErr == nil && strings.TrimSpace(token) != "" {
+			creds.AccessToken = strings.TrimSpace(token)
+		}
+	}
+	proxyURL := ""
+	if account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	client, err := codebuddy.NewClient(proxyURL)
+	if err != nil {
+		return nil, nil, newUpstreamModelSyncConfigError("Invalid CodeBuddy proxy", err)
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, codeBuddyUpstreamTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, codebuddy.ConfigURL(creds.Profile), nil)
+	if err != nil {
+		return nil, nil, newUpstreamModelSyncConfigError("Failed to build CodeBuddy catalog request", err)
+	}
+	codebuddy.ApplyHeadersToRequest(req, codebuddy.CatalogHeaders(creds.Profile, creds.AccessToken, creds.Domain, creds.UID, creds.EnterpriseID))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to request CodeBuddy catalog", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, nil, newUpstreamModelSyncUpstreamError("Failed to read CodeBuddy catalog", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, nil, &UpstreamModelSyncError{
+			Kind:       UpstreamModelSyncErrorUpstream,
+			Message:    fmt.Sprintf("CodeBuddy catalog request failed with HTTP %d", resp.StatusCode),
+			StatusCode: resp.StatusCode,
+		}
+	}
+	models, err := codebuddy.ParseCatalog(body, codebuddy.ProfileProduct(creds.Profile))
+	if err != nil {
+		return nil, nil, newUpstreamModelSyncUpstreamError("CodeBuddy catalog response was invalid", err)
+	}
+	models = codebuddy.FilterCatalog(models, account.CodeBuddyCreditPolicy())
+	ids := codebuddy.CatalogIDs(models)
+	if len(ids) == 0 {
+		return nil, nil, newUpstreamModelSyncUpstreamError("CodeBuddy catalog returned no models", nil)
+	}
+	if s.accountRepo != nil {
+		snapshot := CodeBuddyCatalogSnapshot{SyncedAt: time.Now().UTC().Format(time.RFC3339), Models: models}
+		_ = s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{codeBuddyCatalogExtraKey: snapshot})
+	}
+	return ids, body, nil
 }

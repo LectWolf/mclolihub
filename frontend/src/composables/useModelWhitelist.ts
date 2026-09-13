@@ -204,6 +204,17 @@ const doubaoModels = [
   'doubao-1.5-pro-vision-32k', 'doubao-1.5-thinking-pro'
 ]
 
+// CodeBuddy / WorkBuddy
+const codebuddyModels = [
+  'auto',
+  'glm-5.2',
+  'glm-5',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
+  'kimi-k2.7',
+  'kimi-k2.5'
+]
+
 // MiniMax
 const minimaxModels = [
   'MiniMax-M3',
@@ -455,6 +466,7 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'kimi': return moonshotModels
     case 'doubao': return doubaoModels
     case 'minimax': return minimaxModels
+    case 'codebuddy': return codebuddyModels
     case 'baidu': return baiduModels
     case 'spark': return sparkModels
     case 'hunyuan': return hunyuanModels

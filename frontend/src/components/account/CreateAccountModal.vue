@@ -2241,7 +2241,7 @@
 
       <!-- OpenAI OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok') && isOAuthFlow"
+        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'codebuddy') && isOAuthFlow"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -2378,6 +2378,32 @@
             </div>
           </div>
         </template>
+      </div>
+
+      <div
+        v-if="form.platform === 'codebuddy'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="input-label">{{ t('admin.accounts.codebuddyOAuth.creditPolicy') }}</label>
+        <p class="input-hint">{{ t('admin.accounts.codebuddyOAuth.creditPolicyHint') }}</p>
+        <div class="mt-2 flex gap-3">
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm"
+            :class="codebuddyCreditPolicy === 'all' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+            @click="codebuddyCreditPolicy = 'all'"
+          >
+            {{ t('admin.accounts.codebuddyOAuth.creditPolicyAll') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md border px-3 py-2 text-sm"
+            :class="codebuddyCreditPolicy === 'zero_only' ? 'border-sky-500 text-sky-600' : 'border-gray-200 dark:border-dark-600'"
+            @click="codebuddyCreditPolicy = 'zero_only'"
+          >
+            {{ t('admin.accounts.codebuddyOAuth.creditPolicyZero') }}
+          </button>
+        </div>
       </div>
 
       <!-- Temp Unschedulable Rules -->
@@ -4100,6 +4126,7 @@ const grokOAuth = useGrokOAuth() // For Grok OAuth
 const codebuddyOAuth = useCodeBuddyOAuth()
 const codebuddySite = ref<'cn' | 'intl'>('cn')
 const codebuddyInfoJson = ref('')
+const codebuddyCreditPolicy = ref<'all' | 'zero_only'>('all')
 
 // Computed: current OAuth state for template binding
 const currentAuthUrl = computed(() => {
@@ -5863,6 +5890,9 @@ const handleCreateCodeBuddy = async () => {
       appStore.showError(t('admin.accounts.codebuddyOAuth.failedToCreate'))
       return
     }
+    payload.credit_policy = codebuddyCreditPolicy.value
+    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+    if (modelMapping) payload.model_mapping = modelMapping
     await adminAPI.codebuddy.createFromOAuth(payload as any)
     appStore.showSuccess(t('admin.accounts.accountCreated'))
     emit('created')

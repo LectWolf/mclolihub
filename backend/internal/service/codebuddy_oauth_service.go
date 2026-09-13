@@ -12,14 +12,16 @@ import (
 )
 
 type CodeBuddyOAuthService struct {
-	manager   *codebuddy.OAuthManager
-	proxyRepo ProxyRepository
+	manager     *codebuddy.OAuthManager
+	proxyRepo   ProxyRepository
+	accountRepo AccountRepository
 }
 
-func NewCodeBuddyOAuthService(proxyRepo ProxyRepository) *CodeBuddyOAuthService {
+func NewCodeBuddyOAuthService(proxyRepo ProxyRepository, accountRepo AccountRepository) *CodeBuddyOAuthService {
 	return &CodeBuddyOAuthService{
-		manager:   codebuddy.NewOAuthManager(nil),
-		proxyRepo: proxyRepo,
+		manager:     codebuddy.NewOAuthManager(nil),
+		proxyRepo:   proxyRepo,
+		accountRepo: accountRepo,
 	}
 }
 
