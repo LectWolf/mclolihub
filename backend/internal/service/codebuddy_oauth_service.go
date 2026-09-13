@@ -177,11 +177,4 @@ func CodeBuddyTokenCacheKey(account *Account) string {
 	return fmt.Sprintf("codebuddy:account:%d", account.ID)
 }
 
-func (a *Account) mustCodeBuddyCredentials() (codebuddy.Credentials, error) {
-	if a == nil {
-		return codebuddy.Credentials{}, fmt.Errorf("account is nil")
-	}
-	return codebuddy.ParseCredentials(a.Credentials)
-}
-
 func codebuddyTokenSkew() time.Duration { return time.Hour }

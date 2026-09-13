@@ -58,7 +58,11 @@ type HTTPDoer interface {
 }
 
 func NewClient(proxyURL string) (*http.Client, error) {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("default HTTP transport is not *http.Transport")
+	}
+	transport := base.Clone()
 	if strings.TrimSpace(proxyURL) != "" {
 		parsed, err := url.Parse(proxyURL)
 		if err != nil {
@@ -101,7 +105,7 @@ func DoJSON(ctx context.Context, client HTTPDoer, method, rawURL string, headers
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, err
