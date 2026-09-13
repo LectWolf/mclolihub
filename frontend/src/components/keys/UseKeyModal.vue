@@ -1236,6 +1236,7 @@ function generateRoutedCodexFiles(
     zhipu: 'glm-4.7',
     deepseek: 'deepseek-v4-pro',
     minimax: 'MiniMax-M3',
+    codebuddy: 'codebuddy-code',
     composite: 'gpt-5.5'
   }
   const preferredModel = preferredModels[platform] || ''
@@ -1250,6 +1251,7 @@ function generateRoutedCodexFiles(
     zhipu: 'Zhipu',
     deepseek: 'DeepSeek',
     minimax: 'MiniMax',
+    codebuddy: 'CodeBuddy',
     composite: 'Composite'
   }
   const label = labels[platform]
