@@ -8,7 +8,7 @@ import (
 )
 
 func TestCodeBuddyPlatformMigration(t *testing.T) {
-	content, err := FS.ReadFile("254_add_codebuddy_platform.sql")
+	content, err := FS.ReadFile("255_add_codebuddy_platform.sql")
 	require.NoError(t, err)
 
 	sql := strings.Join(strings.Fields(string(content)), " ")

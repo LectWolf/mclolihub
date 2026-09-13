@@ -12,6 +12,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEnsureChannelMonitorV2CatalogPlatforms(t *testing.T) {
+	cfg := service.ChannelMonitorV2Config{Platforms: []service.ChannelMonitorV2PlatformConfig{
+		{Platform: "openai", Enabled: true, Models: []string{"gpt-5"}},
+		{Platform: "kimi", Enabled: false, Models: []string{"kimi-k2"}},
+	}}
+	ensureChannelMonitorV2CatalogPlatforms(&cfg)
+	require.Equal(t, "openai", cfg.Platforms[0].Platform)
+	require.Equal(t, []string{"gpt-5"}, cfg.Platforms[0].Models)
+	require.Equal(t, "kimi", cfg.Platforms[1].Platform)
+	require.False(t, cfg.Platforms[1].Enabled)
+	require.Equal(t, []string{"kimi-k2"}, cfg.Platforms[1].Models)
+
+	got := map[string]service.ChannelMonitorV2PlatformConfig{}
+	for _, p := range cfg.Platforms {
+		got[p.Platform] = p
+	}
+	for _, name := range []string{"zhipu", "deepseek", "minimax", "codebuddy"} {
+		p, ok := got[name]
+		require.True(t, ok, name)
+		require.True(t, p.Enabled, name)
+		require.Empty(t, p.Models, name)
+	}
+}
+
 func TestChannelMonitorV2DisplayModelIsPlatformScoped(t *testing.T) {
 	cfg := service.ChannelMonitorV2Config{Platforms: []service.ChannelMonitorV2PlatformConfig{
 		{Platform: "openai", Enabled: true, Models: []string{"shared", "gpt-5"}},

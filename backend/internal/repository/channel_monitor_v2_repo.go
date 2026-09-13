@@ -39,6 +39,7 @@ func (r *channelMonitorV2Repository) GetConfig(ctx context.Context) (*service.Ch
 	if err := json.Unmarshal(platforms, &cfg.Platforms); err != nil {
 		return nil, fmt.Errorf("decode channel monitor v2 platforms: %w", err)
 	}
+	ensureChannelMonitorV2CatalogPlatforms(&cfg)
 	if cfg.IgnoredErrorCategories == nil {
 		cfg.IgnoredErrorCategories = []string{}
 	}
@@ -1195,6 +1196,32 @@ func channelMonitorV2EnabledPlatforms(cfg service.ChannelMonitorV2Config) []stri
 		}
 	}
 	return out
+}
+
+// V3/V2 query scope follows channel_monitor_v2_config.platforms. Factory seed
+// (194/197) omitted CN OpenAI-compat providers, so they never appeared until
+// migration 254. Merge on read so validate-mode deploys still show them before
+// that SQL is applied; enabled=false entries are left alone.
+var channelMonitorV2CatalogPlatforms = []string{"kimi", "zhipu", "deepseek", "minimax", "codebuddy"}
+
+func ensureChannelMonitorV2CatalogPlatforms(cfg *service.ChannelMonitorV2Config) {
+	if cfg == nil {
+		return
+	}
+	have := make(map[string]struct{}, len(cfg.Platforms))
+	for _, p := range cfg.Platforms {
+		have[strings.ToLower(strings.TrimSpace(p.Platform))] = struct{}{}
+	}
+	for _, name := range channelMonitorV2CatalogPlatforms {
+		if _, ok := have[name]; ok {
+			continue
+		}
+		cfg.Platforms = append(cfg.Platforms, service.ChannelMonitorV2PlatformConfig{
+			Platform: name,
+			Enabled:  true,
+			Models:   []string{},
+		})
+	}
 }
 
 // channelMonitorV2DisplayModel maps a raw model name for presentation.
