@@ -107,8 +107,14 @@ func AnthropicToChatCompletionsRequest(req *AnthropicRequest) (*ChatCompletionsR
 	}
 	out.ReasoningEffort = mapAnthropicEffortToResponses(effort)
 
-	parallelToolCalls := true
-	out.ParallelToolCalls = &parallelToolCalls
+	// parallel_tool_calls is a tool parameter, so it follows the same rule as
+	// tool_choice above: chat upstreams reject it when no tools are declared
+	// ("'parallel_tool_calls' is only allowed when 'tools' are specified"), and
+	// an Anthropic request without tools is the common case, not the edge case.
+	if len(out.Tools) > 0 {
+		parallelToolCalls := true
+		out.ParallelToolCalls = &parallelToolCalls
+	}
 
 	return out, nil
 }

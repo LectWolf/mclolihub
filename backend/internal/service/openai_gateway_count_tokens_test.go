@@ -39,6 +39,40 @@ func (r *countTokensRuntimeStateRepo) SetError(_ context.Context, _ int64, _ str
 	return nil
 }
 
+// Platforms without an upstream token-counting endpoint must answer locally.
+// Forwarding would 404 on every Claude Code turn, and for CodeBuddy it is worse:
+// those accounts carry no base_url, so the request would go to api.openai.com
+// with a CodeBuddy token.
+func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_EstimatesLocallyWithoutUpstreamEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"glm-5.2","system":"You are helpful.","messages":[{"role":"user","content":"hello there"}]}`)
+
+	for _, platform := range []string{PlatformCodeBuddy, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax} {
+		t.Run(platform, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", bytes.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			upstream := &httpUpstreamRecorder{}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{
+				ID:          301,
+				Platform:    platform,
+				Type:        AccountTypeOAuth,
+				Status:      StatusActive,
+				Schedulable: true,
+				Credentials: map[string]any{"access_token": "token"},
+			}
+
+			require.NoError(t, svc.ForwardCountTokensAsAnthropic(context.Background(), c, account, body, ""))
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Nil(t, upstream.lastReq, "%s has no upstream count-tokens endpoint to call", platform)
+			require.Greater(t, gjson.Get(rec.Body.String(), "input_tokens").Int(), int64(0))
+		})
+	}
+}
+
 func TestOpenAIGatewayService_ForwardCountTokensAsAnthropic_APIKeyUsesResponsesInputTokens(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -278,6 +278,49 @@ func TestAnthropicToChatCompletionsRequest_ReasoningEffortDefaultMedium(t *testi
 	require.Equal(t, "medium", out.ReasoningEffort)
 }
 
+// parallel_tool_calls is only valid alongside tools. Emitting it on a plain
+// chat turn — the common Claude Code case — makes strict chat upstreams reject
+// the whole request with 400/422.
+func TestAnthropicToChatCompletionsRequest_ParallelToolCallsOnlyWithTools(t *testing.T) {
+	base := AnthropicRequest{
+		Model:     "deepseek-v4-pro",
+		MaxTokens: 100,
+		Messages:  []AnthropicMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+	}
+
+	out, err := AnthropicToChatCompletionsRequest(&base)
+	require.NoError(t, err)
+	require.Nil(t, out.ParallelToolCalls, "a tool-less request must not carry parallel_tool_calls")
+	payload, err := json.Marshal(out)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "parallel_tool_calls")
+
+	withTools := base
+	withTools.Tools = []AnthropicTool{
+		{Name: "get_weather", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)},
+	}
+	out, err = AnthropicToChatCompletionsRequest(&withTools)
+	require.NoError(t, err)
+	require.NotNil(t, out.ParallelToolCalls)
+	require.True(t, *out.ParallelToolCalls)
+}
+
+// Server tools are dropped during conversion, so a request that only declared
+// those ends up tool-less and must not keep the tool parameters either.
+func TestAnthropicToChatCompletionsRequest_ParallelToolCallsDroppedWithAllTools(t *testing.T) {
+	req := &AnthropicRequest{
+		Model:     "deepseek-v4-pro",
+		MaxTokens: 100,
+		Tools:     []AnthropicTool{{Type: "web_search_20250305", Name: "web_search"}},
+		Messages:  []AnthropicMessage{{Role: "user", Content: json.RawMessage(`"hi"`)}},
+	}
+
+	out, err := AnthropicToChatCompletionsRequest(req)
+	require.NoError(t, err)
+	require.Empty(t, out.Tools)
+	require.Nil(t, out.ParallelToolCalls)
+}
+
 func TestAnthropicToChatCompletionsRequest_ServerToolDropped(t *testing.T) {
 	req := &AnthropicRequest{
 		Model:     "claude-sonnet-4-20250514",

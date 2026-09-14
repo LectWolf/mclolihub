@@ -260,6 +260,33 @@ func effortsFromManifestModel(t *testing.T, model map[string]any) []string {
 	return efforts
 }
 
+// GLM reaches Codex through both the zhipu platform and CodeBuddy accounts and
+// does support reasoning. The default descriptor would declare "none", which
+// hides the effort selector entirely.
+func TestNewConfiguredCodexModelDescriptorAdvertisesGLMReasoningLevels(t *testing.T) {
+	t.Parallel()
+
+	glm := newConfiguredCodexModelDescriptor("glm-5.2")
+	require.NotNil(t, glm.DefaultReasoningLevel)
+	require.Equal(t, "high", *glm.DefaultReasoningLevel)
+	efforts := make([]string, 0, len(glm.SupportedReasoningLevels))
+	for _, level := range glm.SupportedReasoningLevels {
+		efforts = append(efforts, level.Effort)
+	}
+	// The scale must match what NormalizeGLMOpenAIReasoningEffort can actually
+	// deliver, otherwise Codex offers a level the request path rewrites.
+	require.Equal(t, []string{"high", "max"}, efforts)
+	require.True(t, glm.SupportsParallelToolCalls)
+
+	// GLM-5.3 is the one variant that honours "low" upstream.
+	glm53 := newConfiguredCodexModelDescriptor("glm-5.3")
+	efforts = efforts[:0]
+	for _, level := range glm53.SupportedReasoningLevels {
+		efforts = append(efforts, level.Effort)
+	}
+	require.Equal(t, []string{"low", "high", "max"}, efforts)
+}
+
 func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t *testing.T) {
 	t.Parallel()
 

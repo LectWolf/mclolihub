@@ -18,7 +18,9 @@ import (
 func TestAllowOpenAICompatibleMessagesDispatch_CNProvidersExempt(t *testing.T) {
 	require.True(t, allowOpenAICompatibleMessagesDispatch(nil, nil), "无 key 保持放行")
 
-	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformGrok} {
+	// CodeBuddy 与 grok/CN 同类：其账号经 Anthropic 桥接服务 Claude Code，
+	// 而 AllowMessagesDispatch 对该平台恒被置 false，不豁免则 /v1/messages 恒 403。
+	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformGrok, service.PlatformCodeBuddy} {
 		apiKey := &service.APIKey{Group: &service.Group{Platform: platform, AllowMessagesDispatch: false}}
 		require.True(t, allowOpenAICompatibleMessagesDispatch(nil, apiKey),
 			"%s 分组必须豁免 allow_messages_dispatch 闸门", platform)

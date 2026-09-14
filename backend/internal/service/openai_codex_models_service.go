@@ -471,6 +471,18 @@ func newConfiguredCodexModelDescriptor(modelID string) configuredCodexModelDescr
 		descriptor.MaxContextWindow = configuredCodexDeepSeekV4Context
 	}
 
+	// GLM reaches Codex through both the zhipu platform and CodeBuddy accounts.
+	// Without this branch it falls to the default descriptor, which declares
+	// reasoning level "none" and hides the effort selector on a model that does
+	// support reasoning.
+	if isGLMCodexModel(modelID) {
+		defaultReasoningLevel := "high"
+		descriptor.Description = "GLM coding and reasoning model routed through Sub2API."
+		descriptor.DefaultReasoningLevel = &defaultReasoningLevel
+		descriptor.SupportedReasoningLevels = configuredCodexGLMReasoningLevels(modelID)
+		descriptor.SupportsParallelToolCalls = true
+	}
+
 	if isGrokCodexModel(modelID) {
 		descriptor.DisplayName = grokCodexDisplayName(modelID)
 		descriptor.Description = "Grok coding and reasoning model routed through Sub2API."
@@ -709,6 +721,35 @@ func deepSeekCodexDisplayName(modelID string) string {
 
 func isDeepSeekCodexModel(modelID string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelID)), "deepseek-")
+}
+
+func isGLMCodexModel(modelID string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelID)), "glm-")
+}
+
+// configuredCodexGLMReasoningLevels advertises exactly the efforts the request
+// path can deliver. NormalizeGLMOpenAIReasoningEffort collapses low/medium/high
+// to "high" and xhigh/max to "max" before the request leaves the gateway, with
+// GLM-5.3 additionally honouring "low" — advertising any other level would let
+// the client pick one that gets silently rewritten.
+func configuredCodexGLMReasoningLevels(modelID string) []configuredCodexReasoningLevel {
+	levels := make([]configuredCodexReasoningLevel, 0, 3)
+	if isGLM53Model(modelID) {
+		levels = append(levels, configuredCodexReasoningLevel{
+			Effort:      "low",
+			Description: "Fast responses with lighter reasoning",
+		})
+	}
+	return append(levels,
+		configuredCodexReasoningLevel{
+			Effort:      "high",
+			Description: "Greater reasoning depth for coding and agent tasks",
+		},
+		configuredCodexReasoningLevel{
+			Effort:      "max",
+			Description: "Maximum reasoning depth for complex tasks",
+		},
+	)
 }
 
 func isGrokCodexModel(modelID string) bool {
