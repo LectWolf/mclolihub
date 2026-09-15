@@ -28,11 +28,27 @@ func TestEnsureChannelMonitorV2CatalogPlatforms(t *testing.T) {
 	for _, p := range cfg.Platforms {
 		got[p.Platform] = p
 	}
-	for _, name := range []string{"zhipu", "deepseek", "minimax", "codebuddy"} {
+	for _, name := range []string{"zhipu", "deepseek", "minimax", "codebuddy", "opencode_go"} {
 		p, ok := got[name]
 		require.True(t, ok, name)
 		require.True(t, p.Enabled, name)
 		require.Empty(t, p.Models, name)
+	}
+}
+
+func TestChannelMonitorV2DateBinOriginIsUTC(t *testing.T) {
+	require.Equal(t, "TIMESTAMPTZ '1970-01-01 00:00:00+00'", channelMonitorV2DateBinOrigin)
+	require.Equal(t, "date_bin($1::interval,m.bucket_start,TIMESTAMPTZ '1970-01-01 00:00:00+00')", channelMonitorV2DateBinExpr("m.bucket_start"))
+
+	for _, query := range []string{
+		channelMonitorV2FixedRollupBoundsSQL,
+		channelMonitorV2MetricsRollupSQL,
+		channelMonitorV2UserMetricsRollupSQL,
+		channelMonitorV2HistogramRollupSQL,
+		channelMonitorV2ErrorRollupSQL,
+	} {
+		require.Contains(t, query, channelMonitorV2DateBinOrigin)
+		require.NotContains(t, query, "TIMESTAMPTZ '1970-01-01'")
 	}
 }
 

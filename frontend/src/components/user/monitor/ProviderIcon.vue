@@ -88,6 +88,11 @@ const PROVIDER_ICONS: Record<Provider, IconData> = {
       'M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm0 3.2c1.4 0 2.54 1.14 2.54 2.54S13.4 10.28 12 10.28 9.46 9.14 9.46 7.74 10.6 5.2 12 5.2zm0 13.6c-2.12 0-4-1.08-5.14-2.72.06-1.7 3.42-2.64 5.14-2.64s5.08.94 5.14 2.64C16 17.72 14.12 18.8 12 18.8z',
     ],
   },
+  opencode_go: {
+    paths: [
+      'M16 6H8v12h8V6zm4 16H4V2h16v20z',
+    ],
+  },
 }
 
 const props = withDefaults(defineProps<{

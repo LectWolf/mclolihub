@@ -20,7 +20,7 @@ func TestAllowOpenAICompatibleMessagesDispatch_CNProvidersExempt(t *testing.T) {
 
 	// CodeBuddy 与 grok/CN 同类：其账号经 Anthropic 桥接服务 Claude Code，
 	// 而 AllowMessagesDispatch 对该平台恒被置 false，不豁免则 /v1/messages 恒 403。
-	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformGrok, service.PlatformCodeBuddy} {
+	for _, platform := range []string{service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformGrok, service.PlatformCodeBuddy, service.PlatformOpenCodeGo} {
 		apiKey := &service.APIKey{Group: &service.Group{Platform: platform, AllowMessagesDispatch: false}}
 		require.True(t, allowOpenAICompatibleMessagesDispatch(nil, apiKey),
 			"%s 分组必须豁免 allow_messages_dispatch 闸门", platform)
@@ -76,4 +76,11 @@ func TestResolveOpenAIMessagesDispatchMappedModel_CompositeCNTargetsSkipGroupMap
 
 		require.Empty(t, resolveOpenAIMessagesDispatchMappedModel(c, apiKey, "claude-sonnet-4-5-20250929"), "model=%s", model)
 	}
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/messages", nil)
+	c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), service.PlatformOpenCodeGo))
+	apiKey := &service.APIKey{Group: &service.Group{Platform: service.PlatformComposite}}
+	require.Empty(t, resolveOpenAIMessagesDispatchMappedModel(c, apiKey, "claude-sonnet-4-5-20250929"),
+		"composite → opencode_go 不得注入 openai 默认 gpt-5.x 映射")
 }

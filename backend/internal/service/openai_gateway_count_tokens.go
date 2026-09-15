@@ -264,7 +264,7 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		return fmt.Errorf("count_tokens: missing account")
 	}
 
-	// 国产供应商（全部协议，含 anthropic）与 CodeBuddy：一律本地估算，不发上游请求。
+	// 国产供应商、OpenCode 与 CodeBuddy（全部协议，含 anthropic）：一律本地估算，不发上游请求。
 	// 依据（2026-08 核实）：三家的 Anthropic 兼容层均未提供
 	// /v1/messages/count_tokens——DeepSeek 官方 anthropic_api 文档无此端点
 	// （且注明 anthropic-version 头被忽略），聚合网关 OpenModel 明确标注
@@ -275,7 +275,7 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 	// CodeBuddy 同理且更严重：它只暴露 /v2/chat/completions 与 /v3/config，
 	// 没有 /v1/responses/input_tokens；而其账号又没有 base_url，落到下面的
 	// 分支会带着 CodeBuddy 令牌去打 api.openai.com 默认地址。
-	if account.IsCNProvider() || account.IsCodeBuddy() {
+	if account.IsCNProvider() || account.IsCodeBuddy() || account.IsOpenCodeGo() {
 		estimated, err := estimateAnthropicCountTokensLocally(body)
 		if err != nil {
 			writeAnthropicCountTokensError(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
