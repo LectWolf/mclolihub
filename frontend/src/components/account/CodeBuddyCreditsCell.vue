@@ -1,12 +1,14 @@
 <template>
   <div v-if="visible" class="space-y-1" data-test="codebuddy-credits">
-    <div v-if="snapshot" class="space-y-1">
+    <div
+      v-if="snapshot"
+      ref="segmentTriggerRef"
+      class="space-y-1"
+      @mouseenter="openSegmentCard"
+      @mouseleave="closeSegmentCard"
+    >
       <div class="flex items-center gap-1">
-        <span
-          class="text-[11px] font-medium"
-          :class="balanceClass"
-          :title="balanceTitle"
-        >
+        <span class="text-[11px] font-medium" :class="balanceClass">
           {{ t('admin.accounts.codebuddyOAuth.creditsRemaining', { count: formatCredits(snapshot.credits) }) }}
         </span>
         <span v-if="snapshot.exhausted" class="rounded bg-red-100 px-1 text-[9px] text-red-700 dark:bg-red-900/40 dark:text-red-300">
@@ -15,7 +17,6 @@
         <span
           v-else-if="snapshot.estimated"
           class="rounded bg-amber-100 px-1 text-[9px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-          :title="t('admin.accounts.codebuddyOAuth.creditsEstimatedHint')"
         >
           {{ t('admin.accounts.codebuddyOAuth.creditsEstimated') }}
         </span>
@@ -29,29 +30,50 @@
         {{ t('admin.accounts.codebuddyOAuth.creditsExpiry', { time: expiryLabel }) }}
       </div>
 
-      <div
-        v-if="segmentSummary"
-        class="truncate text-[10px] text-gray-500 dark:text-gray-400"
-        :title="segmentDetail"
-      >
-        {{ segmentSummary }}
-      </div>
-
-      <div v-if="todayUsage" class="text-[10px] text-gray-500 dark:text-gray-400" :title="usageTitle">
-        {{
-          t('admin.accounts.codebuddyOAuth.creditsUsedToday', {
-            credits: formatCredits(todayUsage.credits),
-            requests: todayUsage.requests
-          })
-        }}
-        <span v-if="!todayUsage.official" class="text-gray-400">
-          {{ t('admin.accounts.codebuddyOAuth.creditsGatewayOnly') }}
-        </span>
-      </div>
-
-      <div v-if="fetchedLabel" class="text-[10px]" :class="stale ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'">
-        {{ fetchedLabel }}
-      </div>
+      <Teleport to="body">
+        <div
+          v-if="showSegmentCard"
+          class="pointer-events-none fixed z-[9999] w-[17.5rem] rounded-lg border border-gray-200 bg-white p-2.5 shadow-xl dark:border-dark-600 dark:bg-dark-800"
+          :style="segmentCardStyle"
+        >
+          <div v-if="expiryExact" class="mb-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.codebuddyOAuth.creditsExpiry', { time: expiryExact }) }}
+          </div>
+          <div v-if="segments.length" class="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            {{ t('admin.accounts.codebuddyOAuth.creditsPackages') }}
+          </div>
+          <div v-if="segments.length" class="space-y-1.5">
+            <div
+              v-for="(segment, index) in segments"
+              :key="`${segment.source || 'credits'}-${index}`"
+              class="rounded-md px-2 py-1.5"
+              :class="index === 0 ? 'bg-sky-50 dark:bg-sky-900/20' : 'bg-gray-50 dark:bg-dark-700/60'"
+            >
+              <div class="break-words text-[11px] font-medium leading-snug text-gray-800 dark:text-gray-200">
+                {{ segmentLabel(segment) }}
+              </div>
+              <div class="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-gray-500 dark:text-gray-400">
+                <span>{{ formatCredits(segment.remaining) }} / {{ formatCredits(segment.total) }}</span>
+                <span v-if="segmentExpiry(segment)">{{ segmentExpiry(segment) }}</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="todayUsage" class="mt-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+            {{
+              t('admin.accounts.codebuddyOAuth.creditsUsedToday', {
+                credits: formatCredits(todayUsage.credits),
+                requests: todayUsage.requests
+              })
+            }}
+            <span v-if="!todayUsage.official" class="text-gray-400">
+              {{ t('admin.accounts.codebuddyOAuth.creditsGatewayOnly') }}
+            </span>
+          </div>
+          <div v-if="fetchedLabel" class="mt-1 text-[10px]" :class="stale ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'">
+            {{ fetchedLabel }}
+          </div>
+        </div>
+      </Teleport>
     </div>
     <div v-else-if="!loading" class="text-xs text-gray-400">-</div>
 
@@ -87,7 +109,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -170,42 +192,74 @@ const barClass = computed(() => {
   return 'bg-sky-500'
 })
 
-const balanceTitle = computed(() => {
-  if (totalCredits.value <= 0) return ''
-  return `${formatCredits(snapshot.value?.credits)} / ${formatCredits(totalCredits.value)}`
-})
-
 const segmentLabel = (segment: CodeBuddyCreditSegment) => {
-  // The backend emits a locale-neutral placeholder when the package has no name.
   if (!segment.source || segment.source === 'credits') {
     return t('admin.accounts.codebuddyOAuth.creditsSegmentDefault')
   }
   return segment.source
 }
 
-const segmentSummary = computed(() =>
-  segments.value
-    .slice(0, 3)
-    .map((segment) => `${segmentLabel(segment)} ${formatCredits(segment.remaining)}`)
-    .join(' · ')
-)
+const segmentTriggerRef = ref<HTMLElement | null>(null)
+const showSegmentCard = ref(false)
+const segmentCardStyle = ref<CSSProperties>({})
 
-const segmentDetail = computed(() =>
-  segments.value
-    .map((segment) => {
-      const expiry = segment.expires_at ? ` → ${new Date(segment.expires_at * 1000).toLocaleString()}` : ''
-      return `${segmentLabel(segment)} ${formatCredits(segment.remaining)}/${formatCredits(segment.total)}${expiry}`
-    })
-    .join('\n')
-)
-
-const expiryLabel = computed(() => {
-  const expiry = snapshot.value?.soonest_expiry
-  if (!expiry) return ''
-  const date = new Date(expiry * 1000)
+const formatDateTime = (unixSeconds?: number | null) => {
+  if (!unixSeconds) return ''
+  const date = new Date(unixSeconds * 1000)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString()
-})
+}
+
+const formatExpiryWithin = (unixSeconds?: number | null) => {
+  if (!unixSeconds) return ''
+  const date = new Date(unixSeconds * 1000)
+  if (Number.isNaN(date.getTime())) return ''
+  const diffMs = date.getTime() - Date.now()
+  if (diffMs <= 0) return t('admin.accounts.codebuddyOAuth.creditsExpiryOverdue')
+  const minutes = Math.max(1, Math.ceil(diffMs / 60_000))
+  if (minutes < 60) {
+    return t('admin.accounts.codebuddyOAuth.creditsExpiryWithinMinutes', { count: minutes })
+  }
+  const hours = Math.ceil(diffMs / 3_600_000)
+  if (hours < 24) {
+    return t('admin.accounts.codebuddyOAuth.creditsExpiryWithinHours', { count: hours })
+  }
+  return t('admin.accounts.codebuddyOAuth.creditsExpiryWithinDays', {
+    count: Math.ceil(diffMs / 86_400_000)
+  })
+}
+
+const segmentExpiry = (segment: CodeBuddyCreditSegment) => formatDateTime(segment.expires_at)
+
+const openSegmentCard = () => {
+  const el = segmentTriggerRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const cardWidth = 280
+  const gap = 6
+  const estimatedHeight = 88 + segments.value.length * 56
+  let left = rect.left
+  if (left + cardWidth > window.innerWidth - 8) {
+    left = Math.max(8, window.innerWidth - cardWidth - 8)
+  }
+  let top = rect.bottom + gap
+  if (top + estimatedHeight > window.innerHeight - 8 && rect.top - gap - estimatedHeight > 8) {
+    top = rect.top - gap - estimatedHeight
+  }
+  segmentCardStyle.value = {
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`
+  }
+  showSegmentCard.value = true
+}
+
+const closeSegmentCard = () => {
+  showSegmentCard.value = false
+}
+
+const expiryLabel = computed(() => formatExpiryWithin(snapshot.value?.soonest_expiry))
+
+const expiryExact = computed(() => formatDateTime(snapshot.value?.soonest_expiry))
 
 const stale = computed(() => {
   const fetchedAt = snapshot.value?.fetched_at
@@ -242,31 +296,6 @@ const todayUsage = computed(() => {
   return { credits: usage.value.credits, requests: usage.value.requests, official: false }
 })
 
-const usageTitle = computed(() => {
-  const parts: string[] = []
-  if (official.value) {
-    parts.push(
-      t('admin.accounts.codebuddyOAuth.creditsOfficialWindow', {
-        days: official.value.range_days,
-        credits: formatCredits(official.value.total_credits),
-        requests: official.value.requests
-      })
-    )
-  }
-  if (usage.value) {
-    parts.push(
-      t('admin.accounts.codebuddyOAuth.creditsUsedTotal', {
-        credits: formatCredits(usage.value.total_credits),
-        requests: usage.value.total_requests
-      })
-    )
-    if (usage.value.unpriced) {
-      parts.push(t('admin.accounts.codebuddyOAuth.creditsUnpriced', { count: usage.value.unpriced }))
-    }
-  }
-  return parts.join('\n')
-})
-
 const handleProbe = async () => {
   loading.value = true
   error.value = ''
@@ -289,6 +318,7 @@ watch(
     usage.value = null
     official.value = null
     error.value = ''
+    closeSegmentCard()
     loadFromExtra()
   }
 )

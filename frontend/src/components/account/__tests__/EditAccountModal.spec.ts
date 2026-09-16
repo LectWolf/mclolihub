@@ -267,6 +267,34 @@ function buildGrokOAuthAccount() {
   } as any
 }
 
+function buildCodeBuddyOAuthAccount() {
+  return {
+    id: 8,
+    name: 'CodeBuddy OAuth',
+    notes: '',
+    platform: 'codebuddy',
+    type: 'oauth',
+    credentials: {
+      access_token: 'cb-at',
+      refresh_token: 'cb-rt',
+      model_mapping: {
+        'glm-5.2': 'glm-5.2',
+        auto: 'auto'
+      },
+      credit_policy: 'all'
+    },
+    extra: {},
+    proxy_id: null,
+    concurrency: 1,
+    priority: 1,
+    rate_multiplier: 1,
+    status: 'active',
+    group_ids: [],
+    expires_at: null,
+    auto_pause_on_expired: false
+  } as any
+}
+
 function buildGrokAPIKeyAccount() {
   return {
     ...buildAccount(),
@@ -1031,6 +1059,26 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
       grok: 'grok-build-0.1'
+    })
+  })
+
+  it('loads a saved CodeBuddy OAuth model whitelist when reopening the editor', async () => {
+    const account = buildCodeBuddyOAuthAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    expect(wrapper.get('[data-testid="model-whitelist-value"]').text()).toBe('glm-5.2,auto')
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
+      'glm-5.2': 'glm-5.2',
+      auto: 'auto'
     })
   })
 
