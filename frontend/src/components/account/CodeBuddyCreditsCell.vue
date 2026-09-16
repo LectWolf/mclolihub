@@ -5,7 +5,7 @@
       ref="segmentTriggerRef"
       class="space-y-1"
       @mouseenter="openSegmentCard"
-      @mouseleave="closeSegmentCard"
+      @mouseleave="scheduleCloseSegmentCard"
     >
       <div class="flex items-center gap-1">
         <span class="text-[11px] font-medium" :class="balanceClass">
@@ -33,8 +33,10 @@
       <Teleport to="body">
         <div
           v-if="showSegmentCard"
-          class="pointer-events-none fixed z-[9999] w-[17.5rem] rounded-lg border border-gray-200 bg-white p-2.5 shadow-xl dark:border-dark-600 dark:bg-dark-800"
+          class="fixed z-[9999] w-[17.5rem] rounded-lg border border-gray-200 bg-white p-2.5 shadow-xl dark:border-dark-600 dark:bg-dark-800"
           :style="segmentCardStyle"
+          @mouseenter="openSegmentCard"
+          @mouseleave="scheduleCloseSegmentCard"
         >
           <div v-if="expiryExact" class="mb-1.5 text-[10px] text-gray-500 dark:text-gray-400">
             {{ t('admin.accounts.codebuddyOAuth.creditsExpiry', { time: expiryExact }) }}
@@ -42,14 +44,18 @@
           <div v-if="segments.length" class="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
             {{ t('admin.accounts.codebuddyOAuth.creditsPackages') }}
           </div>
-          <div v-if="segments.length" class="space-y-1.5">
+          <div
+            v-if="segments.length"
+            class="space-y-1.5 overflow-y-auto overscroll-contain [scrollbar-width:thin]"
+            :style="segmentListStyle"
+          >
             <div
               v-for="(segment, index) in segments"
               :key="`${segment.source || 'credits'}-${index}`"
               class="rounded-md px-2 py-1.5"
               :class="index === 0 ? 'bg-sky-50 dark:bg-sky-900/20' : 'bg-gray-50 dark:bg-dark-700/60'"
             >
-              <div class="break-words text-[11px] font-medium leading-snug text-gray-800 dark:text-gray-200">
+              <div class="line-clamp-2 break-words text-[11px] font-medium leading-snug text-gray-800 dark:text-gray-200">
                 {{ segmentLabel(segment) }}
               </div>
               <div class="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-gray-500 dark:text-gray-400">
@@ -109,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type CSSProperties } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import { extractApiErrorMessage } from '@/utils/apiError'
@@ -123,7 +129,10 @@ import type { Account } from '@/types'
 
 /** Matches the backend probe TTL so both sides agree on what "stale" means. */
 const SNAPSHOT_TTL_SECONDS = 10 * 60
-
+const VISIBLE_PACK_COUNT = 5
+const PACK_ROW_PX = 56
+const CARD_CHROME_PX = 96
+const SEGMENT_CLOSE_MS = 180
 const props = defineProps<{ account: Account }>()
 const { t } = useI18n()
 
@@ -202,6 +211,18 @@ const segmentLabel = (segment: CodeBuddyCreditSegment) => {
 const segmentTriggerRef = ref<HTMLElement | null>(null)
 const showSegmentCard = ref(false)
 const segmentCardStyle = ref<CSSProperties>({})
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+const segmentListStyle = computed<CSSProperties>(() => {
+  if (segments.value.length <= VISIBLE_PACK_COUNT) return {}
+  return { maxHeight: `${VISIBLE_PACK_COUNT * PACK_ROW_PX}px` }
+})
+
+const cancelCloseSegmentCard = () => {
+  if (closeTimer == null) return
+  clearTimeout(closeTimer)
+  closeTimer = null
+}
 
 const formatDateTime = (unixSeconds?: number | null) => {
   if (!unixSeconds) return ''
@@ -232,12 +253,14 @@ const formatExpiryWithin = (unixSeconds?: number | null) => {
 const segmentExpiry = (segment: CodeBuddyCreditSegment) => formatDateTime(segment.expires_at)
 
 const openSegmentCard = () => {
+  cancelCloseSegmentCard()
   const el = segmentTriggerRef.value
   if (!el) return
   const rect = el.getBoundingClientRect()
   const cardWidth = 280
   const gap = 6
-  const estimatedHeight = 88 + segments.value.length * 56
+  const estimatedHeight =
+    CARD_CHROME_PX + Math.min(segments.value.length, VISIBLE_PACK_COUNT) * PACK_ROW_PX
   let left = rect.left
   if (left + cardWidth > window.innerWidth - 8) {
     left = Math.max(8, window.innerWidth - cardWidth - 8)
@@ -253,7 +276,16 @@ const openSegmentCard = () => {
   showSegmentCard.value = true
 }
 
+const scheduleCloseSegmentCard = () => {
+  cancelCloseSegmentCard()
+  closeTimer = setTimeout(() => {
+    showSegmentCard.value = false
+    closeTimer = null
+  }, SEGMENT_CLOSE_MS)
+}
+
 const closeSegmentCard = () => {
+  cancelCloseSegmentCard()
   showSegmentCard.value = false
 }
 
@@ -325,5 +357,9 @@ watch(
 
 onMounted(() => {
   loadFromExtra()
+})
+
+onUnmounted(() => {
+  cancelCloseSegmentCard()
 })
 </script>
