@@ -22,7 +22,7 @@
         </span>
       </div>
 
-      <div v-if="totalCredits > 0" class="h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
+      <div v-if="totalCredits > 0" class="h-1 w-28 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700">
         <div class="h-full rounded-full transition-all" :class="barClass" :style="{ width: `${usedPercent}%` }" />
       </div>
 
