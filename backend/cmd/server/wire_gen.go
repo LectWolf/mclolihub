@@ -187,7 +187,9 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	groupHealthRepository := repository.NewGroupHealthStore(client, db)
 	pluginRepository := repository.NewPluginRepository(db)
 	pluginHostInfo := providePluginHostInfo(buildInfo)
-	pluginManager := service.NewPluginManager(pluginRepository, secretEncryptor, configConfig, pluginHostInfo)
+	pluginKVStore := repository.NewPluginKVStore(redisClient)
+	pluginManager := service.NewPluginManager(pluginRepository, secretEncryptor, configConfig, pluginHostInfo, pluginKVStore)
+	pluginManager.SetAccountDirectory(openAIGatewayService)
 	accountTestService := service.ProvideAccountTestService(accountRepository, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, configConfig, tlsFingerprintProfileService, openAIGatewayService, settingService, pluginManager)
 	groupHealthService := service.ProvideGroupHealthService(groupHealthRepository, accountRepository, accountTestService, leaderLockCache, db, rateLimitService)
 	groupService := service.NewGroupService(groupRepository, apiKeyAuthCacheInvalidator)
@@ -212,6 +214,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	openAIQuotaService := service.ProvideOpenAIQuotaService(accountRepository, proxyRepository, openAITokenProvider, privacyClientFactory, openAIGatewayService)
 	usageCache := service.NewUsageCache()
 	accountUsageService := service.ProvideAccountUsageService(accountRepository, usageLogRepository, claudeUsageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, grokQuotaService, openAIQuotaService, usageCache, identityCache, tlsFingerprintProfileService, openAIGatewayService)
+
 	crsSyncService := service.NewCRSSyncService(accountRepository, proxyRepository, oAuthService, openAIOAuthService, geminiOAuthService, configConfig)
 	accountHandler := admin.ProvideAccountHandler(configConfig, adminService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, rateLimitService, accountUsageService, accountTestService, concurrencyService, crsSyncService, sessionLimitCache, rpmCache, compositeTokenCacheInvalidator, grokQuotaService)
 	adminAnnouncementHandler := admin.NewAnnouncementHandler(announcementService)
