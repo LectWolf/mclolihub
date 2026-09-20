@@ -421,6 +421,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 
 		// Antigravity 默认模型映射
 		accounts.GET("/antigravity/default-model-mapping", h.Admin.Account.GetAntigravityDefaultModelMapping)
+		accounts.POST("/cursor/cli-login/start", h.Admin.Account.StartCursorCLILogin)
+		accounts.POST("/cursor/cli-login/poll", h.Admin.Account.PollCursorCLILogin)
 
 		// Spark 影子账号
 		accounts.POST("/:id/shadow", h.Admin.OpenAIOAuth.CreateShadow)

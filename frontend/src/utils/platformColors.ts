@@ -16,6 +16,8 @@ export type Platform =
   | 'deepseek'
   | 'minimax'
   | 'codebuddy' | 'opencode_go'
+  | 'cursor_sand'
+  | 'cursor'
   | 'composite'
 
 // ── Badge (bg + text + border, for inline badges with border) ───────
@@ -31,6 +33,8 @@ const BADGE: Record<Platform, string> = {
   minimax: 'bg-rose-500/10 text-rose-600 border-rose-500/30 dark:text-rose-400',
   codebuddy: 'bg-sky-500/10 text-sky-600 border-sky-500/30 dark:text-sky-400',
   opencode_go: 'bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300',
+  cursor_sand: 'bg-yellow-500/10 text-yellow-800 border-yellow-500/30 dark:text-yellow-300',
+  cursor: 'bg-violet-500/10 text-violet-600 border-violet-500/30 dark:text-violet-400',
   composite: 'bg-cyan-500/10 text-cyan-700 border-cyan-500/30 dark:text-cyan-300',
 }
 const BADGE_DEFAULT = 'bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400'
@@ -48,6 +52,8 @@ const BADGE_LIGHT: Record<Platform, string> = {
   minimax: 'bg-rose-500/10 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300',
   codebuddy: 'bg-sky-500/10 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300',
   opencode_go: 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
+  cursor_sand: 'bg-yellow-500/10 text-yellow-800 dark:bg-yellow-500/10 dark:text-yellow-300',
+  cursor: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300',
   composite: 'bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300',
 }
 
@@ -64,6 +70,8 @@ const BORDER: Record<Platform, string> = {
   minimax: 'border-rose-500/20 dark:border-rose-500/20',
   codebuddy: 'border-sky-500/20 dark:border-sky-500/20',
   opencode_go: 'border-amber-500/20 dark:border-amber-500/20',
+  cursor_sand: 'border-yellow-500/20 dark:border-yellow-500/20',
+  cursor: 'border-violet-500/20 dark:border-violet-500/20',
   composite: 'border-cyan-500/20 dark:border-cyan-500/20',
 }
 const BORDER_DEFAULT = 'border-gray-200 dark:border-dark-700'
@@ -81,6 +89,8 @@ const BORDER_STRONG: Record<Platform, string> = {
   minimax: 'border-rose-500/35 dark:border-rose-500/30',
   codebuddy: 'border-sky-500/35 dark:border-sky-500/30',
   opencode_go: 'border-amber-500/35 dark:border-amber-500/30',
+  cursor_sand: 'border-yellow-500/35 dark:border-yellow-500/30',
+  cursor: 'border-violet-500/35 dark:border-violet-500/30',
   composite: 'border-cyan-500/35 dark:border-cyan-500/30',
 }
 const BORDER_STRONG_DEFAULT = 'border-gray-300 dark:border-dark-600'
@@ -99,6 +109,8 @@ const ACCENT: Record<Platform, string> = {
   minimax: '#f43f5e', // rose-500
   codebuddy: '#0ea5e9', // sky-500,
   opencode_go: '#f59e0b', // amber-500
+  cursor_sand: '#ca8a04', // yellow-600
+  cursor: '#7c3aed', // violet-600
   composite: '#06b6d4', // cyan-500
 }
 const ACCENT_DEFAULT = '#14b8a6' // primary-500 (teal)
@@ -116,6 +128,8 @@ const ACCENT_BAR: Record<Platform, string> = {
   minimax: 'bg-gradient-to-r from-rose-400 to-rose-500',
   codebuddy: 'bg-gradient-to-r from-sky-400 to-sky-500',
   opencode_go: 'bg-gradient-to-r from-amber-400 to-amber-500',
+  cursor_sand: 'bg-gradient-to-r from-yellow-400 to-yellow-600',
+  cursor: 'bg-gradient-to-r from-violet-400 to-violet-600',
   composite: 'bg-gradient-to-r from-slate-500 to-cyan-500',
 }
 const ACCENT_BAR_DEFAULT = 'bg-gradient-to-r from-primary-400 to-primary-500'
@@ -133,6 +147,8 @@ const TEXT: Record<Platform, string> = {
   minimax: 'text-rose-600 dark:text-rose-400',
   codebuddy: 'text-sky-600 dark:text-sky-400',
   opencode_go: 'text-amber-700 dark:text-amber-300',
+  cursor_sand: 'text-yellow-700 dark:text-yellow-300',
+  cursor: 'text-violet-600 dark:text-violet-400',
   composite: 'text-cyan-700 dark:text-cyan-300',
 }
 const TEXT_DEFAULT = 'text-primary-600 dark:text-primary-400'
@@ -150,6 +166,8 @@ const ICON: Record<Platform, string> = {
   minimax: 'text-rose-500 dark:text-rose-400',
   codebuddy: 'text-sky-500 dark:text-sky-400',
   opencode_go: 'text-amber-500 dark:text-amber-300',
+  cursor_sand: 'text-yellow-600 dark:text-yellow-300',
+  cursor: 'text-violet-500 dark:text-violet-400',
   composite: 'text-cyan-600 dark:text-cyan-300',
 }
 const ICON_DEFAULT = 'text-primary-500 dark:text-primary-400'
@@ -167,6 +185,8 @@ const BUTTON: Record<Platform, string> = {
   minimax: 'bg-rose-500 text-white hover:bg-rose-600 active:bg-rose-700 dark:bg-rose-500/80 dark:hover:bg-rose-500',
   codebuddy: 'bg-sky-500 text-white hover:bg-sky-600 active:bg-sky-700 dark:bg-sky-500/80 dark:hover:bg-sky-500',
   opencode_go: 'bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 dark:bg-amber-500/80 dark:hover:bg-amber-500',
+  cursor_sand: 'bg-yellow-600 text-white hover:bg-yellow-700 active:bg-yellow-800 dark:bg-yellow-600/80 dark:hover:bg-yellow-500',
+  cursor: 'bg-violet-600 text-white hover:bg-violet-700 active:bg-violet-800 dark:bg-violet-600/80 dark:hover:bg-violet-500',
   composite: 'bg-cyan-700 text-white hover:bg-cyan-800 active:bg-cyan-900 dark:bg-cyan-600 dark:hover:bg-cyan-500',
 }
 const BUTTON_DEFAULT = 'bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500'
@@ -184,6 +204,8 @@ const DISCOUNT: Record<Platform, string> = {
   minimax: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
   codebuddy: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
   opencode_go: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  cursor_sand: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  cursor: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
   composite: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
 }
 const DISCOUNT_DEFAULT = 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
@@ -201,6 +223,8 @@ const GRADIENT: Record<Platform, string> = {
   minimax: 'from-rose-500 to-rose-600',
   codebuddy: 'from-sky-500 to-sky-600',
   opencode_go: 'from-amber-500 to-amber-600',
+  cursor_sand: 'from-yellow-500 to-yellow-700',
+  cursor: 'from-violet-500 to-violet-700',
   composite: 'from-slate-600 to-cyan-600',
 }
 const GRADIENT_DEFAULT = 'from-primary-500 to-primary-600'
@@ -218,6 +242,8 @@ const GRADIENT_TEXT: Record<Platform, string> = {
   minimax: 'text-rose-100',
   codebuddy: 'text-sky-100',
   opencode_go: 'text-amber-100',
+  cursor_sand: 'text-yellow-100',
+  cursor: 'text-violet-100',
   composite: 'text-cyan-100',
 }
 const GRADIENT_TEXT_DEFAULT = 'text-primary-100'
@@ -234,6 +260,8 @@ const GRADIENT_SUBTEXT: Record<Platform, string> = {
   minimax: 'text-rose-200',
   codebuddy: 'text-sky-200',
   opencode_go: 'text-amber-200',
+  cursor_sand: 'text-yellow-200',
+  cursor: 'text-violet-200',
   composite: 'text-cyan-200',
 }
 const GRADIENT_SUBTEXT_DEFAULT = 'text-primary-200'
@@ -253,6 +281,8 @@ function isPlatform(p: string): p is Platform {
     p === 'minimax' ||
     p === 'codebuddy' ||
     p === 'opencode_go' ||
+    p === 'cursor_sand' ||
+    p === 'cursor' ||
     p === 'composite'
   )
 }
@@ -322,6 +352,8 @@ export function platformLabel(p: string): string {
     case 'minimax': return 'MiniMax'
     case 'codebuddy': return 'CodeBuddy'
     case 'opencode_go': return 'OpenCode'
+    case 'cursor_sand': return 'Cursor Sand'
+    case 'cursor': return 'Cursor IDE'
     case 'composite': return 'Composite'
     default: return p || 'API'
   }

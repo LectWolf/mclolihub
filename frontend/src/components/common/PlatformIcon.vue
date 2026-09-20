@@ -60,6 +60,14 @@
       d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm0 3.2c1.4 0 2.54 1.14 2.54 2.54S13.4 10.28 12 10.28 9.46 9.14 9.46 7.74 10.6 5.2 12 5.2zm0 13.6c-2.12 0-4-1.08-5.14-2.72.06-1.7 3.42-2.64 5.14-2.64s5.08.94 5.14 2.64C16 17.72 14.12 18.8 12 18.8z"
     />
   </svg>
+  <!-- Cursor Sand (Grok Bot Stream quota) -->
+  <svg v-else-if="platform === 'cursor_sand'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M3 18h18v2H3v-2zm2.5-6.5L12 4l6.5 7.5H15v5H9v-5H5.5z" />
+  </svg>
+  <!-- Cursor IDE (AgentService/Run) -->
+  <svg v-else-if="platform === 'cursor'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M4 4l16 8-16 8V4zm3.2 4.4v7.2L14.2 12 7.2 8.4z" />
+  </svg>
   <!-- Composite group icon -->
   <svg v-else-if="platform === 'composite'" :class="sizeClass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <circle cx="6" cy="12" r="3" />

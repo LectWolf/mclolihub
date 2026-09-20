@@ -472,6 +472,27 @@ export async function generateAuthUrl(
   return data
 }
 
+export async function startCursorCLILogin(): Promise<{ login_url: string; uuid: string; verifier: string }> {
+  const { data } = await apiClient.post<{ login_url: string; uuid: string; verifier: string }>(
+    '/admin/accounts/cursor/cli-login/start',
+    {}
+  )
+  return data
+}
+
+export async function pollCursorCLILogin(
+  uuid: string,
+  verifier: string
+): Promise<{ status: string; access_token?: string; refresh_token?: string; email?: string }> {
+  const { data } = await apiClient.post<{
+    status: string
+    access_token?: string
+    refresh_token?: string
+    email?: string
+  }>('/admin/accounts/cursor/cli-login/poll', { uuid, verifier })
+  return data
+}
+
 /**
  * Exchange authorization code for tokens
  * @param endpoint - API endpoint path
@@ -1109,6 +1130,8 @@ export const accountsAPI = {
   syncUpstreamModels,
   syncUpstreamModelsPreview,
   generateAuthUrl,
+  startCursorCLILogin,
+  pollCursorCLILogin,
   exchangeCode,
   refreshOpenAIToken,
   batchCreate,

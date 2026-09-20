@@ -242,6 +242,41 @@
             OpenCode
           </button>
         </div>
+        <!-- Cursor: two distinct reverse-proxy methods -->
+        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+          <button
+            type="button"
+            @click="selectCursorPlatform('cursor_sand')"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'cursor_sand'
+                ? 'bg-white text-yellow-700 shadow-sm dark:bg-dark-600 dark:text-yellow-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="cursor_sand" size="sm" />
+            Cursor Sand
+          </button>
+          <button
+            type="button"
+            @click="selectCursorPlatform('cursor')"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'cursor'
+                ? 'bg-white text-violet-600 shadow-sm dark:bg-dark-600 dark:text-violet-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="cursor" size="sm" />
+            Cursor IDE
+          </button>
+        </div>
+        <p v-if="form.platform === 'cursor_sand'" class="input-hint mt-2">
+          InferenceService/Stream · Grok Bot / sand 额度 · 手动填写 SAND_INFERENCE_RENEWAL_CREDENTIAL
+        </p>
+        <p v-else-if="form.platform === 'cursor'" class="input-hint mt-2">
+          InferenceService/RunInference · Cursor IDE 额度 · 用 Cursor CLI 登录（loginDeepControl）拿 session 票
+        </p>
       </div>
 
       <!-- Account Type Selection (Anthropic) -->
@@ -1372,7 +1407,7 @@
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
       <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
-        <div v-if="!isMultiProtocolPlatform || apiProtocol !== 'adaptive'">
+        <div v-if="!isMultiProtocolPlatform || apiProtocol !== 'adaptive'" v-show="!isCursorProxyPlatform">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="apiKeyBaseUrl"
@@ -1420,7 +1455,7 @@
           v-model:rows="openCodeGoProtocolRules"
           :plan="openCodeAccountMode"
         />
-        <div>
+        <div v-if="!isCursorProxyPlatform">
           <label class="input-label">{{ t('admin.accounts.apiKeyRequired') }}</label>
           <input
             v-model="apiKeyValue"
@@ -1430,6 +1465,43 @@
             :placeholder="apiKeyValuePlaceholder"
           />
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
+        </div>
+        <div v-else-if="form.platform === 'cursor_sand'" class="space-y-3">
+          <label class="input-label">SAND_INFERENCE_RENEWAL_CREDENTIAL</label>
+          <input
+            v-model="cursorSandRenewalCredential"
+            type="password"
+            required
+            class="input font-mono"
+            placeholder="sbi_..."
+          />
+          <p class="input-hint">Grok Bot / sand 额度。从沙箱 host 环境或 grokbot-tokens.txt 复制，不要填 session JWT。</p>
+          <label class="input-label">machine_id（可选）</label>
+          <input v-model="cursorMachineId" type="text" class="input font-mono" placeholder="SAND_BOX_STORE_ID" />
+        </div>
+        <div v-else class="space-y-3">
+          <div class="flex items-center justify-between gap-3">
+            <label class="input-label mb-0">Cursor CLI 登录</label>
+            <button
+              type="button"
+              class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              :disabled="cursorCLILoggingIn"
+              @click="startCursorCLILogin"
+            >
+              {{ cursorCLILoggingIn ? '等待浏览器登录…' : '打开 CLI 登录' }}
+            </button>
+          </div>
+          <p class="input-hint">{{ cursorCLIHint }}</p>
+          <label class="input-label">CLI session token</label>
+          <input
+            v-model="cursorSessionToken"
+            type="password"
+            required
+            class="input font-mono"
+            placeholder="eyJ... 或点击上方 CLI 登录"
+          />
+          <label class="input-label">client_version（可选）</label>
+          <input v-model="cursorClientVersion" type="text" class="input font-mono" placeholder="3.21.12" />
         </div>
 
         <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
@@ -4300,6 +4372,65 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const cursorSandRenewalCredential = ref('')
+const cursorSessionToken = ref('')
+const cursorMachineId = ref('')
+const cursorClientVersion = ref('3.21.12')
+const isCursorProxyPlatform = computed(
+  () => form.platform === 'cursor_sand' || form.platform === 'cursor'
+)
+const selectCursorPlatform = (platform: 'cursor_sand' | 'cursor') => {
+  form.platform = platform
+  accountCategory.value = 'apikey'
+}
+const cursorCLILoggingIn = ref(false)
+const cursorCLIHint = ref('调用 Cursor CLI 同款 loginDeepControl：浏览器登录后自动回填 token。也可手动粘贴 agent login 后的 session JWT。')
+const cursorCLIRefreshToken = ref('')
+let cursorCLIPollTimer: ReturnType<typeof setInterval> | null = null
+
+const stopCursorCLIPoll = () => {
+  if (cursorCLIPollTimer) {
+    clearInterval(cursorCLIPollTimer)
+    cursorCLIPollTimer = null
+  }
+  cursorCLILoggingIn.value = false
+}
+
+const startCursorCLILogin = async () => {
+  stopCursorCLIPoll()
+  cursorCLILoggingIn.value = true
+  cursorCLIHint.value = '正在打开 Cursor CLI 登录页…'
+  try {
+    const sess = await adminAPI.accounts.startCursorCLILogin()
+    window.open(sess.login_url, '_blank', 'noopener')
+    cursorCLIHint.value = '请在打开的窗口完成登录，完成后会自动回填 token。'
+    let ticks = 0
+    cursorCLIPollTimer = setInterval(async () => {
+      ticks += 1
+      if (ticks > 90) {
+        stopCursorCLIPoll()
+        cursorCLIHint.value = '登录超时，请重试或手动粘贴 token。'
+        return
+      }
+      try {
+        const result = await adminAPI.accounts.pollCursorCLILogin(sess.uuid, sess.verifier)
+        if (result.status === 'ok' && result.access_token) {
+          cursorSessionToken.value = result.access_token
+          cursorCLIRefreshToken.value = result.refresh_token || ''
+          stopCursorCLIPoll()
+          cursorCLIHint.value = result.email
+            ? `CLI 登录成功（${result.email}）`
+            : 'CLI 登录成功，token 已回填。'
+        }
+      } catch {
+        // keep polling through transient errors
+      }
+    }, 2000)
+  } catch (err: any) {
+    stopCursorCLIPoll()
+    cursorCLIHint.value = err?.message || '无法启动 CLI 登录'
+  }
+}
 const upstreamBillingAutoProbeEnabled = ref(true)
 
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）账号类型、API 协议与端点 ──
@@ -4960,6 +5091,10 @@ watch(
       form.type = 'oauth'
       return
     }
+    if (form.platform === 'cursor_sand' || form.platform === 'cursor') {
+      form.type = 'apikey'
+      return
+    }
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
       return
@@ -4986,6 +5121,9 @@ watch(
   (newPlatform) => {
     if (newPlatform === 'codebuddy') {
       accountCategory.value = 'oauth-based'
+    }
+    if (newPlatform === 'cursor_sand' || newPlatform === 'cursor') {
+      accountCategory.value = 'apikey'
     }
     // Reset base URL based on platform
     if (isCNProviderPlatform(newPlatform) || newPlatform === 'opencode_go') {
@@ -5920,6 +6058,49 @@ const handleSubmit = async () => {
   }
 
   // Determine default base URL based on platform
+  if (form.platform === 'cursor_sand' || form.platform === 'cursor') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    const credentials: Record<string, unknown> = {}
+    if (form.platform === 'cursor_sand') {
+      const cred = cursorSandRenewalCredential.value.trim()
+      if (!cred) {
+        appStore.showError('请填写 SAND_INFERENCE_RENEWAL_CREDENTIAL')
+        return
+      }
+      credentials.sand_inference_renewal_credential = cred
+      if (cursorMachineId.value.trim()) credentials.machine_id = cursorMachineId.value.trim()
+    } else {
+      const token = cursorSessionToken.value.trim()
+      if (!token) {
+        appStore.showError('请填写 Cursor session JWT')
+        return
+      }
+      credentials.session_token = token
+      if (cursorCLIRefreshToken.value.trim()) credentials.refresh_token = cursorCLIRefreshToken.value.trim()
+      if (cursorClientVersion.value.trim()) credentials.client_version = cursorClientVersion.value.trim()
+      if (cursorMachineId.value.trim()) credentials.machine_id = cursorMachineId.value.trim()
+    }
+    const modelMapping = buildModelMappingObject(
+      modelRestrictionMode.value,
+      allowedModels.value,
+      modelMappings.value
+    )
+    if (modelMapping) credentials.model_mapping = modelMapping
+    form.credentials = credentials
+    await doCreateAccount({
+      ...form,
+      type: 'apikey',
+      group_ids: form.group_ids,
+      extra: withUpstreamRequestIdHeader(buildAnthropicExtra(buildOpenAIExtra())),
+      upstream_billing_probe_enabled: false,
+      auto_pause_on_expired: autoPauseOnExpired.value
+    })
+    return
+  }
+
   const defaultBaseUrl =
     form.platform === 'openai'
       ? 'https://api.openai.com'

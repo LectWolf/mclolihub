@@ -364,6 +364,21 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return ids
 	case PlatformGrok:
 		return xai.DefaultModelIDs()
+	case PlatformCursorSand:
+		return []string{
+			"grok-4.6", "grok-4.5", "composer-2.5",
+			"gpt-5.6-luna", "gpt-5.4-mini",
+			"gemini-3.1-pro", "gemini-3-flash", "gemini-2.5-flash",
+			"claude-haiku-4-5",
+		}
+	case PlatformCursor:
+		return []string{
+			"claude-fable-5-1", "claude-fable-5",
+			"claude-opus-5", "claude-sonnet-5",
+			"claude-opus-4-8", "claude-sonnet-4-6",
+			"grok-4.6", "composer-2.5",
+			"gpt-5.6-sol", "gpt-5.5",
+		}
 	case PlatformOpenCodeGo:
 		return DefaultOpenCodeGoModelIDs()
 	case PlatformComposite:
@@ -386,7 +401,7 @@ func defaultAllowImageGenerationForPlatform(platform string) bool {
 func compositeDefaultModelsListCandidateIDs() []string {
 	seen := make(map[string]struct{})
 	ids := make([]string, 0)
-	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformAntigravity, PlatformGrok, PlatformCodeBuddy, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo} {
+	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformAntigravity, PlatformGrok, PlatformCodeBuddy, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformOpenCodeGo, PlatformCursorSand, PlatformCursor} {
 		for _, id := range defaultModelsListCandidateIDs(platform) {
 			if _, ok := seen[id]; ok {
 				continue

@@ -12,7 +12,9 @@ const concretePlatforms = [
   'deepseek',
   'minimax',
   'codebuddy',
-  'opencode_go'
+  'opencode_go',
+  'cursor_sand',
+  'cursor'
 ]
 
 describe('platform option catalogs', () => {
