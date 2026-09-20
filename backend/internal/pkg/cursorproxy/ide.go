@@ -134,7 +134,7 @@ func RunInference(ctx context.Context, client *http.Client, creds IDECredentials
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != 0 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("InferenceService/RunInference HTTP %d: %s", resp.StatusCode, truncate(string(raw), 240))
 	}
 	return resp, nil
@@ -198,7 +198,7 @@ func PollCLILogin(ctx context.Context, client *http.Client, sessionUUID, verifie
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	switch resp.StatusCode {
 	case http.StatusOK:

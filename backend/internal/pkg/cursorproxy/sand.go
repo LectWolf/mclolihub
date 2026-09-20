@@ -150,7 +150,7 @@ func RenewGrokBotToken(ctx context.Context, client *http.Client, creds SandCrede
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("inference-credential renew HTTP %d: %s", resp.StatusCode, truncate(string(raw), 200))

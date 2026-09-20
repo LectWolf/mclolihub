@@ -286,7 +286,7 @@ func (s *CursorGatewayService) pumpConnectStream(
 				}
 				delta := cursorproxy.FrameText(frame)
 				if delta != "" {
-					textBuf.WriteString(delta)
+					_, _ = textBuf.WriteString(delta)
 					emit(delta, "")
 				}
 				if stopOnTurnEnd && (cursorproxy.FrameTurnEnded(frame) || cursorproxy.FrameInvocationEnded(frame)) {
