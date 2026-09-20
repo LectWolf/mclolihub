@@ -1471,16 +1471,20 @@
           :platform="form.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
           mode="create"
           :renewal-credential="cursorSandRenewalCredential"
+          :grok-bot-token="cursorGrokBotToken"
           :session-token="cursorSessionToken"
           :machine-id="cursorMachineId"
           :client-version="cursorClientVersion"
           :cli-logging-in="cursorCLILoggingIn"
           :cli-hint="cursorCLIHint"
+          :proxy-id="form.proxy_id"
           @update:renewal-credential="cursorSandRenewalCredential = $event"
+          @update:grok-bot-token="cursorGrokBotToken = $event"
           @update:session-token="cursorSessionToken = $event"
           @update:machine-id="cursorMachineId = $event"
           @update:client-version="cursorClientVersion = $event"
           @start-cli-login="startCursorCLILogin"
+          @grok-oauth-complete="onSandGrokOAuthComplete"
         />
 
         <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
@@ -4354,6 +4358,8 @@ const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
 const cursorSandRenewalCredential = ref('')
+const cursorGrokBotToken = ref('')
+const cursorGrokRefreshToken = ref('')
 const cursorSessionToken = ref('')
 const cursorMachineId = ref('')
 const cursorClientVersion = ref('3.21.12')
@@ -4375,6 +4381,11 @@ const stopCursorCLIPoll = () => {
     cursorCLIPollTimer = null
   }
   cursorCLILoggingIn.value = false
+}
+
+const onSandGrokOAuthComplete = (payload: { accessToken: string; refreshToken?: string }) => {
+  cursorGrokBotToken.value = payload.accessToken
+  cursorGrokRefreshToken.value = payload.refreshToken || ''
 }
 
 const startCursorCLILogin = async () => {
@@ -6047,11 +6058,14 @@ const handleSubmit = async () => {
     const credentials: Record<string, unknown> = {}
     if (form.platform === 'cursor_sand') {
       const cred = cursorSandRenewalCredential.value.trim()
-      if (!cred) {
+      const grokTok = cursorGrokBotToken.value.trim()
+      if (!cred && !grokTok) {
         appStore.showError(t('admin.accounts.cursorProxy.sandCredentialRequired'))
         return
       }
-      credentials.sand_inference_renewal_credential = cred
+      if (cred) credentials.sand_inference_renewal_credential = cred
+      if (grokTok) credentials.grok_bot_token = grokTok
+      if (cursorGrokRefreshToken.value.trim()) credentials.refresh_token = cursorGrokRefreshToken.value.trim()
       if (cursorMachineId.value.trim()) credentials.machine_id = cursorMachineId.value.trim()
     } else {
       const token = cursorSessionToken.value.trim()

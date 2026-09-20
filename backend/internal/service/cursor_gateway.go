@@ -85,9 +85,9 @@ func (s *CursorGatewayService) forwardSand(
 	stream bool,
 ) (*ForwardResult, error) {
 	creds := parseSandCredentials(account)
-	token, err := cursorproxy.RenewGrokBotToken(ctx, s.client, creds, s.tokens)
+	token, err := cursorproxy.ResolveSandToken(ctx, s.client, creds, s.tokens)
 	if err != nil {
-		return nil, s.writeError(c, http.StatusUnauthorized, "authentication_error", "sand renewal failed: "+err.Error())
+		return nil, s.writeError(c, http.StatusUnauthorized, "authentication_error", "sand auth failed: "+err.Error())
 	}
 	payload := cursorproxy.NewStreamPayload(model, messages)
 	resp, err := cursorproxy.Stream(ctx, s.client, token, creds, payload, uuid.NewString())
@@ -358,9 +358,15 @@ func (s *CursorGatewayService) writeError(c *gin.Context, status int, errType, m
 }
 
 func parseSandCredentials(account *Account) cursorproxy.SandCredentials {
+	token := strings.TrimSpace(account.GetCredential("grok_bot_token"))
+	if token == "" {
+		token = strings.TrimSpace(account.GetCredential("access_token"))
+	}
 	return cursorproxy.SandCredentials{
 		RenewalCredential: strings.TrimSpace(account.GetCredential("sand_inference_renewal_credential")),
+		GrokBotToken:      token,
 		MachineID:         strings.TrimSpace(account.GetCredential("machine_id")),
+		ClientOS:          strings.TrimSpace(account.GetCredential("client_os")),
 	}
 }
 

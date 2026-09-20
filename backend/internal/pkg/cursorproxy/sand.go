@@ -12,13 +12,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 // SandCredentials are stored on a cursor_sand account. The renewal credential is
 // filled in by an admin; grokBotToken is minted at request time and never stored.
 type SandCredentials struct {
 	RenewalCredential string
+	GrokBotToken      string
 	MachineID         string
+	ClientOS          string
 }
 
 // StreamRequest is the InferenceService/Stream JSON body.
@@ -98,7 +102,8 @@ func sandMachineID(creds SandCredentials) string {
 	return hexed[:8] + "-" + hexed[8:12] + "-" + hexed[12:16] + "-" + hexed[16:20] + "-" + hexed[20:32]
 }
 
-func sandHeaders(machineID, requestID string) http.Header {
+func sandHeaders(creds SandCredentials, machineID, requestID string) http.Header {
+	clientOS := sandClientOS(creds)
 	h := make(http.Header)
 	h.Set("content-type", connectContentType)
 	h.Set("connect-protocol-version", "1")
@@ -110,10 +115,32 @@ func sandHeaders(machineID, requestID string) http.Header {
 	h.Set("x-cursor-client-machine-id", machineID)
 	h.Set("x-cursor-checksum", Checksum(machineID))
 	h.Set("x-ghost-mode", "true")
+	h.Set("x-cursor-client-os", clientOS)
+	h.Set("User-Agent", sandUserAgent)
+	h.Set("x-grok-client-version", xai.ResolveCLIVersion())
+	h.Set("x-grok-client-identifier", xai.CLIClientIdentifier)
+	h.Set("x-grok-client-mode", xai.CLIClientMode)
 	if requestID != "" {
 		h.Set("x-request-id", requestID)
 	}
 	return h
+}
+
+const sandUserAgent = "GrokBotLocalProxy/1.0"
+
+func sandClientOS(creds SandCredentials) string {
+	if osName := strings.TrimSpace(creds.ClientOS); osName != "" {
+		return osName
+	}
+	return "linux"
+}
+
+// ResolveSandToken returns a grok_bot JWT: stored grokBotToken wins, otherwise renew.
+func ResolveSandToken(ctx context.Context, client *http.Client, creds SandCredentials, cache *TokenCache) (string, error) {
+	if token := strings.TrimSpace(creds.GrokBotToken); token != "" {
+		return token, nil
+	}
+	return RenewGrokBotToken(ctx, client, creds, cache)
 }
 
 func renewHeaders() http.Header {
@@ -184,7 +211,7 @@ func Stream(ctx context.Context, client *http.Client, token string, creds SandCr
 	if err != nil {
 		return nil, err
 	}
-	req.Header = sandHeaders(machineID, requestID)
+	req.Header = sandHeaders(creds, machineID, requestID)
 	req.Header.Set("authorization", "Bearer "+token)
 	return client.Do(req)
 }

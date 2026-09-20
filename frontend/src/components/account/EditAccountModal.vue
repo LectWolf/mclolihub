@@ -233,16 +233,20 @@
           :platform="account.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
           mode="edit"
           :renewal-credential="cursorSandRenewalCredential"
+          :grok-bot-token="cursorGrokBotToken"
           :session-token="cursorSessionToken"
           :machine-id="cursorMachineId"
           :client-version="cursorClientVersion"
           :cli-logging-in="cursorCLILoggingIn"
           :cli-hint="cursorCLIHint"
+          :proxy-id="form.proxy_id"
           @update:renewal-credential="cursorSandRenewalCredential = $event"
+          @update:grok-bot-token="cursorGrokBotToken = $event"
           @update:session-token="cursorSessionToken = $event"
           @update:machine-id="cursorMachineId = $event"
           @update:client-version="cursorClientVersion = $event"
           @start-cli-login="startCursorCLILogin"
+          @grok-oauth-complete="onSandGrokOAuthComplete"
         />
 
         <!-- Model Restriction Section (不适用于 Antigravity) -->
@@ -3229,6 +3233,8 @@ const isCursorProxyAccount = computed(
   () => props.account?.platform === 'cursor_sand' || props.account?.platform === 'cursor'
 )
 const cursorSandRenewalCredential = ref('')
+const cursorGrokBotToken = ref('')
+const cursorGrokRefreshToken = ref('')
 const cursorSessionToken = ref('')
 const cursorMachineId = ref('')
 const cursorClientVersion = ref('3.21.12')
@@ -3243,6 +3249,11 @@ const stopCursorCLIPoll = () => {
     cursorCLIPollTimer = null
   }
   cursorCLILoggingIn.value = false
+}
+
+const onSandGrokOAuthComplete = (payload: { accessToken: string; refreshToken?: string }) => {
+  cursorGrokBotToken.value = payload.accessToken
+  cursorGrokRefreshToken.value = payload.refreshToken || ''
 }
 
 const startCursorCLILogin = async () => {
@@ -4473,6 +4484,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   }
   editApiKey.value = ''
   cursorSandRenewalCredential.value = ''
+  cursorGrokBotToken.value = ''
+  cursorGrokRefreshToken.value = ''
   cursorSessionToken.value = ''
   cursorCLIRefreshToken.value = ''
   stopCursorCLIPoll()
@@ -5172,6 +5185,12 @@ const handleSubmit = async () => {
         if (props.account.platform === 'cursor_sand') {
           if (cursorSandRenewalCredential.value.trim()) {
             newCredentials.sand_inference_renewal_credential = cursorSandRenewalCredential.value.trim()
+          }
+          if (cursorGrokBotToken.value.trim()) {
+            newCredentials.grok_bot_token = cursorGrokBotToken.value.trim()
+          }
+          if (cursorGrokRefreshToken.value.trim()) {
+            newCredentials.refresh_token = cursorGrokRefreshToken.value.trim()
           }
         } else if (cursorSessionToken.value.trim()) {
           newCredentials.session_token = cursorSessionToken.value.trim()

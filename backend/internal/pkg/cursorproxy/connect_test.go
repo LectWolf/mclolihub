@@ -85,6 +85,16 @@ func TestFrameRunReady(t *testing.T) {
 	}
 }
 
+func TestResolveSandTokenPrefersGrokBotToken(t *testing.T) {
+	token, err := ResolveSandToken(t.Context(), nil, SandCredentials{GrokBotToken: "gb-direct"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "gb-direct" {
+		t.Fatalf("got %s", token)
+	}
+}
+
 func TestChecksumStableShape(t *testing.T) {
 	cs := Checksum("c8b94651-f0a5-55bd-961a-921860efc3bf")
 	if !json.Valid([]byte("\"" + cs + "\"")) {
