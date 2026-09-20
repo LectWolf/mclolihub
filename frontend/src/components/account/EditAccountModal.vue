@@ -5177,9 +5177,11 @@ const handleSubmit = async () => {
         props.account.credentials_status?.has_api_key
         || props.account.credentials_status?.has_sand_inference_renewal_credential
         || props.account.credentials_status?.has_session_token
+        || props.account.credentials_status?.has_grok_bot_token
         || currentCredentials.api_key
         || currentCredentials.sand_inference_renewal_credential
         || currentCredentials.session_token
+        || currentCredentials.grok_bot_token
       )
       if (isCursorProxyAccount.value) {
         if (props.account.platform === 'cursor_sand') {
