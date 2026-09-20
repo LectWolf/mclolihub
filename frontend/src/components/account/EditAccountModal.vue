@@ -5160,8 +5160,14 @@ const handleSubmit = async () => {
       // 用户填入新值则覆盖；留空时优先看 credentials_status.has_api_key；
       // 若后端尚未升级（无 credentials_status），回退读旧结构 currentCredentials.api_key。
       // 两者都无才报错。
-      const hasExistingApiKey =
-        props.account.credentials_status?.has_api_key ?? Boolean(currentCredentials.api_key)
+      const hasExistingApiKey = Boolean(
+        props.account.credentials_status?.has_api_key
+        || props.account.credentials_status?.has_sand_inference_renewal_credential
+        || props.account.credentials_status?.has_session_token
+        || currentCredentials.api_key
+        || currentCredentials.sand_inference_renewal_credential
+        || currentCredentials.session_token
+      )
       if (isCursorProxyAccount.value) {
         if (props.account.platform === 'cursor_sand') {
           if (cursorSandRenewalCredential.value.trim()) {

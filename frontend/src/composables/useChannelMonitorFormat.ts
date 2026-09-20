@@ -46,7 +46,7 @@ export interface AvailabilityRow {
 }
 
 export function useChannelMonitorFormat() {
-  const { t } = useI18n()
+  const { t, te } = useI18n()
 
   function statusLabel(s: MonitorStatus | ''): string {
     if (!s) return t('monitorCommon.status.unknown')
@@ -68,10 +68,13 @@ export function useChannelMonitorFormat() {
   }
 
   function providerLabel(p: Provider | string): string {
+    if (!p) return '-'
+    const key = `monitorCommon.providers.${p}`
+    if (te(key)) return t(key)
     if (PROVIDERS.includes(p as Provider)) {
-      return t(`monitorCommon.providers.${p}`)
+      return t(key)
     }
-    return p || '-'
+    return p
   }
 
   function checkModeLabel(m: CheckMode | string): string {

@@ -523,7 +523,9 @@ export default {
       deepseek: 'DeepSeek',
       minimax: 'MiniMax',
       codebuddy: 'CodeBuddy',
-      opencode_go: 'OpenCode'
+      opencode_go: 'OpenCode',
+      cursor_sand: 'Cursor Sand',
+      cursor: 'Cursor IDE'
     },
     // Check modes (how a monitor performs its checks)
     checkMode: {

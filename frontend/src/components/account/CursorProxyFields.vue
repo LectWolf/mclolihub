@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-3">
     <template v-if="platform === 'cursor_sand'">
-      <label class="input-label">SAND_INFERENCE_RENEWAL_CREDENTIAL</label>
+      <label class="input-label">{{ t('admin.accounts.cursorProxy.sandCredential') }}</label>
       <input
         :value="renewalCredential"
         type="password"
@@ -12,10 +12,10 @@
         @input="emit('update:renewalCredential', ($event.target as HTMLInputElement).value)"
       />
       <p class="input-hint">
-        InferenceService/Stream，走 Grok Bot / sand 额度。从沙箱 host 环境复制续期凭据，不要填 session JWT。
-        <span v-if="mode === 'edit'">留空则保持原凭据。</span>
+        {{ t('admin.accounts.cursorProxy.sandCredentialHint') }}
+        <span v-if="mode === 'edit'">{{ t('admin.accounts.cursorProxy.sandKeepHint') }}</span>
       </p>
-      <label class="input-label">machine_id（可选）</label>
+      <label class="input-label">{{ t('admin.accounts.cursorProxy.machineId') }}</label>
       <input
         :value="machineId"
         type="text"
@@ -27,31 +27,31 @@
 
     <template v-else>
       <div class="flex items-center justify-between gap-3">
-        <label class="input-label mb-0">Cursor CLI 登录</label>
+        <label class="input-label mb-0">{{ t('admin.accounts.cursorProxy.cliLogin') }}</label>
         <button
           type="button"
           class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
           :disabled="cliLoggingIn"
           @click="emit('startCliLogin')"
         >
-          {{ cliLoggingIn ? '等待浏览器登录…' : '打开 CLI 登录' }}
+          {{ cliLoggingIn ? t('admin.accounts.cursorProxy.cliLoginWait') : t('admin.accounts.cursorProxy.cliLoginOpen') }}
         </button>
       </div>
       <p class="input-hint">{{ cliHint }}</p>
-      <label class="input-label">CLI session token</label>
+      <label class="input-label">{{ t('admin.accounts.cursorProxy.sessionToken') }}</label>
       <input
         :value="sessionToken"
         type="password"
         class="input font-mono"
         autocomplete="new-password"
-        :placeholder="mode === 'create' ? 'eyJ... 或点击上方 CLI 登录' : '留空保持原 token'"
+        :placeholder="mode === 'create' ? t('admin.accounts.cursorProxy.sessionTokenCreatePlaceholder') : t('admin.accounts.cursorProxy.sessionTokenEditPlaceholder')"
         :required="mode === 'create'"
         @input="emit('update:sessionToken', ($event.target as HTMLInputElement).value)"
       />
       <p class="input-hint">
-        InferenceService/RunInference，走 Cursor IDE 额度。使用 Cursor CLI（loginDeepControl / agent login）的 session JWT，不要填 grok_bot 或 Origin CLI token。
+        {{ t('admin.accounts.cursorProxy.sessionTokenHint') }}
       </p>
-      <label class="input-label">client_version（可选）</label>
+      <label class="input-label">{{ t('admin.accounts.cursorProxy.clientVersion') }}</label>
       <input
         :value="clientVersion"
         type="text"
@@ -64,6 +64,8 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 defineProps<{
   platform: 'cursor_sand' | 'cursor'
   mode: 'create' | 'edit'
@@ -74,6 +76,8 @@ defineProps<{
   cliLoggingIn: boolean
   cliHint: string
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   'update:renewalCredential': [value: string]

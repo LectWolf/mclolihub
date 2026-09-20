@@ -272,10 +272,10 @@
           </button>
         </div>
         <p v-if="form.platform === 'cursor_sand'" class="input-hint mt-2">
-          InferenceService/Stream · Grok Bot / sand 额度 · 手动填写 SAND_INFERENCE_RENEWAL_CREDENTIAL
+          {{ t('admin.accounts.cursorProxy.sandPlatformHint') }}
         </p>
         <p v-else-if="form.platform === 'cursor'" class="input-hint mt-2">
-          InferenceService/RunInference · Cursor IDE 额度 · 用 Cursor CLI 登录（loginDeepControl）拿 session 票
+          {{ t('admin.accounts.cursorProxy.idePlatformHint') }}
         </p>
       </div>
 
@@ -6033,7 +6033,7 @@ const handleSubmit = async () => {
   }
 
   // For apikey type, create directly
-  if (!apiKeyValue.value.trim()) {
+  if (!isCursorProxyPlatform.value && !apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
     return
   }
@@ -6048,7 +6048,7 @@ const handleSubmit = async () => {
     if (form.platform === 'cursor_sand') {
       const cred = cursorSandRenewalCredential.value.trim()
       if (!cred) {
-        appStore.showError('请填写 SAND_INFERENCE_RENEWAL_CREDENTIAL')
+        appStore.showError(t('admin.accounts.cursorProxy.sandCredentialRequired'))
         return
       }
       credentials.sand_inference_renewal_credential = cred
@@ -6056,7 +6056,7 @@ const handleSubmit = async () => {
     } else {
       const token = cursorSessionToken.value.trim()
       if (!token) {
-        appStore.showError('请填写 Cursor session JWT')
+        appStore.showError(t('admin.accounts.cursorProxy.sessionTokenRequired'))
         return
       }
       credentials.session_token = token
