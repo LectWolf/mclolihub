@@ -1238,6 +1238,8 @@ function generateRoutedCodexFiles(
     minimax: 'MiniMax-M3',
     codebuddy: 'codebuddy-code',
     opencode_go: 'glm-5.3',
+    cursor_sand: 'grok-4.6',
+    cursor: 'claude-fable-5-1',
     composite: 'gpt-5.5'
   }
   const preferredModel = preferredModels[platform] || ''
@@ -1254,6 +1256,8 @@ function generateRoutedCodexFiles(
     minimax: 'MiniMax',
     codebuddy: 'CodeBuddy',
     opencode_go: 'OpenCode',
+    cursor_sand: 'Cursor Sand',
+    cursor: 'Cursor IDE',
     composite: 'Composite'
   }
   const label = labels[platform]

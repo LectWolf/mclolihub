@@ -1466,46 +1466,26 @@
           />
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
         </div>
-        <div v-else-if="form.platform === 'cursor_sand'" class="space-y-3">
-          <label class="input-label">SAND_INFERENCE_RENEWAL_CREDENTIAL</label>
-          <input
-            v-model="cursorSandRenewalCredential"
-            type="password"
-            required
-            class="input font-mono"
-            placeholder="sbi_..."
-          />
-          <p class="input-hint">Grok Bot / sand 额度。从沙箱 host 环境或 grokbot-tokens.txt 复制，不要填 session JWT。</p>
-          <label class="input-label">machine_id（可选）</label>
-          <input v-model="cursorMachineId" type="text" class="input font-mono" placeholder="SAND_BOX_STORE_ID" />
-        </div>
-        <div v-else class="space-y-3">
-          <div class="flex items-center justify-between gap-3">
-            <label class="input-label mb-0">Cursor CLI 登录</label>
-            <button
-              type="button"
-              class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-              :disabled="cursorCLILoggingIn"
-              @click="startCursorCLILogin"
-            >
-              {{ cursorCLILoggingIn ? '等待浏览器登录…' : '打开 CLI 登录' }}
-            </button>
-          </div>
-          <p class="input-hint">{{ cursorCLIHint }}</p>
-          <label class="input-label">CLI session token</label>
-          <input
-            v-model="cursorSessionToken"
-            type="password"
-            required
-            class="input font-mono"
-            placeholder="eyJ... 或点击上方 CLI 登录"
-          />
-          <label class="input-label">client_version（可选）</label>
-          <input v-model="cursorClientVersion" type="text" class="input font-mono" placeholder="3.21.12" />
-        </div>
+        <CursorProxyFields
+          v-else
+          :platform="form.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
+          mode="create"
+          :renewal-credential="cursorSandRenewalCredential"
+          :session-token="cursorSessionToken"
+          :machine-id="cursorMachineId"
+          :client-version="cursorClientVersion"
+          :cli-logging-in="cursorCLILoggingIn"
+          :cli-hint="cursorCLIHint"
+          @update:renewal-credential="cursorSandRenewalCredential = $event"
+          @update:session-token="cursorSessionToken = $event"
+          @update:machine-id="cursorMachineId = $event"
+          @update:client-version="cursorClientVersion = $event"
+          @start-cli-login="startCursorCLILogin"
+        />
 
         <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
         <div
+          v-if="!isCursorProxyPlatform"
           class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600"
         >
           <div>
@@ -4144,6 +4124,7 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
+import CursorProxyFields from '@/components/account/CursorProxyFields.vue'
 import { allSelectedGroupsEnableLongContextPricing } from '@/components/account/longContextBilling'
 import {
   applyAntigravityProjectID,

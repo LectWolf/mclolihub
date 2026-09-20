@@ -28,7 +28,7 @@
 
       <!-- API Key fields (only for apikey type) -->
       <div v-if="account.type === 'apikey'" class="space-y-4">
-        <div v-if="!isCNApiKeyAccount || editApiProtocol !== 'adaptive'">
+        <div v-if="(!isCNApiKeyAccount || editApiProtocol !== 'adaptive') && !isCursorProxyAccount">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="editBaseUrl"
@@ -62,7 +62,7 @@
             @select="onCnPresetSelect"
           />
         </div>
-        <div v-else>
+        <div v-else-if="isCNApiKeyAccount && editApiProtocol === 'adaptive'">
           <label class="input-label">{{ t('admin.accounts.cnProviders.apiProtocol.endpoints') }}</label>
           <div class="mt-2 space-y-3">
             <div v-for="item in editAdaptiveProtocolOptions" :key="item.value">
@@ -204,7 +204,7 @@
           </div>
           <p class="input-hint mt-2">{{ t('admin.accounts.cnProviders.zhipuTeam.hint') }}</p>
         </div>
-        <div>
+        <div v-if="!isCursorProxyAccount">
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
           <input
             v-model="editApiKey"
@@ -228,6 +228,22 @@
           />
           <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
         </div>
+        <CursorProxyFields
+          v-else-if="account.platform === 'cursor_sand' || account.platform === 'cursor'"
+          :platform="account.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
+          mode="edit"
+          :renewal-credential="cursorSandRenewalCredential"
+          :session-token="cursorSessionToken"
+          :machine-id="cursorMachineId"
+          :client-version="cursorClientVersion"
+          :cli-logging-in="cursorCLILoggingIn"
+          :cli-hint="cursorCLIHint"
+          @update:renewal-credential="cursorSandRenewalCredential = $event"
+          @update:session-token="cursorSessionToken = $event"
+          @update:machine-id="cursorMachineId = $event"
+          @update:client-version="cursorClientVersion = $event"
+          @start-cli-login="startCursorCLILogin"
+        />
 
         <!-- Model Restriction Section (不适用于 Antigravity) -->
         <div v-if="account.platform !== 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -3080,6 +3096,7 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
+import CursorProxyFields from '@/components/account/CursorProxyFields.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import {
   applyAntigravityProjectID,
@@ -3208,6 +3225,59 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const isCursorProxyAccount = computed(
+  () => props.account?.platform === 'cursor_sand' || props.account?.platform === 'cursor'
+)
+const cursorSandRenewalCredential = ref('')
+const cursorSessionToken = ref('')
+const cursorMachineId = ref('')
+const cursorClientVersion = ref('3.21.12')
+const cursorCLILoggingIn = ref(false)
+const cursorCLIHint = ref('调用 Cursor CLI 同款 loginDeepControl：浏览器登录后自动回填 token。也可手动粘贴。')
+const cursorCLIRefreshToken = ref('')
+let cursorCLIPollTimer: ReturnType<typeof setInterval> | null = null
+
+const stopCursorCLIPoll = () => {
+  if (cursorCLIPollTimer) {
+    clearInterval(cursorCLIPollTimer)
+    cursorCLIPollTimer = null
+  }
+  cursorCLILoggingIn.value = false
+}
+
+const startCursorCLILogin = async () => {
+  stopCursorCLIPoll()
+  cursorCLILoggingIn.value = true
+  cursorCLIHint.value = '正在打开 Cursor CLI 登录页…'
+  try {
+    const sess = await adminAPI.accounts.startCursorCLILogin()
+    window.open(sess.login_url, '_blank', 'noopener')
+    cursorCLIHint.value = '请在打开的窗口完成登录，完成后会自动回填 token。'
+    let ticks = 0
+    cursorCLIPollTimer = setInterval(async () => {
+      ticks += 1
+      if (ticks > 90) {
+        stopCursorCLIPoll()
+        cursorCLIHint.value = '登录超时，请重试或手动粘贴 token。'
+        return
+      }
+      try {
+        const result = await adminAPI.accounts.pollCursorCLILogin(sess.uuid, sess.verifier)
+        if (result.status === 'ok' && result.access_token) {
+          cursorSessionToken.value = result.access_token
+          cursorCLIRefreshToken.value = result.refresh_token || ''
+          stopCursorCLIPoll()
+          cursorCLIHint.value = result.email ? `CLI 登录成功（${result.email}）` : 'CLI 登录成功，token 已回填。'
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 2000)
+  } catch (err: any) {
+    stopCursorCLIPoll()
+    cursorCLIHint.value = err?.message || '无法启动 CLI 登录'
+  }
+}
 
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）account_mode / api_protocol 编辑 ──
 // account_mode 决定额度/余额监控路径，api_protocol 决定转发端点与格式；
@@ -4402,6 +4472,14 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     selectedErrorCodes.value = []
   }
   editApiKey.value = ''
+  cursorSandRenewalCredential.value = ''
+  cursorSessionToken.value = ''
+  cursorCLIRefreshToken.value = ''
+  stopCursorCLIPoll()
+  cursorCLIHint.value = '调用 Cursor CLI 同款 loginDeepControl：浏览器登录后自动回填 token。也可手动粘贴。'
+  const cursorCreds = (newAccount.credentials || {}) as Record<string, unknown>
+  cursorMachineId.value = String(cursorCreds.machine_id || '')
+  cursorClientVersion.value = String(cursorCreds.client_version || '3.21.12')
 }
 
 async function loadTLSProfiles() {
@@ -5084,7 +5162,26 @@ const handleSubmit = async () => {
       // 两者都无才报错。
       const hasExistingApiKey =
         props.account.credentials_status?.has_api_key ?? Boolean(currentCredentials.api_key)
-      if (editApiKey.value.trim()) {
+      if (isCursorProxyAccount.value) {
+        if (props.account.platform === 'cursor_sand') {
+          if (cursorSandRenewalCredential.value.trim()) {
+            newCredentials.sand_inference_renewal_credential = cursorSandRenewalCredential.value.trim()
+          }
+        } else if (cursorSessionToken.value.trim()) {
+          newCredentials.session_token = cursorSessionToken.value.trim()
+        }
+        if (cursorCLIRefreshToken.value.trim()) {
+          newCredentials.refresh_token = cursorCLIRefreshToken.value.trim()
+        }
+        if (cursorMachineId.value.trim()) {
+          newCredentials.machine_id = cursorMachineId.value.trim()
+        } else {
+          delete newCredentials.machine_id
+        }
+        if (cursorClientVersion.value.trim()) {
+          newCredentials.client_version = cursorClientVersion.value.trim()
+        }
+      } else if (editApiKey.value.trim()) {
         newCredentials.api_key = editApiKey.value.trim()
       } else if (!hasExistingApiKey) {
         appStore.showError(t('admin.accounts.apiKeyIsRequired'))

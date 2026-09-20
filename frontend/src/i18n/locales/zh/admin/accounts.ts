@@ -362,6 +362,8 @@ export default {
         deepseek: 'DeepSeek',
         minimax: 'MiniMax',
         opencode_go: 'OpenCode',
+        cursor_sand: 'Cursor Sand',
+        cursor: 'Cursor IDE',
       },
       cnProviders: {
         accountMode: {
