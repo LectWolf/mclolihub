@@ -12,11 +12,14 @@ import (
 // OpenChat posts a signed chat body and returns the upstream response.
 // The caller must close the body. A non-200 status is still returned so the
 // caller can read the error payload.
-func OpenChat(ctx context.Context, client *http.Client, identity Identity, model string, body []byte) (*http.Response, error) {
+func OpenChat(ctx context.Context, client *http.Client, identity Identity, model string, body []byte, chatURL string) (*http.Response, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	signed, err := Sign(body, ChatURL(), Creds{
+	if strings.TrimSpace(chatURL) == "" {
+		chatURL = ChatURL()
+	}
+	signed, err := Sign(body, chatURL, Creds{
 		UserID:    identity.UserID,
 		AuthToken: identity.JobToken,
 		Name:      identity.Name,
@@ -26,7 +29,7 @@ func OpenChat(ctx context.Context, client *http.Client, identity Identity, model
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ChatURL(), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

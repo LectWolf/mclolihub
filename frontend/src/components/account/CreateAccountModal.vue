@@ -1509,8 +1509,11 @@
           mode="create"
           :personal-token="qoderPersonalToken"
           :machine-id="qoderMachineId"
+          :region="qoderRegion"
           @update:personal-token="qoderPersonalToken = $event"
           @update:machine-id="qoderMachineId = $event"
+          @update:region="qoderRegion = $event"
+          @oauth="onQoderOAuth"
         />
 
         <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
@@ -4398,6 +4401,19 @@ const hidesGenericApiKey = computed(
 )
 const qoderPersonalToken = ref('')
 const qoderMachineId = ref('')
+const qoderRegion = ref<'cn' | 'global'>('cn')
+const qoderAccessToken = ref('')
+const qoderRefreshToken = ref('')
+const qoderUserID = ref('')
+const qoderExpiresAt = ref('')
+const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
+  qoderAccessToken.value = payload.accessToken
+  qoderRefreshToken.value = payload.refreshToken
+  qoderUserID.value = payload.userId
+  qoderExpiresAt.value = payload.expiresAt
+  qoderMachineId.value = payload.machineId
+  qoderRegion.value = payload.region
+}
 const selectCursorPlatform = (platform: 'cursor_sand' | 'cursor') => {
   form.platform = platform
   accountCategory.value = 'apikey'
@@ -6092,11 +6108,17 @@ const handleSubmit = async () => {
       return
     }
     const token = qoderPersonalToken.value.trim()
-    if (!token) {
-      appStore.showError(t('admin.accounts.qoderProxy.personalTokenRequired'))
+    const access = qoderAccessToken.value.trim()
+    if (!token && !access) {
+      appStore.showError(t('admin.accounts.qoderProxy.credentialRequired'))
       return
     }
-    const credentials: Record<string, unknown> = { personal_token: token }
+    const credentials: Record<string, unknown> = { qoder_region: qoderRegion.value }
+    if (token) credentials.personal_token = token
+    if (access) credentials.access_token = access
+    if (qoderRefreshToken.value.trim()) credentials.refresh_token = qoderRefreshToken.value.trim()
+    if (qoderUserID.value.trim()) credentials.user_id = qoderUserID.value.trim()
+    if (qoderExpiresAt.value.trim()) credentials.expires_at = qoderExpiresAt.value.trim()
     if (qoderMachineId.value.trim()) credentials.machine_id = qoderMachineId.value.trim()
     const modelMapping = buildModelMappingObject(
       modelRestrictionMode.value,

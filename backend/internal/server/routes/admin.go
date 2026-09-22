@@ -423,6 +423,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.GET("/antigravity/default-model-mapping", h.Admin.Account.GetAntigravityDefaultModelMapping)
 		accounts.POST("/cursor/cli-login/start", h.Admin.Account.StartCursorCLILogin)
 		accounts.POST("/cursor/cli-login/poll", h.Admin.Account.PollCursorCLILogin)
+		accounts.POST("/qoder/oauth/start", h.Admin.Account.StartQoderOAuth)
+		accounts.POST("/qoder/oauth/poll", h.Admin.Account.PollQoderOAuth)
 
 		// Spark 影子账号
 		accounts.POST("/:id/shadow", h.Admin.OpenAIOAuth.CreateShadow)

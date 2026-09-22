@@ -22,12 +22,23 @@ import (
 type QoderGatewayService struct {
 	tokens *qoderproxy.TokenCache
 	client *http.Client
+	creds  qoderCredentialWriter
+}
+
+type qoderCredentialWriter interface {
+	UpdateCredentials(ctx context.Context, id int64, credentials map[string]any) error
 }
 
 func NewQoderGatewayService() *QoderGatewayService {
 	return &QoderGatewayService{
 		tokens: qoderproxy.NewTokenCache(),
 		client: &http.Client{},
+	}
+}
+
+func (s *QoderGatewayService) SetCredentialWriter(writer qoderCredentialWriter) {
+	if s != nil {
+		s.creds = writer
 	}
 }
 
@@ -58,11 +69,7 @@ func (s *QoderGatewayService) ForwardAsChatCompletions(
 		return nil, s.writeError(c, http.StatusBadRequest, "invalid_request_error", "messages required")
 	}
 	pat := qoderPersonalToken(account)
-	if pat == "" {
-		return nil, s.writeError(c, http.StatusUnauthorized, "authentication_error", "qoder personal token is required")
-	}
-
-	identity, err := s.tokens.Resolve(ctx, s.client, pat, strings.TrimSpace(account.GetCredential("machine_id")))
+	identity, chatURL, err := s.resolveQoderIdentity(ctx, account, pat)
 	if err != nil {
 		return nil, s.writeError(c, http.StatusUnauthorized, "authentication_error", err.Error())
 	}
@@ -90,7 +97,7 @@ func (s *QoderGatewayService) ForwardAsChatCompletions(
 		return nil, s.writeError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 	}
 
-	resp, err := qoderproxy.OpenChat(ctx, s.client, identity, model, payload)
+	resp, err := qoderproxy.OpenChat(ctx, s.client, identity, model, payload, chatURL)
 	if err != nil {
 		return nil, s.writeError(c, http.StatusBadGateway, "api_error", err.Error())
 	}
@@ -272,6 +279,87 @@ func (s *QoderGatewayService) writeError(c *gin.Context, status int, errType, me
 		},
 	})
 	return errors.New(message)
+}
+
+func (s *QoderGatewayService) resolveQoderIdentity(ctx context.Context, account *Account, pat string) (qoderproxy.Identity, string, error) {
+	region := qoderproxy.NormalizeRegion(account.GetCredential("qoder_region"))
+	access := strings.TrimSpace(account.GetCredential("access_token"))
+	refresh := strings.TrimSpace(account.GetCredential("refresh_token"))
+	if access != "" || refresh != "" {
+		return s.resolveQoderOAuth(ctx, account, region, access, refresh)
+	}
+	if pat == "" {
+		return qoderproxy.Identity{}, "", errors.New("qoder personal token or device login is required")
+	}
+	identity, err := s.tokens.Resolve(ctx, s.client, pat, strings.TrimSpace(account.GetCredential("machine_id")))
+	if err != nil {
+		return qoderproxy.Identity{}, "", err
+	}
+	chatURL := qoderproxy.ChatURL()
+	if strings.TrimSpace(account.GetCredential("qoder_region")) == string(qoderproxy.RegionCN) {
+		chatURL = region.ChatEndpoint()
+	}
+	return identity, chatURL, nil
+}
+
+func (s *QoderGatewayService) resolveQoderOAuth(ctx context.Context, account *Account, region qoderproxy.Region, access, refresh string) (qoderproxy.Identity, string, error) {
+	expires := account.GetCredentialAsTime("expires_at")
+	needsRefresh := access == "" || (expires != nil && time.Until(*expires) < 5*time.Minute)
+	if needsRefresh {
+		if refresh == "" {
+			return qoderproxy.Identity{}, "", errors.New("qoder device token expired")
+		}
+		tok, err := qoderproxy.RefreshLogin(ctx, s.client, string(region), refresh)
+		if err != nil {
+			return qoderproxy.Identity{}, "", err
+		}
+		access = tok.AccessToken
+		if tok.RefreshToken != "" {
+			refresh = tok.RefreshToken
+		}
+		s.persistQoderOAuth(ctx, account, tok)
+	}
+	userID := strings.TrimSpace(account.GetCredential("user_id"))
+	name := strings.TrimSpace(account.GetCredential("name"))
+	email := strings.TrimSpace(account.GetCredential("email"))
+	if userID == "" {
+		var profErr error
+		userID, name, email, profErr = qoderproxy.FetchProfile(ctx, s.client, region.APIBase()+"/api/v1/userinfo", access)
+		if profErr != nil {
+			return qoderproxy.Identity{}, "", profErr
+		}
+	}
+	return qoderproxy.Identity{
+		UserID:    userID,
+		Name:      name,
+		Email:     email,
+		JobToken:  access,
+		MachineID: strings.TrimSpace(account.GetCredential("machine_id")),
+	}, region.ChatEndpoint(), nil
+}
+
+func (s *QoderGatewayService) persistQoderOAuth(ctx context.Context, account *Account, tok qoderproxy.DeviceToken) {
+	if account.Credentials == nil {
+		account.Credentials = map[string]any{}
+	}
+	account.Credentials["access_token"] = tok.AccessToken
+	if tok.RefreshToken != "" {
+		account.Credentials["refresh_token"] = tok.RefreshToken
+	}
+	if !tok.ExpiresAt.IsZero() {
+		account.Credentials["expires_at"] = tok.ExpiresAt.Format(time.RFC3339)
+	}
+	if tok.UserID != "" {
+		account.Credentials["user_id"] = tok.UserID
+	}
+	if s.creds == nil || account.ID == 0 {
+		return
+	}
+	copied := make(map[string]any, len(account.Credentials))
+	for k, v := range account.Credentials {
+		copied[k] = v
+	}
+	_ = s.creds.UpdateCredentials(ctx, account.ID, copied)
 }
 
 func qoderPersonalToken(account *Account) string {

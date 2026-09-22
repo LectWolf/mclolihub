@@ -423,8 +423,8 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	if s.qoderGatewayService == nil {
 		return s.sendErrorAndEnd(c, "Qoder proxy service is not configured")
 	}
-	if strings.TrimSpace(qoderPersonalToken(account)) == "" {
-		return s.sendErrorAndEnd(c, "No Qoder personal access token available")
+	if strings.TrimSpace(qoderPersonalToken(account)) == "" && strings.TrimSpace(account.GetCredential("access_token")) == "" && strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
+		return s.sendErrorAndEnd(c, "No Qoder personal access token or device login available")
 	}
 
 	testModelID := strings.TrimSpace(modelID)

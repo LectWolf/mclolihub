@@ -13,8 +13,6 @@ import (
 )
 
 const (
-	jobTokenURL = "https://openapi.qoder.sh/api/v1/jobToken/exchange"
-	userInfoURL = "https://openapi.qoder.sh/api/v1/userinfo"
 	userAgent   = "qodercli/1.0.0"
 	refreshSkew = 5 * time.Minute
 )
@@ -72,7 +70,7 @@ func (c *TokenCache) Resolve(ctx context.Context, client *http.Client, pat, mach
 		}
 	}
 
-	identity, err := exchange(ctx, client, pat)
+	identity, err := exchange(ctx, client, RegionGlobal.APIBase(), pat)
 	if err != nil {
 		return Identity{}, err
 	}
@@ -89,12 +87,12 @@ func (c *TokenCache) Resolve(ctx context.Context, client *http.Client, pat, mach
 	return identity, nil
 }
 
-func exchange(ctx context.Context, client *http.Client, pat string) (Identity, error) {
+func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Identity, error) {
 	raw, err := json.Marshal(map[string]string{"personal_token": pat})
 	if err != nil {
 		return Identity{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, jobTokenURL, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(apiBase, "/")+"/api/v1/jobToken/exchange", bytes.NewReader(raw))
 	if err != nil {
 		return Identity{}, err
 	}
@@ -133,7 +131,7 @@ func exchange(ctx context.Context, client *http.Client, pat string) (Identity, e
 		ExpiresAt: expiry(parsed.ExpiresAt, parsed.ExpiresIn),
 	}
 	_ = parsed.RefreshToken
-	profile, err := fetchUser(ctx, client, parsed.Token)
+	profile, err := fetchUser(ctx, client, strings.TrimRight(apiBase, "/")+"/api/v1/userinfo", parsed.Token)
 	if err != nil {
 		identity.UserID = "user-" + newID()[:8]
 		return identity, nil
@@ -150,7 +148,7 @@ type profile struct {
 	Email  string
 }
 
-func fetchUser(ctx context.Context, client *http.Client, jobToken string) (profile, error) {
+func fetchUser(ctx context.Context, client *http.Client, userInfoURL, jobToken string) (profile, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, userInfoURL, nil)
 	if err != nil {
 		return profile{}, err
@@ -196,4 +194,13 @@ func expiry(expiresAt string, expiresIn int64) time.Time {
 		return time.Now().Add(time.Duration(expiresIn) * time.Second)
 	}
 	return time.Now().Add(24 * time.Hour)
+}
+
+// FetchProfile loads the user id for a device or job token.
+func FetchProfile(ctx context.Context, client *http.Client, userInfoURL, token string) (userID, name, email string, err error) {
+	got, err := fetchUser(ctx, client, userInfoURL, token)
+	if err != nil {
+		return "", "", "", err
+	}
+	return got.UserID, got.Name, got.Email, nil
 }

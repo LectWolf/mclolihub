@@ -480,6 +480,43 @@ export async function startCursorCLILogin(): Promise<{ login_url: string; uuid: 
   return data
 }
 
+export async function startQoderOAuth(
+  region: 'cn' | 'global',
+  machineId?: string
+): Promise<{ login_url: string; nonce: string; verifier: string; machine_id: string; region: string }> {
+  const { data } = await apiClient.post<{
+    login_url: string
+    nonce: string
+    verifier: string
+    machine_id: string
+    region: string
+  }>('/admin/accounts/qoder/oauth/start', { region, machine_id: machineId || '' })
+  return data
+}
+
+export async function pollQoderOAuth(
+  region: string,
+  nonce: string,
+  verifier: string
+): Promise<{
+  status: string
+  access_token?: string
+  refresh_token?: string
+  user_id?: string
+  expires_at?: string
+  region?: string
+}> {
+  const { data } = await apiClient.post<{
+    status: string
+    access_token?: string
+    refresh_token?: string
+    user_id?: string
+    expires_at?: string
+    region?: string
+  }>('/admin/accounts/qoder/oauth/poll', { region, nonce, verifier })
+  return data
+}
+
 export async function pollCursorCLILogin(
   uuid: string,
   verifier: string
@@ -1132,6 +1169,8 @@ export const accountsAPI = {
   generateAuthUrl,
   startCursorCLILogin,
   pollCursorCLILogin,
+  startQoderOAuth,
+  pollQoderOAuth,
   exchangeCode,
   refreshOpenAIToken,
   batchCreate,

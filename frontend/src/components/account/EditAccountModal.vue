@@ -253,8 +253,11 @@
           mode="edit"
           :personal-token="qoderPersonalToken"
           :machine-id="qoderMachineId"
+          :region="qoderRegion"
           @update:personal-token="qoderPersonalToken = $event"
           @update:machine-id="qoderMachineId = $event"
+          @update:region="qoderRegion = $event"
+          @oauth="onQoderOAuth"
         />
 
         <!-- Model Restriction Section (不适用于 Antigravity) -->
@@ -3243,6 +3246,19 @@ const isCursorProxyAccount = computed(
 )
 const qoderPersonalToken = ref('')
 const qoderMachineId = ref('')
+const qoderRegion = ref<'cn' | 'global'>('cn')
+const qoderAccessToken = ref('')
+const qoderRefreshToken = ref('')
+const qoderUserID = ref('')
+const qoderExpiresAt = ref('')
+const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
+  qoderAccessToken.value = payload.accessToken
+  qoderRefreshToken.value = payload.refreshToken
+  qoderUserID.value = payload.userId
+  qoderExpiresAt.value = payload.expiresAt
+  qoderMachineId.value = payload.machineId
+  qoderRegion.value = payload.region
+}
 const cursorSandRenewalCredential = ref('')
 const cursorGrokBotToken = ref('')
 const cursorGrokRefreshToken = ref('')
@@ -4505,6 +4521,11 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   cursorMachineId.value = String(cursorCreds.machine_id || '')
   cursorClientVersion.value = String(cursorCreds.client_version || '3.21.12')
   qoderPersonalToken.value = ''
+  qoderAccessToken.value = ''
+  qoderRefreshToken.value = ''
+  qoderUserID.value = ''
+  qoderExpiresAt.value = ''
+  qoderRegion.value = cursorCreds.qoder_region === 'global' ? 'global' : 'cn'
   qoderMachineId.value = String(cursorCreds.machine_id || '')
 }
 
@@ -5225,6 +5246,11 @@ const handleSubmit = async () => {
         if (qoderPersonalToken.value.trim()) {
           newCredentials.personal_token = qoderPersonalToken.value.trim()
         }
+        newCredentials.qoder_region = qoderRegion.value
+        if (qoderAccessToken.value.trim()) newCredentials.access_token = qoderAccessToken.value.trim()
+        if (qoderRefreshToken.value.trim()) newCredentials.refresh_token = qoderRefreshToken.value.trim()
+        if (qoderUserID.value.trim()) newCredentials.user_id = qoderUserID.value.trim()
+        if (qoderExpiresAt.value.trim()) newCredentials.expires_at = qoderExpiresAt.value.trim()
         if (qoderMachineId.value.trim()) {
           newCredentials.machine_id = qoderMachineId.value.trim()
         } else {
