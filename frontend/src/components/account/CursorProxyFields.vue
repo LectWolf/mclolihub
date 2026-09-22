@@ -32,14 +32,14 @@
           <button
             type="button"
             class="rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-900 disabled:opacity-50 dark:bg-zinc-600"
-            :disabled="grokOAuth.loading"
+            :disabled="grokOAuthLoading"
             @click="startGrokOAuth"
           >
-            {{ grokOAuth.loading.value ? t('admin.accounts.cursorProxy.grokOAuthWait') : t('admin.accounts.cursorProxy.grokOAuthOpen') }}
+            {{ grokOAuthLoading ? t('admin.accounts.cursorProxy.grokOAuthWait') : t('admin.accounts.cursorProxy.grokOAuthOpen') }}
           </button>
         </div>
         <p class="input-hint mt-1">{{ grokOAuthHint }}</p>
-        <div v-if="grokOAuth.authUrl.value" class="mt-2 space-y-2">
+        <div v-if="grokAuthUrl" class="mt-2 space-y-2">
           <input
             v-model="grokAuthCode"
             type="text"
@@ -49,7 +49,7 @@
           <button
             type="button"
             class="rounded-md bg-zinc-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-            :disabled="!grokAuthCode.trim() || grokOAuth.loading"
+            :disabled="!grokAuthCode.trim() || grokOAuthLoading"
             @click="finishGrokOAuth"
           >
             {{ t('admin.accounts.cursorProxy.grokOAuthExchange') }}
@@ -135,6 +135,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const grokOAuth = useGrokOAuth()
+const grokOAuthLoading = grokOAuth.loading
+const grokAuthUrl = grokOAuth.authUrl
 const grokAuthCode = ref('')
 const grokOAuthHint = ref('')
 
