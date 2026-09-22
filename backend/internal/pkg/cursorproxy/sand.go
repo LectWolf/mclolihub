@@ -16,8 +16,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
-// SandCredentials are stored on a cursor_sand account. The renewal credential is
-// filled in by an admin; grokBotToken is minted at request time and never stored.
+// SandCredentials are stored on a cursor_sand account. RenewalCredential mints a
+// grok_bot JWT when GrokBotToken is empty; a stored grok_bot token is used as-is.
 type SandCredentials struct {
 	RenewalCredential string
 	GrokBotToken      string

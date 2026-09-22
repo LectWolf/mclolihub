@@ -1159,7 +1159,7 @@ export default {
       cursorProxy: {
         sandCredential: '沙箱续期密钥',
         sandCredentialHint: '当作账号密钥使用。从沙箱环境复制 SAND_INFERENCE_RENEWAL_CREDENTIAL，不要填 session JWT。',
-        sandCredentialRequired: '请填写沙箱续期密钥',
+        sandCredentialRequired: '请填写沙箱续期密钥或 Grok Bot Token',
         sandKeepHint: '留空则保持原密钥。',
         grokBotToken: 'Grok Bot Token',
         grokBotTokenHint: '可选 grok_bot JWT，作为 OAuth Bearer，并带上 Grok Bot 请求头。留空则用沙箱续期密钥兑换。',
