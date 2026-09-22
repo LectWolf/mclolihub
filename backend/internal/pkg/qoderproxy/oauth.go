@@ -30,12 +30,25 @@ const (
 	RegionGlobal Region = "global"
 )
 
+// NormalizeRegion maps a login request onto a site. An empty value follows the
+// account form default, which is the China edition.
 func NormalizeRegion(raw string) Region {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "global", "intl", "qoder.sh", "qoder.com":
 		return RegionGlobal
 	default:
 		return RegionCN
+	}
+}
+
+// AccountRegion reads a stored qoder_region. An empty value stays on the global
+// site so accounts created before the edition switch keep their original host.
+func AccountRegion(raw string) Region {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "cn", "china", "domestic", "qoder.com.cn":
+		return RegionCN
+	default:
+		return RegionGlobal
 	}
 }
 

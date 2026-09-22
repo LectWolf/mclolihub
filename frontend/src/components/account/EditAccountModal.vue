@@ -4525,7 +4525,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   qoderRefreshToken.value = ''
   qoderUserID.value = ''
   qoderExpiresAt.value = ''
-  qoderRegion.value = cursorCreds.qoder_region === 'global' ? 'global' : 'cn'
+  qoderRegion.value = cursorCreds.qoder_region === 'cn' ? 'cn' : 'global'
   qoderMachineId.value = String(cursorCreds.machine_id || '')
 }
 

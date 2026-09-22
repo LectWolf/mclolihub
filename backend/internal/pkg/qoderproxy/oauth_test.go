@@ -42,6 +42,38 @@ func TestStartLoginURL(t *testing.T) {
 	}
 }
 
+func TestRegionEndpoints(t *testing.T) {
+	cn, err := StartLogin("cn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	global, err := StartLogin("global", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(cn.LoginURL, "https://qoder.com.cn/device/selectAccounts") {
+		t.Fatal(cn.LoginURL)
+	}
+	if !strings.Contains(global.LoginURL, "https://qoder.com/device/selectAccounts") {
+		t.Fatal(global.LoginURL)
+	}
+	if !strings.Contains(cn.LoginURL, "qoder-work-cn") || !strings.Contains(global.LoginURL, "qoder.com%2F") && !strings.Contains(global.LoginURL, "aicoding") {
+		t.Fatalf("redirects cn=%s global=%s", cn.LoginURL, global.LoginURL)
+	}
+	if RegionCN.APIBase() != "https://openapi.qoder.com.cn" || RegionGlobal.APIBase() != "https://openapi.qoder.sh" {
+		t.Fatal("api bases")
+	}
+	if !strings.Contains(RegionCN.ChatEndpoint(), "https://gateway.qoder.com.cn/") {
+		t.Fatal(RegionCN.ChatEndpoint())
+	}
+	if !strings.Contains(RegionGlobal.ChatEndpoint(), "https://api2.qoder.sh/") {
+		t.Fatal(RegionGlobal.ChatEndpoint())
+	}
+	if AccountRegion("") != RegionGlobal || AccountRegion("cn") != RegionCN || AccountRegion("global") != RegionGlobal {
+		t.Fatal("stored region")
+	}
+}
+
 func TestPollLoginPending(t *testing.T) {
 	client := &http.Client{Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
 		if !strings.Contains(req.URL.Path, "/deviceToken/poll") {

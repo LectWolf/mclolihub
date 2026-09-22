@@ -1206,9 +1206,10 @@ export default {
         oauthSuccess: '登录成功，设备令牌已回填。',
         oauthFailed: '无法启动 Qoder 登录',
         oauthHint: '用浏览器完成 Qoder 设备登录。也可以不登录，直接粘贴 Personal Access Token。',
-        region: '站点',
-        regionCN: '中国站 qoder.com.cn',
-        regionGlobal: '国际站 qoder.com'
+        edition: '版本',
+        editionHint: '国内版走 qoder.com.cn，国际版走 qoder.com。登录、PAT 换票和对话转发都用这一版的地址。',
+        regionCN: '国内版',
+        regionGlobal: '国际版'
       },
       bedrockAccessKeyId: 'AWS Access Key ID',
       bedrockSecretAccessKey: 'AWS Secret Access Key',

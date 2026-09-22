@@ -37,30 +37,44 @@ func NewTokenCache() *TokenCache {
 	return &TokenCache{items: map[string]Identity{}}
 }
 
-// Invalidate drops one PAT so the next call exchanges a fresh job token.
+// Invalidate drops cached job tokens for a PAT on every region.
 func (c *TokenCache) Invalidate(pat string) {
 	if c == nil {
 		return
 	}
+	pat = strings.TrimSpace(pat)
 	c.mu.Lock()
-	delete(c.items, strings.TrimSpace(pat))
+	for key := range c.items {
+		if key == pat || strings.HasSuffix(key, "\x00"+pat) {
+			delete(c.items, key)
+		}
+	}
 	c.mu.Unlock()
 }
 
-// Resolve exchanges a personal access token for a job token and user id.
-// machineID is kept when the caller already has one.
+// Resolve exchanges a personal access token for a job token on the global site.
 func (c *TokenCache) Resolve(ctx context.Context, client *http.Client, pat, machineID string) (Identity, error) {
+	return c.ResolveRegion(ctx, client, RegionGlobal, pat, machineID)
+}
+
+// ResolveRegion exchanges a PAT on the China or global Qoder API.
+// machineID is kept when the caller already has one.
+func (c *TokenCache) ResolveRegion(ctx context.Context, client *http.Client, region Region, pat, machineID string) (Identity, error) {
 	pat = strings.TrimSpace(pat)
 	if pat == "" {
 		return Identity{}, fmt.Errorf("qoder: personal token is empty")
 	}
+	if region != RegionCN {
+		region = RegionGlobal
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
+	key := string(region) + "\x00" + pat
 	machineID = strings.TrimSpace(machineID)
 	if c != nil {
 		c.mu.Lock()
-		cached, ok := c.items[pat]
+		cached, ok := c.items[key]
 		c.mu.Unlock()
 		if ok && time.Until(cached.ExpiresAt) > refreshSkew {
 			if machineID != "" {
@@ -70,7 +84,7 @@ func (c *TokenCache) Resolve(ctx context.Context, client *http.Client, pat, mach
 		}
 	}
 
-	identity, err := exchange(ctx, client, RegionGlobal.APIBase(), pat)
+	identity, err := exchange(ctx, client, region.APIBase(), pat)
 	if err != nil {
 		return Identity{}, err
 	}
@@ -81,7 +95,7 @@ func (c *TokenCache) Resolve(ctx context.Context, client *http.Client, pat, mach
 	}
 	if c != nil {
 		c.mu.Lock()
-		c.items[pat] = identity
+		c.items[key] = identity
 		c.mu.Unlock()
 	}
 	return identity, nil

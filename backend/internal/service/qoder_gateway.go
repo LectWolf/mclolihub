@@ -281,8 +281,15 @@ func (s *QoderGatewayService) writeError(c *gin.Context, status int, errType, me
 	return errors.New(message)
 }
 
+func qoderAccountRegion(account *Account) qoderproxy.Region {
+	if account == nil {
+		return qoderproxy.RegionGlobal
+	}
+	return qoderproxy.AccountRegion(account.GetCredential("qoder_region"))
+}
+
 func (s *QoderGatewayService) resolveQoderIdentity(ctx context.Context, account *Account, pat string) (qoderproxy.Identity, string, error) {
-	region := qoderproxy.NormalizeRegion(account.GetCredential("qoder_region"))
+	region := qoderAccountRegion(account)
 	access := strings.TrimSpace(account.GetCredential("access_token"))
 	refresh := strings.TrimSpace(account.GetCredential("refresh_token"))
 	if access != "" || refresh != "" {
@@ -291,15 +298,11 @@ func (s *QoderGatewayService) resolveQoderIdentity(ctx context.Context, account 
 	if pat == "" {
 		return qoderproxy.Identity{}, "", errors.New("qoder personal token or device login is required")
 	}
-	identity, err := s.tokens.Resolve(ctx, s.client, pat, strings.TrimSpace(account.GetCredential("machine_id")))
+	identity, err := s.tokens.ResolveRegion(ctx, s.client, region, pat, strings.TrimSpace(account.GetCredential("machine_id")))
 	if err != nil {
 		return qoderproxy.Identity{}, "", err
 	}
-	chatURL := qoderproxy.ChatURL()
-	if strings.TrimSpace(account.GetCredential("qoder_region")) == string(qoderproxy.RegionCN) {
-		chatURL = region.ChatEndpoint()
-	}
-	return identity, chatURL, nil
+	return identity, region.ChatEndpoint(), nil
 }
 
 func (s *QoderGatewayService) resolveQoderOAuth(ctx context.Context, account *Account, region qoderproxy.Region, access, refresh string) (qoderproxy.Identity, string, error) {

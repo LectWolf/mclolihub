@@ -1,5 +1,27 @@
 <template>
   <div class="space-y-3">
+    <div>
+      <label class="input-label">{{ t('admin.accounts.qoderProxy.edition') }}</label>
+      <div class="mt-1 flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+        <button
+          type="button"
+          class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all"
+          :class="region === 'cn' ? 'bg-white text-emerald-800 shadow-sm dark:bg-dark-600 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'"
+          @click="emit('update:region', 'cn')"
+        >
+          {{ t('admin.accounts.qoderProxy.regionCN') }}
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all"
+          :class="region === 'global' ? 'bg-white text-emerald-800 shadow-sm dark:bg-dark-600 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-400'"
+          @click="emit('update:region', 'global')"
+        >
+          {{ t('admin.accounts.qoderProxy.regionGlobal') }}
+        </button>
+      </div>
+      <p class="input-hint">{{ t('admin.accounts.qoderProxy.editionHint') }}</p>
+    </div>
     <div class="rounded-lg border border-emerald-200 p-3 dark:border-emerald-900">
       <div class="flex items-center justify-between gap-3">
         <label class="input-label mb-0">{{ t('admin.accounts.qoderProxy.oauth') }}</label>
@@ -12,11 +34,6 @@
           {{ loggingIn ? t('admin.accounts.qoderProxy.oauthWait') : t('admin.accounts.qoderProxy.oauthOpen') }}
         </button>
       </div>
-      <label class="input-label mt-3">{{ t('admin.accounts.qoderProxy.region') }}</label>
-      <select :value="region" class="input" @change="onRegion">
-        <option value="cn">{{ t('admin.accounts.qoderProxy.regionCN') }}</option>
-        <option value="global">{{ t('admin.accounts.qoderProxy.regionGlobal') }}</option>
-      </select>
       <p class="input-hint mt-1">{{ hint }}</p>
     </div>
 
@@ -83,11 +100,6 @@ const stop = () => {
     timer = null
   }
   loggingIn.value = false
-}
-
-const onRegion = (event: Event) => {
-  const value = (event.target as HTMLSelectElement).value === 'global' ? 'global' : 'cn'
-  emit('update:region', value)
 }
 
 const startLogin = async () => {

@@ -1136,9 +1136,10 @@ export default {
         oauthSuccess: 'Login succeeded. The device token is filled in.',
         oauthFailed: 'Could not start Qoder login',
         oauthHint: 'Sign in with the Qoder device login. Or skip it and paste a personal access token.',
-        region: 'Site',
-        regionCN: 'China (qoder.com.cn)',
-        regionGlobal: 'Global (qoder.com)'
+        edition: 'Edition',
+        editionHint: 'China uses qoder.com.cn. Global uses qoder.com. Login, PAT exchange, and chat all follow this choice.',
+        regionCN: 'China',
+        regionGlobal: 'Global'
       },
       bedrockAccessKeyId: 'AWS Access Key ID',
       bedrockSecretAccessKey: 'AWS Secret Access Key',
