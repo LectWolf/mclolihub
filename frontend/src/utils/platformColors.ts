@@ -18,6 +18,7 @@ export type Platform =
   | 'codebuddy' | 'opencode_go'
   | 'cursor_sand'
   | 'cursor'
+  | 'qoder'
   | 'composite'
 
 // ── Badge (bg + text + border, for inline badges with border) ───────
@@ -35,6 +36,7 @@ const BADGE: Record<Platform, string> = {
   opencode_go: 'bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300',
   cursor_sand: 'bg-yellow-500/10 text-yellow-800 border-yellow-500/30 dark:text-yellow-300',
   cursor: 'bg-violet-500/10 text-violet-600 border-violet-500/30 dark:text-violet-400',
+  qoder: 'bg-emerald-500/10 text-emerald-800 border-emerald-500/30 dark:text-emerald-300',
   composite: 'bg-cyan-500/10 text-cyan-700 border-cyan-500/30 dark:text-cyan-300',
 }
 const BADGE_DEFAULT = 'bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400'
@@ -54,6 +56,7 @@ const BADGE_LIGHT: Record<Platform, string> = {
   opencode_go: 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
   cursor_sand: 'bg-yellow-500/10 text-yellow-800 dark:bg-yellow-500/10 dark:text-yellow-300',
   cursor: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300',
+  qoder: 'bg-emerald-500/10 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
   composite: 'bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300',
 }
 
@@ -72,6 +75,7 @@ const BORDER: Record<Platform, string> = {
   opencode_go: 'border-amber-500/20 dark:border-amber-500/20',
   cursor_sand: 'border-yellow-500/20 dark:border-yellow-500/20',
   cursor: 'border-violet-500/20 dark:border-violet-500/20',
+  qoder: 'border-emerald-600/20 dark:border-emerald-500/20',
   composite: 'border-cyan-500/20 dark:border-cyan-500/20',
 }
 const BORDER_DEFAULT = 'border-gray-200 dark:border-dark-700'
@@ -91,6 +95,7 @@ const BORDER_STRONG: Record<Platform, string> = {
   opencode_go: 'border-amber-500/35 dark:border-amber-500/30',
   cursor_sand: 'border-yellow-500/35 dark:border-yellow-500/30',
   cursor: 'border-violet-500/35 dark:border-violet-500/30',
+  qoder: 'border-emerald-600/35 dark:border-emerald-500/30',
   composite: 'border-cyan-500/35 dark:border-cyan-500/30',
 }
 const BORDER_STRONG_DEFAULT = 'border-gray-300 dark:border-dark-600'
@@ -111,6 +116,7 @@ const ACCENT: Record<Platform, string> = {
   opencode_go: '#f59e0b', // amber-500
   cursor_sand: '#ca8a04', // yellow-600
   cursor: '#7c3aed', // violet-600
+  qoder: '#047857', // emerald-700
   composite: '#06b6d4', // cyan-500
 }
 const ACCENT_DEFAULT = '#14b8a6' // primary-500 (teal)
@@ -130,6 +136,7 @@ const ACCENT_BAR: Record<Platform, string> = {
   opencode_go: 'bg-gradient-to-r from-amber-400 to-amber-500',
   cursor_sand: 'bg-gradient-to-r from-yellow-400 to-yellow-600',
   cursor: 'bg-gradient-to-r from-violet-400 to-violet-600',
+  qoder: 'bg-gradient-to-r from-emerald-500 to-emerald-700',
   composite: 'bg-gradient-to-r from-slate-500 to-cyan-500',
 }
 const ACCENT_BAR_DEFAULT = 'bg-gradient-to-r from-primary-400 to-primary-500'
@@ -149,6 +156,7 @@ const TEXT: Record<Platform, string> = {
   opencode_go: 'text-amber-700 dark:text-amber-300',
   cursor_sand: 'text-yellow-700 dark:text-yellow-300',
   cursor: 'text-violet-600 dark:text-violet-400',
+  qoder: 'text-emerald-800 dark:text-emerald-300',
   composite: 'text-cyan-700 dark:text-cyan-300',
 }
 const TEXT_DEFAULT = 'text-primary-600 dark:text-primary-400'
@@ -168,6 +176,7 @@ const ICON: Record<Platform, string> = {
   opencode_go: 'text-amber-500 dark:text-amber-300',
   cursor_sand: 'text-yellow-600 dark:text-yellow-300',
   cursor: 'text-violet-500 dark:text-violet-400',
+  qoder: 'text-emerald-700 dark:text-emerald-300',
   composite: 'text-cyan-600 dark:text-cyan-300',
 }
 const ICON_DEFAULT = 'text-primary-500 dark:text-primary-400'
@@ -187,6 +196,7 @@ const BUTTON: Record<Platform, string> = {
   opencode_go: 'bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 dark:bg-amber-500/80 dark:hover:bg-amber-500',
   cursor_sand: 'bg-yellow-600 text-white hover:bg-yellow-700 active:bg-yellow-800 dark:bg-yellow-600/80 dark:hover:bg-yellow-500',
   cursor: 'bg-violet-600 text-white hover:bg-violet-700 active:bg-violet-800 dark:bg-violet-600/80 dark:hover:bg-violet-500',
+  qoder: 'bg-emerald-700 text-white hover:bg-emerald-800 active:bg-emerald-900 dark:bg-emerald-700/80 dark:hover:bg-emerald-600',
   composite: 'bg-cyan-700 text-white hover:bg-cyan-800 active:bg-cyan-900 dark:bg-cyan-600 dark:hover:bg-cyan-500',
 }
 const BUTTON_DEFAULT = 'bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500'
@@ -206,6 +216,7 @@ const DISCOUNT: Record<Platform, string> = {
   opencode_go: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   cursor_sand: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
   cursor: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  qoder: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   composite: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
 }
 const DISCOUNT_DEFAULT = 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
@@ -225,6 +236,7 @@ const GRADIENT: Record<Platform, string> = {
   opencode_go: 'from-amber-500 to-amber-600',
   cursor_sand: 'from-yellow-500 to-yellow-700',
   cursor: 'from-violet-500 to-violet-700',
+  qoder: 'from-emerald-600 to-emerald-800',
   composite: 'from-slate-600 to-cyan-600',
 }
 const GRADIENT_DEFAULT = 'from-primary-500 to-primary-600'
@@ -244,6 +256,7 @@ const GRADIENT_TEXT: Record<Platform, string> = {
   opencode_go: 'text-amber-100',
   cursor_sand: 'text-yellow-100',
   cursor: 'text-violet-100',
+  qoder: 'text-emerald-100',
   composite: 'text-cyan-100',
 }
 const GRADIENT_TEXT_DEFAULT = 'text-primary-100'
@@ -262,6 +275,7 @@ const GRADIENT_SUBTEXT: Record<Platform, string> = {
   opencode_go: 'text-amber-200',
   cursor_sand: 'text-yellow-200',
   cursor: 'text-violet-200',
+  qoder: 'text-emerald-200',
   composite: 'text-cyan-200',
 }
 const GRADIENT_SUBTEXT_DEFAULT = 'text-primary-200'
@@ -283,6 +297,7 @@ function isPlatform(p: string): p is Platform {
     p === 'opencode_go' ||
     p === 'cursor_sand' ||
     p === 'cursor' ||
+    p === 'qoder' ||
     p === 'composite'
   )
 }
@@ -354,6 +369,7 @@ export function platformLabel(p: string): string {
     case 'opencode_go': return 'OpenCode'
     case 'cursor_sand': return 'Cursor Sand'
     case 'cursor': return 'Cursor IDE'
+    case 'qoder': return 'Qoder'
     case 'composite': return 'Composite'
     default: return p || 'API'
   }

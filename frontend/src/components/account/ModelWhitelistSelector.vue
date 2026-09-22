@@ -213,7 +213,8 @@ const upstreamSyncPlatforms = new Set([
   'codebuddy',
   'opencode_go',
   'cursor_sand',
-  'cursor'
+  'cursor',
+  'qoder'
 ])
 const canSyncUpstream = computed(() => {
   if (props.accountId) {

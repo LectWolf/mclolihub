@@ -277,6 +277,24 @@
         <p v-else-if="form.platform === 'cursor'" class="input-hint mt-2">
           {{ t('admin.accounts.cursorProxy.idePlatformHint') }}
         </p>
+        <div class="mt-2 flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
+          <button
+            type="button"
+            @click="selectQoderPlatform()"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'qoder'
+                ? 'bg-white text-emerald-700 shadow-sm dark:bg-dark-600 dark:text-emerald-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="qoder" size="sm" />
+            Qoder
+          </button>
+        </div>
+        <p v-if="form.platform === 'qoder'" class="input-hint mt-2">
+          {{ t('admin.accounts.qoderProxy.platformHint') }}
+        </p>
       </div>
 
       <!-- Account Type Selection (Anthropic) -->
@@ -1407,7 +1425,7 @@
 
       <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
       <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
-        <div v-if="!isMultiProtocolPlatform || apiProtocol !== 'adaptive'" v-show="!isCursorProxyPlatform">
+        <div v-if="!isMultiProtocolPlatform || apiProtocol !== 'adaptive'" v-show="!hidesGenericApiKey">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="apiKeyBaseUrl"
@@ -1455,7 +1473,7 @@
           v-model:rows="openCodeGoProtocolRules"
           :plan="openCodeAccountMode"
         />
-        <div v-if="!isCursorProxyPlatform">
+        <div v-if="!hidesGenericApiKey">
           <label class="input-label">{{ t('admin.accounts.apiKeyRequired') }}</label>
           <input
             v-model="apiKeyValue"
@@ -1467,7 +1485,7 @@
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
         </div>
         <CursorProxyFields
-          v-else
+          v-else-if="isCursorProxyPlatform"
           :platform="form.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
           mode="create"
           :renewal-credential="cursorSandRenewalCredential"
@@ -1486,10 +1504,18 @@
           @start-cli-login="startCursorCLILogin"
           @grok-oauth-complete="onSandGrokOAuthComplete"
         />
+        <QoderProxyFields
+          v-else-if="form.platform === 'qoder'"
+          mode="create"
+          :personal-token="qoderPersonalToken"
+          :machine-id="qoderMachineId"
+          @update:personal-token="qoderPersonalToken = $event"
+          @update:machine-id="qoderMachineId = $event"
+        />
 
         <!-- 上游倍率自动探测：全部 API-key 平台可用（所在区块已限定 apikey 类型） -->
         <div
-          v-if="!isCursorProxyPlatform"
+          v-if="!hidesGenericApiKey"
           class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600"
         >
           <div>
@@ -4129,6 +4155,7 @@ import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import CursorProxyFields from '@/components/account/CursorProxyFields.vue'
+import QoderProxyFields from '@/components/account/QoderProxyFields.vue'
 import { allSelectedGroupsEnableLongContextPricing } from '@/components/account/longContextBilling'
 import {
   applyAntigravityProjectID,
@@ -4366,8 +4393,17 @@ const cursorClientVersion = ref('3.21.12')
 const isCursorProxyPlatform = computed(
   () => form.platform === 'cursor_sand' || form.platform === 'cursor'
 )
+const hidesGenericApiKey = computed(
+  () => isCursorProxyPlatform.value || form.platform === 'qoder'
+)
+const qoderPersonalToken = ref('')
+const qoderMachineId = ref('')
 const selectCursorPlatform = (platform: 'cursor_sand' | 'cursor') => {
   form.platform = platform
+  accountCategory.value = 'apikey'
+}
+const selectQoderPlatform = () => {
+  form.platform = 'qoder'
   accountCategory.value = 'apikey'
 }
 const cursorCLILoggingIn = ref(false)
@@ -5114,7 +5150,7 @@ watch(
     if (newPlatform === 'codebuddy') {
       accountCategory.value = 'oauth-based'
     }
-    if (newPlatform === 'cursor_sand' || newPlatform === 'cursor') {
+    if (newPlatform === 'cursor_sand' || newPlatform === 'cursor' || newPlatform === 'qoder') {
       accountCategory.value = 'apikey'
     }
     // Reset base URL based on platform
@@ -6044,12 +6080,42 @@ const handleSubmit = async () => {
   }
 
   // For apikey type, create directly
-  if (!isCursorProxyPlatform.value && !apiKeyValue.value.trim()) {
+  if (!hidesGenericApiKey.value && !apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
     return
   }
 
   // Determine default base URL based on platform
+  if (form.platform === 'qoder') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    const token = qoderPersonalToken.value.trim()
+    if (!token) {
+      appStore.showError(t('admin.accounts.qoderProxy.personalTokenRequired'))
+      return
+    }
+    const credentials: Record<string, unknown> = { personal_token: token }
+    if (qoderMachineId.value.trim()) credentials.machine_id = qoderMachineId.value.trim()
+    const modelMapping = buildModelMappingObject(
+      modelRestrictionMode.value,
+      allowedModels.value,
+      modelMappings.value
+    )
+    if (modelMapping) credentials.model_mapping = modelMapping
+    form.credentials = credentials
+    await doCreateAccount({
+      ...form,
+      type: 'apikey',
+      group_ids: form.group_ids,
+      extra: withUpstreamRequestIdHeader(buildAnthropicExtra(buildOpenAIExtra())),
+      upstream_billing_probe_enabled: false,
+      auto_pause_on_expired: autoPauseOnExpired.value
+    })
+    return
+  }
+
   if (form.platform === 'cursor_sand' || form.platform === 'cursor') {
     if (!form.name.trim()) {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))

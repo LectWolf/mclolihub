@@ -120,6 +120,8 @@ func DetectModelPlatform(model string) (string, bool) {
 			return PlatformCursor, true
 		case "cursor_sand", "sand":
 			return PlatformCursorSand, true
+		case "qoder", "qd":
+			return PlatformQoder, true
 		}
 		if rest != "" {
 			normalized = strings.TrimPrefix(rest, "models/")

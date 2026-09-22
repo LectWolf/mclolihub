@@ -49,6 +49,7 @@ const (
 	PlatformOpenCodeGo  = domain.PlatformOpenCodeGo
 	PlatformCursorSand  = domain.PlatformCursorSand
 	PlatformCursor      = domain.PlatformCursor
+	PlatformQoder       = domain.PlatformQoder
 )
 
 // AllPlatforms 返回所有支持的平台列表
@@ -67,6 +68,7 @@ func AllPlatforms() []string {
 		PlatformOpenCodeGo,
 		PlatformCursorSand,
 		PlatformCursor,
+		PlatformQoder,
 	}
 }
 

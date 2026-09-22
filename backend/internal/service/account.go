@@ -298,6 +298,11 @@ func (a *Account) IsCursor() bool {
 	return a != nil && a.Platform == PlatformCursor
 }
 
+// IsQoder reports Qoder agent-chat accounts (personal access token).
+func (a *Account) IsQoder() bool {
+	return a != nil && a.Platform == PlatformQoder
+}
+
 // IsKimi / IsZhipu / IsDeepseek 标识国产 OpenAI 兼容供应商账号。
 func (a *Account) IsKimi() bool {
 	return a.Platform == PlatformKimi

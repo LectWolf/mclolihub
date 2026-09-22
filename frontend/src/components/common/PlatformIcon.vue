@@ -68,6 +68,10 @@
   <svg v-else-if="platform === 'cursor'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
     <path d="M4 4l16 8-16 8V4zm3.2 4.4v7.2L14.2 12 7.2 8.4z" />
   </svg>
+  <!-- Qoder -->
+  <svg v-else-if="platform === 'qoder'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 3l7 4v10l-7 4-7-4V7l7-4zm0 3.2L8.2 8.4v7.2L12 17.8l3.8-2.2V8.4L12 6.2z" />
+  </svg>
   <!-- Composite group icon -->
   <svg v-else-if="platform === 'composite'" :class="sizeClass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <circle cx="6" cy="12" r="3" />

@@ -364,6 +364,7 @@ export default {
         opencode_go: 'OpenCode',
         cursor_sand: 'Cursor Sand',
         cursor: 'Cursor IDE',
+        qoder: 'Qoder',
       },
       cnProviders: {
         accountMode: {
@@ -1185,6 +1186,16 @@ export default {
         clientVersion: '客户端版本（可选）',
         sandPlatformHint: 'InferenceService/Stream · Grok Bot / sand 额度 · 填写沙箱续期密钥',
         idePlatformHint: 'InferenceService/RunInference · Cursor IDE 额度 · 用 Cursor CLI 登录拿会话令牌'
+      },
+      qoderProxy: {
+        personalToken: 'Personal Access Token',
+        personalTokenHint: 'Qoder 个人访问令牌（pt-...）。网关会把它换成 job token，再按 COSY 签名转发到 Qoder。',
+        personalTokenRequired: '请填写 Qoder Personal Access Token',
+        personalTokenCreatePlaceholder: 'pt-...',
+        personalTokenEditPlaceholder: '留空保持原令牌',
+        keepHint: '留空则保持原令牌。',
+        machineId: '机器 ID（可选）',
+        platformHint: '把 OpenAI Chat Completions 转到 Qoder agent 接口，消耗该 PAT 的额度。'
       },
       bedrockAccessKeyId: 'AWS Access Key ID',
       bedrockSecretAccessKey: 'AWS Secret Access Key',

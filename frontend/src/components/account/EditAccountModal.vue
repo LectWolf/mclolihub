@@ -28,7 +28,7 @@
 
       <!-- API Key fields (only for apikey type) -->
       <div v-if="account.type === 'apikey'" class="space-y-4">
-        <div v-if="(!isCNApiKeyAccount || editApiProtocol !== 'adaptive') && !isCursorProxyAccount">
+        <div v-if="(!isCNApiKeyAccount || editApiProtocol !== 'adaptive') && !isCursorProxyAccount && account.platform !== 'qoder'">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="editBaseUrl"
@@ -204,7 +204,7 @@
           </div>
           <p class="input-hint mt-2">{{ t('admin.accounts.cnProviders.zhipuTeam.hint') }}</p>
         </div>
-        <div v-if="!isCursorProxyAccount">
+        <div v-if="!isCursorProxyAccount && account.platform !== 'qoder'">
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
           <input
             v-model="editApiKey"
@@ -247,6 +247,14 @@
           @update:client-version="cursorClientVersion = $event"
           @start-cli-login="startCursorCLILogin"
           @grok-oauth-complete="onSandGrokOAuthComplete"
+        />
+        <QoderProxyFields
+          v-else-if="account.platform === 'qoder'"
+          mode="edit"
+          :personal-token="qoderPersonalToken"
+          :machine-id="qoderMachineId"
+          @update:personal-token="qoderPersonalToken = $event"
+          @update:machine-id="qoderMachineId = $event"
         />
 
         <!-- Model Restriction Section (不适用于 Antigravity) -->
@@ -3101,6 +3109,7 @@ import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import CursorProxyFields from '@/components/account/CursorProxyFields.vue'
+import QoderProxyFields from '@/components/account/QoderProxyFields.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import {
   applyAntigravityProjectID,
@@ -3232,6 +3241,8 @@ const editApiKey = ref('')
 const isCursorProxyAccount = computed(
   () => props.account?.platform === 'cursor_sand' || props.account?.platform === 'cursor'
 )
+const qoderPersonalToken = ref('')
+const qoderMachineId = ref('')
 const cursorSandRenewalCredential = ref('')
 const cursorGrokBotToken = ref('')
 const cursorGrokRefreshToken = ref('')
@@ -4493,6 +4504,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   const cursorCreds = (newAccount.credentials || {}) as Record<string, unknown>
   cursorMachineId.value = String(cursorCreds.machine_id || '')
   cursorClientVersion.value = String(cursorCreds.client_version || '3.21.12')
+  qoderPersonalToken.value = ''
+  qoderMachineId.value = String(cursorCreds.machine_id || '')
 }
 
 async function loadTLSProfiles() {
@@ -5177,9 +5190,11 @@ const handleSubmit = async () => {
         props.account.credentials_status?.has_api_key
         || props.account.credentials_status?.has_sand_inference_renewal_credential
         || props.account.credentials_status?.has_session_token
+        || props.account.credentials_status?.has_personal_token
         || currentCredentials.api_key
         || currentCredentials.sand_inference_renewal_credential
         || currentCredentials.session_token
+        || currentCredentials.personal_token
       )
       if (isCursorProxyAccount.value) {
         if (props.account.platform === 'cursor_sand') {
@@ -5205,6 +5220,15 @@ const handleSubmit = async () => {
         }
         if (cursorClientVersion.value.trim()) {
           newCredentials.client_version = cursorClientVersion.value.trim()
+        }
+      } else if (props.account.platform === 'qoder') {
+        if (qoderPersonalToken.value.trim()) {
+          newCredentials.personal_token = qoderPersonalToken.value.trim()
+        }
+        if (qoderMachineId.value.trim()) {
+          newCredentials.machine_id = qoderMachineId.value.trim()
+        } else {
+          delete newCredentials.machine_id
         }
       } else if (editApiKey.value.trim()) {
         newCredentials.api_key = editApiKey.value.trim()

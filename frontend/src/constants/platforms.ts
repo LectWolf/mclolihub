@@ -23,7 +23,8 @@ export const CONCRETE_PLATFORM_OPTIONS = [
   { value: 'codebuddy', label: 'CodeBuddy' },
   { value: 'opencode_go', label: 'OpenCode' },
   { value: 'cursor_sand', label: 'Cursor Sand' },
-  { value: 'cursor', label: 'Cursor IDE' }
+  { value: 'cursor', label: 'Cursor IDE' },
+  { value: 'qoder', label: 'Qoder' }
 ] as const satisfies readonly PlatformOption<AccountPlatform>[]
 
 /** Platforms that can own a group. */

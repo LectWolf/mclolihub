@@ -158,6 +158,7 @@ export default {
         opencode_go: 'OpenCode',
         cursor_sand: 'Cursor Sand',
         cursor: 'Cursor IDE',
+        qoder: 'Qoder',
       },
       cnProviders: {
         accountMode: {
@@ -1115,6 +1116,16 @@ export default {
         clientVersion: 'Client version (optional)',
         sandPlatformHint: 'InferenceService/Stream · Grok Bot / sand quota · sand renewal key',
         idePlatformHint: 'InferenceService/RunInference · Cursor IDE quota · Cursor CLI session token'
+      },
+      qoderProxy: {
+        personalToken: 'Personal Access Token',
+        personalTokenHint: 'Your Qoder personal access token (pt-...). The gateway exchanges it for a job token and signs requests with COSY.',
+        personalTokenRequired: 'Enter a Qoder personal access token',
+        personalTokenCreatePlaceholder: 'pt-...',
+        personalTokenEditPlaceholder: 'Leave blank to keep the current token',
+        keepHint: 'Leave blank to keep the current token.',
+        machineId: 'Machine ID (optional)',
+        platformHint: 'Forwards OpenAI Chat Completions to Qoder and spends this PAT quota.'
       },
       bedrockAccessKeyId: 'AWS Access Key ID',
       bedrockSecretAccessKey: 'AWS Secret Access Key',

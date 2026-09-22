@@ -41,7 +41,9 @@ const (
 	PlatformCursorSand = "cursor_sand"
 	// PlatformCursor: AgentService/Run, Cursor IDE quota.
 	// Credential: session JWT (type=session), client-type=ide.
-	PlatformCursor    = "cursor"
+	PlatformCursor = "cursor"
+	// PlatformQoder: agent_chat_generation SSE. Credential: personal access token.
+	PlatformQoder     = "qoder"
 	PlatformComposite = "composite"
 )
 

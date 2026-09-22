@@ -19,7 +19,8 @@ const PROVIDER_BY_PLATFORM: Record<GroupPlatform, KeyGroupProvider> = {
   codebuddy: 'other',
   opencode_go: 'other',
   cursor_sand: 'other',
-  cursor: 'other'
+  cursor: 'other',
+  qoder: 'other'
 }
 
 export function getKeyGroupProvider(platform: GroupPlatform): KeyGroupProvider {

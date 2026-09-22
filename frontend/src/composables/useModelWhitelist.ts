@@ -475,6 +475,14 @@ export function getModelsByPlatform(platform: string): string[] {
         'grok-4.6', 'composer-2.5',
         'gpt-5.6-sol', 'gpt-5.5'
       ]
+    case 'qoder':
+      return [
+        'auto',
+        'qmodel_preview', 'qmodel_38max', 'qmodel_latest', 'qmodel',
+        'kmodel_latest', 'kmodel',
+        'gm51model', 'cmodel',
+        'dmodel', 'dfmodel', 'mmodel'
+      ]
     case 'cohere': return cohereModels
     case 'yi': return yiModels
     case 'moonshot':

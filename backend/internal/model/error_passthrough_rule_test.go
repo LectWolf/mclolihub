@@ -21,5 +21,6 @@ func TestAllPlatformsIncludesEveryConcretePlatform(t *testing.T) {
 		"opencode_go",
 		"cursor_sand",
 		"cursor",
+		"qoder",
 	}, AllPlatforms())
 }

@@ -154,6 +154,7 @@ type AccountTestService struct {
 	pluginManager             *PluginManager
 	openaiGatewayService      *OpenAIGatewayService
 	cursorGatewayService      *CursorGatewayService
+	qoderGatewayService       *QoderGatewayService
 	agentIdentityTaskMu       sync.Mutex
 	agentIdentityWS           agentIdentityWSConnectionInvalidator
 	// grokWSDialer is optional; realtime account tests use the default OpenAI-style
@@ -182,6 +183,12 @@ func (s *AccountTestService) SetOpenAIGatewayService(gateway *OpenAIGatewayServi
 func (s *AccountTestService) SetCursorGatewayService(gateway *CursorGatewayService) {
 	if s != nil {
 		s.cursorGatewayService = gateway
+	}
+}
+
+func (s *AccountTestService) SetQoderGatewayService(gateway *QoderGatewayService) {
+	if s != nil {
+		s.qoderGatewayService = gateway
 	}
 }
 
@@ -377,6 +384,10 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		}
 	}
 
+	if account.IsQoder() {
+		return s.testQoderAccountConnection(c, account, modelID, prompt)
+	}
+
 	if account.IsCursorSand() || account.IsCursor() {
 		return s.testCursorAccountConnection(c, account, modelID, prompt)
 	}
@@ -406,6 +417,74 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	return s.testClaudeAccountConnection(c, account, modelID)
+}
+
+func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {
+	if s.qoderGatewayService == nil {
+		return s.sendErrorAndEnd(c, "Qoder proxy service is not configured")
+	}
+	if strings.TrimSpace(qoderPersonalToken(account)) == "" {
+		return s.sendErrorAndEnd(c, "No Qoder personal access token available")
+	}
+
+	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = "auto"
+	}
+	testModelID = account.GetMappedModel(testModelID)
+	testPrompt := strings.TrimSpace(prompt)
+	if testPrompt == "" {
+		testPrompt = "Reply with exactly: ok"
+	}
+	body, err := json.Marshal(map[string]any{
+		"model": testModelID,
+		"messages": []map[string]string{
+			{"role": "user", "content": testPrompt},
+		},
+		"stream": false,
+	})
+	if err != nil {
+		return s.sendErrorAndEnd(c, "Failed to build Qoder test request")
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+
+	recorder := httptest.NewRecorder()
+	probeContext, _ := gin.CreateTestContext(recorder)
+	probeContext.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body)).WithContext(c.Request.Context())
+	result, forwardErr := s.qoderGatewayService.ForwardAsChatCompletions(
+		c.Request.Context(), probeContext, account, body, nil,
+	)
+	responseBody := recorder.Body.Bytes()
+	if forwardErr != nil || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices {
+		message := strings.TrimSpace(gjson.GetBytes(responseBody, "error.message").String())
+		if message == "" && forwardErr != nil {
+			message = forwardErr.Error()
+		}
+		if message == "" {
+			message = fmt.Sprintf("Qoder proxy returned HTTP %d", recorder.Code)
+		}
+		return s.sendErrorAndEnd(c, message)
+	}
+	text := gjson.GetBytes(responseBody, "choices.0.message.content").String()
+	if strings.TrimSpace(text) == "" {
+		return s.sendErrorAndEnd(c, "Qoder proxy returned no assistant text")
+	}
+	resolvedModel := strings.TrimSpace(gjson.GetBytes(responseBody, "model").String())
+	if resolvedModel == "" && result != nil {
+		resolvedModel = strings.TrimSpace(result.Model)
+	}
+	if resolvedModel != "" && resolvedModel != testModelID {
+		s.sendEvent(c, TestEvent{Type: "status", Text: "Resolved model: " + resolvedModel, Model: resolvedModel})
+	}
+	s.sendEvent(c, TestEvent{Type: "content", Text: text})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true, Model: resolvedModel})
+	return nil
 }
 
 func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {

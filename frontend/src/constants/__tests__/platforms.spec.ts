@@ -14,7 +14,8 @@ const concretePlatforms = [
   'codebuddy',
   'opencode_go',
   'cursor_sand',
-  'cursor'
+  'cursor',
+  'qoder'
 ]
 
 describe('platform option catalogs', () => {
