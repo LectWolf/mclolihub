@@ -199,6 +199,7 @@ func aesEncryptCBCBase64(plaintext, key []byte) (string, error) {
 }
 
 func rsaEncryptBase64(data []byte) (string, error) {
+	//nolint:staticcheck // SA1019: Qoder COSY wire format requires PKCS#1 v1.5.
 	enc, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPublic, data)
 	if err != nil {
 		return "", err

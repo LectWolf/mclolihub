@@ -10,6 +10,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func TestShouldUseQoderProxy(t *testing.T) {
+	if shouldUseQoderProxy(nil) {
+		t.Fatal("nil")
+	}
+	qoder := &Account{Platform: PlatformQoder}
+	grok := &Account{Platform: PlatformGrok}
+	if !shouldUseQoderProxy(qoder) {
+		t.Fatal("expected qoder")
+	}
+	if shouldUseQoderProxy(grok) {
+		t.Fatal("grok is not qoder")
+	}
+}
 func TestQoderGatewayNonStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := NewQoderGatewayService()

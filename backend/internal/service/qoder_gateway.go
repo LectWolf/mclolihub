@@ -101,7 +101,7 @@ func (s *QoderGatewayService) ForwardAsChatCompletions(
 	if err != nil {
 		return nil, s.writeError(c, http.StatusBadGateway, "api_error", err.Error())
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		s.tokens.Invalidate(pat)
 	}
@@ -156,7 +156,7 @@ func (s *QoderGatewayService) pump(c *gin.Context, body io.Reader, model string,
 			lastErr = delta.Err.Error()
 		}
 		if delta.Content != "" {
-			text.WriteString(delta.Content)
+			_, _ = text.WriteString(delta.Content)
 			chunk := gin.H{"content": delta.Content}
 			if !sentRole {
 				chunk["role"] = "assistant"
@@ -165,7 +165,7 @@ func (s *QoderGatewayService) pump(c *gin.Context, body io.Reader, model string,
 			emit(chunk, "")
 		}
 		if delta.Reasoning != "" {
-			reasoning.WriteString(delta.Reasoning)
+			_, _ = reasoning.WriteString(delta.Reasoning)
 			emit(gin.H{"reasoning_content": delta.Reasoning}, "")
 		}
 		for _, call := range delta.ToolCalls {
@@ -317,9 +317,6 @@ func (s *QoderGatewayService) resolveQoderOAuth(ctx context.Context, account *Ac
 			return qoderproxy.Identity{}, "", err
 		}
 		access = tok.AccessToken
-		if tok.RefreshToken != "" {
-			refresh = tok.RefreshToken
-		}
 		s.persistQoderOAuth(ctx, account, tok)
 	}
 	userID := strings.TrimSpace(account.GetCredential("user_id"))
@@ -420,14 +417,14 @@ func flattenQoderContent(content gjson.Result) string {
 	var b strings.Builder
 	content.ForEach(func(_, part gjson.Result) bool {
 		if part.Type == gjson.String {
-			b.WriteString(part.String())
+			_, _ = b.WriteString(part.String())
 			return true
 		}
 		text := part.Get("text").String()
 		if text == "" {
 			text = part.Get("content").String()
 		}
-		b.WriteString(text)
+		_, _ = b.WriteString(text)
 		return true
 	})
 	return b.String()

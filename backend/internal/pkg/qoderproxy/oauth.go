@@ -148,7 +148,7 @@ func PollLogin(ctx context.Context, client *http.Client, region, nonce, verifier
 	if err != nil {
 		return DeviceToken{}, fmt.Errorf("qoder: device poll: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return DeviceToken{}, err
@@ -187,7 +187,7 @@ func RefreshLogin(ctx context.Context, client *http.Client, region, refreshToken
 	if err != nil {
 		return DeviceToken{}, fmt.Errorf("qoder: device refresh: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return DeviceToken{}, err

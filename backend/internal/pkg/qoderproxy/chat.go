@@ -151,9 +151,9 @@ func splitSystem(messages []Message) (string, []Message) {
 				continue
 			}
 			if system.Len() > 0 {
-				system.WriteString("\n\n")
+				_, _ = system.WriteString("\n\n")
 			}
-			system.WriteString(content)
+			_, _ = system.WriteString(content)
 		case "tool":
 			turns = append(turns, Message{Role: "user", Content: content})
 		default:

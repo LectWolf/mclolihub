@@ -120,7 +120,7 @@ func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Id
 	if err != nil {
 		return Identity{}, fmt.Errorf("qoder: job token: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return Identity{}, fmt.Errorf("qoder: job token body: %w", err)
@@ -174,7 +174,7 @@ func fetchUser(ctx context.Context, client *http.Client, userInfoURL, jobToken s
 	if err != nil {
 		return profile{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return profile{}, err
