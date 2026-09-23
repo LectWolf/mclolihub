@@ -50,8 +50,6 @@ const (
 	PlatformMiniMax    = domain.PlatformMiniMax
 	PlatformCodeBuddy  = domain.PlatformCodeBuddy
 	PlatformOpenCodeGo = domain.PlatformOpenCodeGo
-	PlatformCursorSand = domain.PlatformCursorSand
-	PlatformCursor     = domain.PlatformCursor
 	PlatformQoder      = domain.PlatformQoder
 	PlatformComposite  = domain.PlatformComposite
 	// PlatformKiro is retained for unsupported-platform threshold tests and legacy
@@ -140,8 +138,6 @@ var AllowedQuotaPlatforms = []string{
 	PlatformMiniMax,
 	PlatformCodeBuddy,
 	PlatformOpenCodeGo,
-	PlatformCursorSand,
-	PlatformCursor,
 	PlatformQoder,
 }
 

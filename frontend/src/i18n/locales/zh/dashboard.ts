@@ -529,8 +529,6 @@ export default {
       minimax: 'MiniMax',
       codebuddy: 'CodeBuddy',
       opencode_go: 'OpenCode',
-      cursor_sand: 'Cursor Sand',
-      cursor: 'Cursor IDE',
       qoder: 'Qoder'
     },
     // 检查模式（监控条目的工作方式）

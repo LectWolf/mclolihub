@@ -47,8 +47,6 @@ const (
 	PlatformMiniMax     = domain.PlatformMiniMax
 	PlatformCodeBuddy   = domain.PlatformCodeBuddy
 	PlatformOpenCodeGo  = domain.PlatformOpenCodeGo
-	PlatformCursorSand  = domain.PlatformCursorSand
-	PlatformCursor      = domain.PlatformCursor
 	PlatformQoder       = domain.PlatformQoder
 )
 
@@ -66,8 +64,6 @@ func AllPlatforms() []string {
 		PlatformMiniMax,
 		PlatformCodeBuddy,
 		PlatformOpenCodeGo,
-		PlatformCursorSand,
-		PlatformCursor,
 		PlatformQoder,
 	}
 }

@@ -36,12 +36,6 @@ const (
 	// PlatformOpenCodeGo 是 OpenCode 平台（账号类型 Zen 按量 / Go 订阅）。
 	// 值保持 opencode_go 以兼容已落库的分组、配额与 Composite 路由 CHECK。
 	PlatformOpenCodeGo = "opencode_go"
-	// PlatformCursorSand: InferenceService/Stream, Grok Bot / sand quota.
-	// Credential: SAND_INFERENCE_RENEWAL_CREDENTIAL (manual).
-	PlatformCursorSand = "cursor_sand"
-	// PlatformCursor: AgentService/Run, Cursor IDE quota.
-	// Credential: session JWT (type=session), client-type=ide.
-	PlatformCursor = "cursor"
 	// PlatformQoder: agent_chat_generation SSE. Credential: personal access token.
 	PlatformQoder     = "qoder"
 	PlatformComposite = "composite"

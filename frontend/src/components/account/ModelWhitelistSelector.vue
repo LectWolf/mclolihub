@@ -211,10 +211,7 @@ const upstreamSyncPlatforms = new Set([
   'deepseek',
   'minimax',
   'codebuddy',
-  'opencode_go',
-  'cursor_sand',
-  'cursor',
-  'qoder'
+  'opencode_go'
 ])
 const canSyncUpstream = computed(() => {
   if (props.accountId) {

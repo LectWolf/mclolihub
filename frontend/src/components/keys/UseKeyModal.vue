@@ -1240,8 +1240,6 @@ function generateRoutedCodexFiles(
     minimax: 'MiniMax-M3',
     codebuddy: 'codebuddy-code',
     opencode_go: 'glm-5.3',
-    cursor_sand: 'grok-4.6',
-    cursor: 'claude-fable-5-1',
     qoder: 'auto',
     composite: 'gpt-5.5'
   }
@@ -1259,8 +1257,6 @@ function generateRoutedCodexFiles(
     minimax: 'MiniMax',
     codebuddy: 'CodeBuddy',
     opencode_go: 'OpenCode',
-    cursor_sand: 'Cursor Sand',
-    cursor: 'Cursor IDE',
     qoder: 'Qoder',
     composite: 'Composite'
   }

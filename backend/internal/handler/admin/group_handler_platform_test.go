@@ -27,7 +27,7 @@ func bindGroupPlatformJSON(t *testing.T, target any, body string) error {
 func TestGroupPlatformBinding_AllowedPlatforms(t *testing.T) {
 	allowed := []string{
 		"anthropic", "openai", "gemini", "antigravity", "grok",
-		"kimi", "zhipu", "deepseek", "minimax", "codebuddy", "opencode_go", "cursor_sand", "cursor", "qoder", "composite",
+		"kimi", "zhipu", "deepseek", "minimax", "codebuddy", "opencode_go", "qoder", "composite",
 	}
 	for _, platform := range allowed {
 		t.Run("create_"+platform, func(t *testing.T) {
@@ -54,6 +54,9 @@ func TestGroupPlatformBinding_RejectsInvalidPlatforms(t *testing.T) {
 		"openai ",  // 尾随空格
 		"glm",
 		"bogus",
+		// Cursor 反向代理已下线，平台标识不能再创建分组。
+		"cursor_sand",
+		"cursor",
 	}
 	for _, platform := range invalid {
 		t.Run("create_"+platform, func(t *testing.T) {
@@ -72,7 +75,7 @@ func TestGroupPlatformBinding_RejectsInvalidPlatforms(t *testing.T) {
 }
 
 func TestCompositeRouteTargetPlatform_AllowsCNProviders(t *testing.T) {
-	for _, platform := range []string{"kimi", "zhipu", "deepseek", "minimax", "opencode_go"} {
+	for _, platform := range []string{"kimi", "zhipu", "deepseek", "minimax", "opencode_go", "qoder"} {
 		var req CompositeRouteRequest
 		body := fmt.Sprintf(`{"public_model":"m","target_platform":%q}`, platform)
 		require.NoError(t, bindGroupPlatformJSON(t, &req, body))
@@ -83,4 +86,12 @@ func TestCompositeRouteTargetPlatform_AllowsCNProviders(t *testing.T) {
 func TestCompositeRouteTargetPlatform_RejectsComposite(t *testing.T) {
 	var req CompositeRouteRequest
 	require.Error(t, bindGroupPlatformJSON(t, &req, `{"public_model":"m","target_platform":"composite"}`))
+}
+
+func TestCompositeRouteTargetPlatform_RejectsRemovedCursorPlatforms(t *testing.T) {
+	for _, platform := range []string{"cursor_sand", "cursor"} {
+		var req CompositeRouteRequest
+		body := fmt.Sprintf(`{"public_model":"m","target_platform":%q}`, platform)
+		require.Error(t, bindGroupPlatformJSON(t, &req, body), "platform %q 已下线，应被拒绝", platform)
+	}
 }

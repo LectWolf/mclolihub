@@ -242,41 +242,6 @@
             OpenCode
           </button>
         </div>
-        <!-- Cursor: two distinct reverse-proxy methods -->
-        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
-          <button
-            type="button"
-            @click="selectCursorPlatform('cursor_sand')"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'cursor_sand'
-                ? 'bg-white text-yellow-700 shadow-sm dark:bg-dark-600 dark:text-yellow-300'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <PlatformIcon platform="cursor_sand" size="sm" />
-            Cursor Sand
-          </button>
-          <button
-            type="button"
-            @click="selectCursorPlatform('cursor')"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'cursor'
-                ? 'bg-white text-violet-600 shadow-sm dark:bg-dark-600 dark:text-violet-400'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <PlatformIcon platform="cursor" size="sm" />
-            Cursor IDE
-          </button>
-        </div>
-        <p v-if="form.platform === 'cursor_sand'" class="input-hint mt-2">
-          {{ t('admin.accounts.cursorProxy.sandPlatformHint') }}
-        </p>
-        <p v-else-if="form.platform === 'cursor'" class="input-hint mt-2">
-          {{ t('admin.accounts.cursorProxy.idePlatformHint') }}
-        </p>
         <div class="mt-2 flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
           <button
             type="button"
@@ -1484,26 +1449,6 @@
           />
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
         </div>
-        <CursorProxyFields
-          v-else-if="isCursorProxyPlatform"
-          :platform="form.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
-          mode="create"
-          :renewal-credential="cursorSandRenewalCredential"
-          :grok-bot-token="cursorGrokBotToken"
-          :session-token="cursorSessionToken"
-          :machine-id="cursorMachineId"
-          :client-version="cursorClientVersion"
-          :cli-logging-in="cursorCLILoggingIn"
-          :cli-hint="cursorCLIHint"
-          :proxy-id="form.proxy_id"
-          @update:renewal-credential="cursorSandRenewalCredential = $event"
-          @update:grok-bot-token="cursorGrokBotToken = $event"
-          @update:session-token="cursorSessionToken = $event"
-          @update:machine-id="cursorMachineId = $event"
-          @update:client-version="cursorClientVersion = $event"
-          @start-cli-login="startCursorCLILogin"
-          @grok-oauth-complete="onSandGrokOAuthComplete"
-        />
         <QoderProxyFields
           v-else-if="form.platform === 'qoder'"
           mode="create"
@@ -4159,7 +4104,6 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
-import CursorProxyFields from '@/components/account/CursorProxyFields.vue'
 import QoderProxyFields from '@/components/account/QoderProxyFields.vue'
 import { allSelectedGroupsEnableLongContextPricing } from '@/components/account/longContextBilling'
 import {
@@ -4389,17 +4333,8 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
-const cursorSandRenewalCredential = ref('')
-const cursorGrokBotToken = ref('')
-const cursorGrokRefreshToken = ref('')
-const cursorSessionToken = ref('')
-const cursorMachineId = ref('')
-const cursorClientVersion = ref('3.21.12')
-const isCursorProxyPlatform = computed(
-  () => form.platform === 'cursor_sand' || form.platform === 'cursor'
-)
 const hidesGenericApiKey = computed(
-  () => isCursorProxyPlatform.value || form.platform === 'qoder'
+  () => form.platform === 'qoder'
 )
 const qoderPersonalToken = ref('')
 const qoderMachineId = ref('')
@@ -4421,65 +4356,9 @@ const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; user
   qoderMachineId.value = payload.machineId
   qoderRegion.value = payload.region
 }
-  form.platform = platform
-  accountCategory.value = 'apikey'
-}
 const selectQoderPlatform = () => {
   form.platform = 'qoder'
   accountCategory.value = 'apikey'
-}
-const cursorCLILoggingIn = ref(false)
-const cursorCLIHint = ref('调用 Cursor CLI 同款 loginDeepControl：浏览器登录后自动回填 token。也可手动粘贴 agent login 后的 session JWT。')
-const cursorCLIRefreshToken = ref('')
-let cursorCLIPollTimer: ReturnType<typeof setInterval> | null = null
-
-const stopCursorCLIPoll = () => {
-  if (cursorCLIPollTimer) {
-    clearInterval(cursorCLIPollTimer)
-    cursorCLIPollTimer = null
-  }
-  cursorCLILoggingIn.value = false
-}
-
-const onSandGrokOAuthComplete = (payload: { accessToken: string; refreshToken?: string }) => {
-  cursorGrokBotToken.value = payload.accessToken
-  cursorGrokRefreshToken.value = payload.refreshToken || ''
-}
-
-const startCursorCLILogin = async () => {
-  stopCursorCLIPoll()
-  cursorCLILoggingIn.value = true
-  cursorCLIHint.value = '正在打开 Cursor CLI 登录页…'
-  try {
-    const sess = await adminAPI.accounts.startCursorCLILogin()
-    window.open(sess.login_url, '_blank', 'noopener')
-    cursorCLIHint.value = '请在打开的窗口完成登录，完成后会自动回填 token。'
-    let ticks = 0
-    cursorCLIPollTimer = setInterval(async () => {
-      ticks += 1
-      if (ticks > 90) {
-        stopCursorCLIPoll()
-        cursorCLIHint.value = '登录超时，请重试或手动粘贴 token。'
-        return
-      }
-      try {
-        const result = await adminAPI.accounts.pollCursorCLILogin(sess.uuid, sess.verifier)
-        if (result.status === 'ok' && result.access_token) {
-          cursorSessionToken.value = result.access_token
-          cursorCLIRefreshToken.value = result.refresh_token || ''
-          stopCursorCLIPoll()
-          cursorCLIHint.value = result.email
-            ? `CLI 登录成功（${result.email}）`
-            : 'CLI 登录成功，token 已回填。'
-        }
-      } catch {
-        // keep polling through transient errors
-      }
-    }, 2000)
-  } catch (err: any) {
-    stopCursorCLIPoll()
-    cursorCLIHint.value = err?.message || '无法启动 CLI 登录'
-  }
 }
 const upstreamBillingAutoProbeEnabled = ref(true)
 
@@ -5141,10 +5020,6 @@ watch(
       form.type = 'oauth'
       return
     }
-    if (form.platform === 'cursor_sand' || form.platform === 'cursor') {
-      form.type = 'apikey'
-      return
-    }
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
       return
@@ -5172,7 +5047,7 @@ watch(
     if (newPlatform === 'codebuddy') {
       accountCategory.value = 'oauth-based'
     }
-    if (newPlatform === 'cursor_sand' || newPlatform === 'cursor' || newPlatform === 'qoder') {
+    if (newPlatform === 'qoder') {
       accountCategory.value = 'apikey'
     }
     // Reset base URL based on platform
@@ -6146,51 +6021,6 @@ const handleSubmit = async () => {
     return
   }
 
-  if (form.platform === 'cursor_sand' || form.platform === 'cursor') {
-    if (!form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
-    const credentials: Record<string, unknown> = {}
-    if (form.platform === 'cursor_sand') {
-      const cred = cursorSandRenewalCredential.value.trim()
-      const grokTok = cursorGrokBotToken.value.trim()
-      if (!cred && !grokTok) {
-        appStore.showError(t('admin.accounts.cursorProxy.sandCredentialRequired'))
-        return
-      }
-      if (cred) credentials.sand_inference_renewal_credential = cred
-      if (grokTok) credentials.grok_bot_token = grokTok
-      if (cursorGrokRefreshToken.value.trim()) credentials.refresh_token = cursorGrokRefreshToken.value.trim()
-      if (cursorMachineId.value.trim()) credentials.machine_id = cursorMachineId.value.trim()
-    } else {
-      const token = cursorSessionToken.value.trim()
-      if (!token) {
-        appStore.showError(t('admin.accounts.cursorProxy.sessionTokenRequired'))
-        return
-      }
-      credentials.session_token = token
-      if (cursorCLIRefreshToken.value.trim()) credentials.refresh_token = cursorCLIRefreshToken.value.trim()
-      if (cursorClientVersion.value.trim()) credentials.client_version = cursorClientVersion.value.trim()
-      if (cursorMachineId.value.trim()) credentials.machine_id = cursorMachineId.value.trim()
-    }
-    const modelMapping = buildModelMappingObject(
-      modelRestrictionMode.value,
-      allowedModels.value,
-      modelMappings.value
-    )
-    if (modelMapping) credentials.model_mapping = modelMapping
-    form.credentials = credentials
-    await doCreateAccount({
-      ...form,
-      type: 'apikey',
-      group_ids: form.group_ids,
-      extra: withUpstreamRequestIdHeader(buildAnthropicExtra(buildOpenAIExtra())),
-      upstream_billing_probe_enabled: false,
-      auto_pause_on_expired: autoPauseOnExpired.value
-    })
-    return
-  }
 
   const defaultBaseUrl =
     form.platform === 'openai'

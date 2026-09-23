@@ -19,8 +19,6 @@ func TestAllPlatformsIncludesEveryConcretePlatform(t *testing.T) {
 		"minimax",
 		"codebuddy",
 		"opencode_go",
-		"cursor_sand",
-		"cursor",
 		"qoder",
 	}, AllPlatforms())
 }

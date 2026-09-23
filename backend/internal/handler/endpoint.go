@@ -354,10 +354,6 @@ func shouldUseAntigravityCompat(account *service.Account) bool {
 		account.Type == service.AccountTypeOAuth
 }
 
-func shouldUseCursorProxy(account *service.Account) bool {
-	return account != nil && (account.IsCursorSand() || account.IsCursor())
-}
-
 func shouldUseQoderProxy(account *service.Account) bool {
 	return account != nil && account.IsQoder()
 }

@@ -18,8 +18,6 @@ const PROVIDER_BY_PLATFORM: Record<GroupPlatform, KeyGroupProvider> = {
   composite: 'other',
   codebuddy: 'other',
   opencode_go: 'other',
-  cursor_sand: 'other',
-  cursor: 'other',
   qoder: 'other'
 }
 

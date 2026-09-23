@@ -43,7 +43,6 @@ type GatewayHandler struct {
 	openAIGatewayService      *service.OpenAIGatewayService
 	geminiCompatService       *service.GeminiMessagesCompatService
 	antigravityGatewayService *service.AntigravityGatewayService
-	cursorGatewayService      *service.CursorGatewayService
 	qoderGatewayService       *service.QoderGatewayService
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
@@ -126,7 +125,6 @@ func NewGatewayHandler(
 	openAIGatewayService *service.OpenAIGatewayService,
 	geminiCompatService *service.GeminiMessagesCompatService,
 	antigravityGatewayService *service.AntigravityGatewayService,
-	cursorGatewayService *service.CursorGatewayService,
 	qoderGatewayService *service.QoderGatewayService,
 	userService *service.UserService,
 	concurrencyService *service.ConcurrencyService,
@@ -164,7 +162,6 @@ func NewGatewayHandler(
 		openAIGatewayService:      openAIGatewayService,
 		geminiCompatService:       geminiCompatService,
 		antigravityGatewayService: antigravityGatewayService,
-		cursorGatewayService:      cursorGatewayService,
 		qoderGatewayService:       qoderGatewayService,
 		userService:               userService,
 		billingCacheService:       billingCacheService,

@@ -266,7 +266,6 @@ func ProvideAccountTestService(
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	openAIGatewayService *OpenAIGatewayService,
-	cursorGatewayService *CursorGatewayService,
 	qoderGatewayService *QoderGatewayService,
 	settingService *SettingService,
 	pluginManager *PluginManager,
@@ -283,7 +282,6 @@ func ProvideAccountTestService(
 	)
 	service.agentIdentityWS = openAIGatewayService
 	service.SetOpenAIGatewayService(openAIGatewayService)
-	service.SetCursorGatewayService(cursorGatewayService)
 	service.SetQoderGatewayService(qoderGatewayService)
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)
@@ -995,7 +993,6 @@ var ProviderSet = wire.NewSet(
 	ProvideCNProviderBalanceCheckService,
 	ProvideClaudeTokenProvider,
 	NewAntigravityGatewayService,
-	NewCursorGatewayService,
 	NewQoderGatewayService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
