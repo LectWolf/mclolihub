@@ -524,8 +524,6 @@ export default {
       minimax: 'MiniMax',
       codebuddy: 'CodeBuddy',
       opencode_go: 'OpenCode',
-      cursor_sand: 'Cursor Sand',
-      cursor: 'Cursor IDE',
       qoder: 'Qoder'
     },
     // Check modes (how a monitor performs its checks)

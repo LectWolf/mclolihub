@@ -460,21 +460,6 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'meta': return metaModels
     case 'xai':
     case 'grok': return xaiModels
-    case 'cursor_sand':
-      return [
-        'grok-4.6', 'grok-4.5', 'composer-2.5',
-        'gpt-5.6-luna', 'gpt-5.4-mini',
-        'gemini-3.1-pro', 'gemini-3-flash', 'gemini-2.5-flash',
-        'claude-haiku-4-5'
-      ]
-    case 'cursor':
-      return [
-        'claude-fable-5-1', 'claude-fable-5',
-        'claude-opus-5', 'claude-sonnet-5',
-        'claude-opus-4-8', 'claude-sonnet-4-6',
-        'grok-4.6', 'composer-2.5',
-        'gpt-5.6-sol', 'gpt-5.5'
-      ]
     case 'qoder':
       return [
         'auto',

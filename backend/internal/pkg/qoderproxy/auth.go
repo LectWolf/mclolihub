@@ -10,11 +10,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 const (
 	userAgent   = "qodercli/1.0.0"
 	refreshSkew = 5 * time.Minute
+	// exchangeTimeout bounds a shared PAT exchange, which outlives any single
+	// caller's context.
+	exchangeTimeout = 30 * time.Second
 )
 
 // Identity is a job token plus the user it belongs to.
@@ -27,14 +32,20 @@ type Identity struct {
 	ExpiresAt time.Time
 }
 
-// TokenCache remembers PAT to job-token exchanges.
+// TokenCache remembers PAT to job-token exchanges. Concurrent misses for the
+// same PAT share one exchange.
 type TokenCache struct {
-	mu    sync.Mutex
-	items map[string]Identity
+	mu     sync.Mutex
+	items  map[string]Identity
+	flight singleflight.Group
 }
 
 func NewTokenCache() *TokenCache {
 	return &TokenCache{items: map[string]Identity{}}
+}
+
+func tokenCacheKey(region Region, pat string) string {
+	return string(region) + "\x00" + pat
 }
 
 // Invalidate drops cached job tokens for a PAT on every region.
@@ -53,13 +64,13 @@ func (c *TokenCache) Invalidate(pat string) {
 }
 
 // Resolve exchanges a personal access token for a job token on the global site.
-func (c *TokenCache) Resolve(ctx context.Context, client *http.Client, pat, machineID string) (Identity, error) {
-	return c.ResolveRegion(ctx, client, RegionGlobal, pat, machineID)
+func (c *TokenCache) Resolve(ctx context.Context, doer Doer, pat, machineID string) (Identity, error) {
+	return c.ResolveRegion(ctx, doer, RegionGlobal, pat, machineID)
 }
 
 // ResolveRegion exchanges a PAT on the China or global Qoder API.
 // machineID is kept when the caller already has one.
-func (c *TokenCache) ResolveRegion(ctx context.Context, client *http.Client, region Region, pat, machineID string) (Identity, error) {
+func (c *TokenCache) ResolveRegion(ctx context.Context, doer Doer, region Region, pat, machineID string) (Identity, error) {
 	pat = strings.TrimSpace(pat)
 	if pat == "" {
 		return Identity{}, fmt.Errorf("qoder: personal token is empty")
@@ -67,41 +78,69 @@ func (c *TokenCache) ResolveRegion(ctx context.Context, client *http.Client, reg
 	if region != RegionCN {
 		region = RegionGlobal
 	}
-	if client == nil {
-		client = http.DefaultClient
-	}
-	key := string(region) + "\x00" + pat
 	machineID = strings.TrimSpace(machineID)
-	if c != nil {
-		c.mu.Lock()
-		cached, ok := c.items[key]
-		c.mu.Unlock()
-		if ok && time.Until(cached.ExpiresAt) > refreshSkew {
-			if machineID != "" {
-				cached.MachineID = machineID
-			}
-			return cached, nil
+	withMachine := func(identity Identity) Identity {
+		if machineID != "" {
+			identity.MachineID = machineID
+		} else if identity.MachineID == "" {
+			identity.MachineID = newID()
 		}
+		return identity
+	}
+	if c == nil {
+		identity, err := exchange(ctx, doer, region.APIBase(), pat)
+		if err != nil {
+			return Identity{}, err
+		}
+		return withMachine(identity), nil
 	}
 
-	identity, err := exchange(ctx, client, region.APIBase(), pat)
-	if err != nil {
-		return Identity{}, err
+	key := tokenCacheKey(region, pat)
+	if cached, ok := c.fresh(key); ok {
+		return withMachine(cached), nil
 	}
-	if machineID != "" {
-		identity.MachineID = machineID
-	} else if identity.MachineID == "" {
+	results := c.flight.DoChan(key, func() (any, error) {
+		if cached, ok := c.fresh(key); ok {
+			return cached, nil
+		}
+		// The result is shared with other waiters: one caller's cancellation
+		// must not fail everyone else's request, so the exchange gets its own
+		// deadline instead.
+		exchangeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), exchangeTimeout)
+		defer cancel()
+		identity, err := exchange(exchangeCtx, doer, region.APIBase(), pat)
+		if err != nil {
+			return Identity{}, err
+		}
 		identity.MachineID = newID()
-	}
-	if c != nil {
 		c.mu.Lock()
 		c.items[key] = identity
 		c.mu.Unlock()
+		return identity, nil
+	})
+	select {
+	case <-ctx.Done():
+		return Identity{}, ctx.Err()
+	case result := <-results:
+		if result.Err != nil {
+			return Identity{}, result.Err
+		}
+		identity, _ := result.Val.(Identity)
+		return withMachine(identity), nil
 	}
-	return identity, nil
 }
 
-func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Identity, error) {
+func (c *TokenCache) fresh(key string) (Identity, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cached, ok := c.items[key]
+	if !ok || time.Until(cached.ExpiresAt) <= refreshSkew {
+		return Identity{}, false
+	}
+	return cached, true
+}
+
+func exchange(ctx context.Context, doer Doer, apiBase, pat string) (Identity, error) {
 	raw, err := json.Marshal(map[string]string{"personal_token": pat})
 	if err != nil {
 		return Identity{}, err
@@ -116,7 +155,7 @@ func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Id
 	req.Header.Set("Cosy-Version", cosyVersion)
 	req.Header.Set("Cosy-ClientType", clientType)
 
-	resp, err := client.Do(req)
+	resp, err := doerOrDefault(doer).Do(req)
 	if err != nil {
 		return Identity{}, fmt.Errorf("qoder: job token: %w", err)
 	}
@@ -126,13 +165,12 @@ func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Id
 		return Identity{}, fmt.Errorf("qoder: job token body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Identity{}, fmt.Errorf("qoder: job token HTTP %d: %s", resp.StatusCode, truncateRunes(string(body), 240))
+		return Identity{}, &HTTPError{Op: "job token", Status: resp.StatusCode, Body: string(body)}
 	}
 	var parsed struct {
-		Token        string `json:"token"`
-		ExpiresIn    int64  `json:"expires_in"`
-		ExpiresAt    string `json:"expires_at"`
-		RefreshToken string `json:"refresh_token"`
+		Token     string `json:"token"`
+		ExpiresIn int64  `json:"expires_in"`
+		ExpiresAt string `json:"expires_at"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return Identity{}, fmt.Errorf("qoder: job token json: %w", err)
@@ -144,9 +182,10 @@ func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Id
 		JobToken:  parsed.Token,
 		ExpiresAt: expiry(parsed.ExpiresAt, parsed.ExpiresIn),
 	}
-	_ = parsed.RefreshToken
-	profile, err := fetchUser(ctx, client, strings.TrimRight(apiBase, "/")+"/api/v1/userinfo", parsed.Token)
+	profile, err := fetchUser(ctx, doer, strings.TrimRight(apiBase, "/")+"/api/v1/userinfo", parsed.Token)
 	if err != nil {
+		// COSY needs some uid; a placeholder keeps the request valid when user
+		// info is temporarily unavailable.
 		identity.UserID = "user-" + newID()[:8]
 		return identity, nil
 	}
@@ -156,31 +195,32 @@ func exchange(ctx context.Context, client *http.Client, apiBase, pat string) (Id
 	return identity, nil
 }
 
-type profile struct {
+// Profile is the user a Qoder token belongs to.
+type Profile struct {
 	UserID string
 	Name   string
 	Email  string
 }
 
-func fetchUser(ctx context.Context, client *http.Client, userInfoURL, jobToken string) (profile, error) {
+func fetchUser(ctx context.Context, doer Doer, userInfoURL, token string) (Profile, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, userInfoURL, nil)
 	if err != nil {
-		return profile{}, err
+		return Profile{}, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Authorization", "Bearer "+jobToken)
-	resp, err := client.Do(req)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := doerOrDefault(doer).Do(req)
 	if err != nil {
-		return profile{}, err
+		return Profile{}, fmt.Errorf("qoder: user info: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return profile{}, err
+		return Profile{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return profile{}, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return Profile{}, &HTTPError{Op: "user info", Status: resp.StatusCode, Body: string(body)}
 	}
 	var parsed struct {
 		ID     string `json:"id"`
@@ -189,13 +229,13 @@ func fetchUser(ctx context.Context, client *http.Client, userInfoURL, jobToken s
 		Email  string `json:"email"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return profile{}, err
+		return Profile{}, err
 	}
 	id := firstNonEmpty(parsed.ID, parsed.UserID)
 	if id == "" {
-		return profile{}, fmt.Errorf("user id missing")
+		return Profile{}, fmt.Errorf("qoder: user info has no user id")
 	}
-	return profile{UserID: id, Name: parsed.Name, Email: parsed.Email}, nil
+	return Profile{UserID: id, Name: parsed.Name, Email: parsed.Email}, nil
 }
 
 func expiry(expiresAt string, expiresIn int64) time.Time {
@@ -210,11 +250,7 @@ func expiry(expiresAt string, expiresIn int64) time.Time {
 	return time.Now().Add(24 * time.Hour)
 }
 
-// FetchProfile loads the user id for a device or job token.
-func FetchProfile(ctx context.Context, client *http.Client, userInfoURL, token string) (userID, name, email string, err error) {
-	got, err := fetchUser(ctx, client, userInfoURL, token)
-	if err != nil {
-		return "", "", "", err
-	}
-	return got.UserID, got.Name, got.Email, nil
+// FetchProfile loads the user a device or job token belongs to.
+func FetchProfile(ctx context.Context, doer Doer, region Region, token string) (Profile, error) {
+	return fetchUser(ctx, doer, region.APIBase()+"/api/v1/userinfo", token)
 }

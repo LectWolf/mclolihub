@@ -35,6 +35,10 @@ const (
 
 const EndpointAntigravityGenerateContent = "/v1internal:streamGenerateContent"
 
+// EndpointQoderAgentChat is the Qoder agent SSE endpoint every Qoder request is
+// forwarded to, whatever the inbound protocol.
+const EndpointQoderAgentChat = "/algo/api/v2/service/pro/sse/agent_chat_generation"
+
 // gin.Context keys used by the middleware and helpers below.
 const (
 	ctxKeyInboundEndpoint        = "_gateway_inbound_endpoint"
@@ -348,10 +352,6 @@ func shouldUseAntigravityCompat(account *service.Account) bool {
 	return account != nil &&
 		account.Platform == service.PlatformAntigravity &&
 		account.Type == service.AccountTypeOAuth
-}
-
-func shouldUseCursorProxy(account *service.Account) bool {
-	return account != nil && (account.IsCursorSand() || account.IsCursor())
 }
 
 func shouldUseQoderProxy(account *service.Account) bool {

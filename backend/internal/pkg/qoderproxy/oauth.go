@@ -127,12 +127,10 @@ func StartLogin(region, machineID string) (LoginStart, error) {
 	}, nil
 }
 
-// PollLogin waits one round for the device token. ErrLoginPending means try again.
-func PollLogin(ctx context.Context, client *http.Client, region, nonce, verifier string) (DeviceToken, error) {
+// PollLogin waits one round for the device token. ErrLoginPending means try
+// again; an *HTTPError means Qoder rejected the login session.
+func PollLogin(ctx context.Context, doer Doer, region, nonce, verifier string) (DeviceToken, error) {
 	site := NormalizeRegion(region)
-	if client == nil {
-		client = http.DefaultClient
-	}
 	query := url.Values{}
 	query.Set("nonce", strings.TrimSpace(nonce))
 	query.Set("verifier", strings.TrimSpace(verifier))
@@ -144,7 +142,7 @@ func PollLogin(ctx context.Context, client *http.Client, region, nonce, verifier
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
+	resp, err := doerOrDefault(doer).Do(req)
 	if err != nil {
 		return DeviceToken{}, fmt.Errorf("qoder: device poll: %w", err)
 	}
@@ -157,7 +155,7 @@ func PollLogin(ctx context.Context, client *http.Client, region, nonce, verifier
 		return DeviceToken{}, ErrLoginPending
 	}
 	if resp.StatusCode != http.StatusOK {
-		return DeviceToken{}, fmt.Errorf("qoder: device poll HTTP %d: %s", resp.StatusCode, truncateRunes(string(body), 240))
+		return DeviceToken{}, &HTTPError{Op: "device poll", Status: resp.StatusCode, Body: string(body)}
 	}
 	tok, ok := parseDeviceToken(body)
 	if !ok {
@@ -166,11 +164,12 @@ func PollLogin(ctx context.Context, client *http.Client, region, nonce, verifier
 	return tok, nil
 }
 
-// RefreshLogin exchanges a device refresh token for a new access token.
-func RefreshLogin(ctx context.Context, client *http.Client, region, refreshToken string) (DeviceToken, error) {
-	site := NormalizeRegion(region)
-	if client == nil {
-		client = http.DefaultClient
+// RefreshLogin exchanges a device refresh token for a new access token on the
+// account's site. An *HTTPError with a 4xx status means the refresh token is
+// no longer accepted.
+func RefreshLogin(ctx context.Context, doer Doer, site Region, refreshToken string) (DeviceToken, error) {
+	if site != RegionCN {
+		site = RegionGlobal
 	}
 	raw, err := json.Marshal(map[string]string{"refresh_token": strings.TrimSpace(refreshToken)})
 	if err != nil {
@@ -183,7 +182,7 @@ func RefreshLogin(ctx context.Context, client *http.Client, region, refreshToken
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
+	resp, err := doerOrDefault(doer).Do(req)
 	if err != nil {
 		return DeviceToken{}, fmt.Errorf("qoder: device refresh: %w", err)
 	}
@@ -193,7 +192,7 @@ func RefreshLogin(ctx context.Context, client *http.Client, region, refreshToken
 		return DeviceToken{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return DeviceToken{}, fmt.Errorf("qoder: device refresh HTTP %d: %s", resp.StatusCode, truncateRunes(string(body), 240))
+		return DeviceToken{}, &HTTPError{Op: "device refresh", Status: resp.StatusCode, Body: string(body)}
 	}
 	tok, ok := parseDeviceToken(body)
 	if !ok {

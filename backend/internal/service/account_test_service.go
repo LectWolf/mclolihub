@@ -153,7 +153,6 @@ type AccountTestService struct {
 	modelMetadataRegistryAt   time.Time
 	pluginManager             *PluginManager
 	openaiGatewayService      *OpenAIGatewayService
-	cursorGatewayService      *CursorGatewayService
 	qoderGatewayService       *QoderGatewayService
 	agentIdentityTaskMu       sync.Mutex
 	agentIdentityWS           agentIdentityWSConnectionInvalidator
@@ -177,12 +176,6 @@ func (s *AccountTestService) SetPluginManager(pluginManager *PluginManager) {
 func (s *AccountTestService) SetOpenAIGatewayService(gateway *OpenAIGatewayService) {
 	if s != nil {
 		s.openaiGatewayService = gateway
-	}
-}
-
-func (s *AccountTestService) SetCursorGatewayService(gateway *CursorGatewayService) {
-	if s != nil {
-		s.cursorGatewayService = gateway
 	}
 }
 
@@ -388,10 +381,6 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		return s.testQoderAccountConnection(c, account, modelID, prompt)
 	}
 
-	if account.IsCursorSand() || account.IsCursor() {
-		return s.testCursorAccountConnection(c, account, modelID, prompt)
-	}
-
 	if account.IsOpenAI() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
 	}
@@ -423,21 +412,22 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	if s.qoderGatewayService == nil {
 		return s.sendErrorAndEnd(c, "Qoder proxy service is not configured")
 	}
-	if strings.TrimSpace(qoderPersonalToken(account)) == "" && strings.TrimSpace(account.GetCredential("access_token")) == "" && strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
+	if qoderPersonalToken(account) == "" && !qoderHasDeviceLogin(account) {
 		return s.sendErrorAndEnd(c, "No Qoder personal access token or device login available")
 	}
 
-	testModelID := strings.TrimSpace(modelID)
-	if testModelID == "" {
-		testModelID = "auto"
+	// The gateway applies the account model mapping itself.
+	requestModel := strings.TrimSpace(modelID)
+	if requestModel == "" {
+		requestModel = "auto"
 	}
-	testModelID = account.GetMappedModel(testModelID)
+	testModelID := account.GetMappedModel(requestModel)
 	testPrompt := strings.TrimSpace(prompt)
 	if testPrompt == "" {
 		testPrompt = "Reply with exactly: ok"
 	}
 	body, err := json.Marshal(map[string]any{
-		"model": testModelID,
+		"model": requestModel,
 		"messages": []map[string]string{
 			{"role": "user", "content": testPrompt},
 		},
@@ -463,6 +453,11 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	responseBody := recorder.Body.Bytes()
 	if forwardErr != nil || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices {
 		message := strings.TrimSpace(gjson.GetBytes(responseBody, "error.message").String())
+		var failoverErr *UpstreamFailoverError
+		if message == "" && errors.As(forwardErr, &failoverErr) {
+			// Failover errors leave the response unwritten for the handler.
+			message = qoderFailoverTestMessage(failoverErr)
+		}
 		if message == "" && forwardErr != nil {
 			message = forwardErr.Error()
 		}
@@ -475,11 +470,11 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	if strings.TrimSpace(text) == "" {
 		return s.sendErrorAndEnd(c, "Qoder proxy returned no assistant text")
 	}
-	resolvedModel := strings.TrimSpace(gjson.GetBytes(responseBody, "model").String())
-	if resolvedModel == "" && result != nil {
-		resolvedModel = strings.TrimSpace(result.Model)
+	resolvedModel := testModelID
+	if result != nil && strings.TrimSpace(result.UpstreamResponseModel) != "" {
+		resolvedModel = strings.TrimSpace(result.UpstreamResponseModel)
 	}
-	if resolvedModel != "" && resolvedModel != testModelID {
+	if resolvedModel != "" && resolvedModel != requestModel {
 		s.sendEvent(c, TestEvent{Type: "status", Text: "Resolved model: " + resolvedModel, Model: resolvedModel})
 	}
 	s.sendEvent(c, TestEvent{Type: "content", Text: text})
@@ -487,87 +482,22 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	return nil
 }
 
-func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {
-	if s.cursorGatewayService == nil {
-		return s.sendErrorAndEnd(c, "Cursor proxy service is not configured")
+func qoderFailoverTestMessage(failoverErr *UpstreamFailoverError) string {
+	detail := strings.TrimSpace(extractUpstreamErrorMessage(failoverErr.ResponseBody))
+	if detail == "" {
+		detail = truncateString(strings.TrimSpace(string(failoverErr.ResponseBody)), 300)
 	}
-
-	if account.IsCursorSand() {
-		creds := parseSandCredentials(account)
-		if strings.TrimSpace(creds.GrokBotToken) == "" && strings.TrimSpace(creds.RenewalCredential) == "" {
-			return s.sendErrorAndEnd(c, "No Grok Bot token or SAND_INFERENCE_RENEWAL_CREDENTIAL available")
+	detail = sanitizeUpstreamErrorMessage(detail)
+	if failoverErr.IsCredentialFailure() {
+		if detail == "" {
+			return failoverErr.ClientMessage
 		}
-	} else {
-		creds := parseIDECredentials(account)
-		if strings.TrimSpace(creds.SessionToken) == "" {
-			return s.sendErrorAndEnd(c, "No Cursor CLI session token available")
-		}
+		return failoverErr.ClientMessage + ": " + detail
 	}
-
-	testModelID := strings.TrimSpace(modelID)
-	if testModelID == "" {
-		if account.IsCursorSand() {
-			testModelID = "grok-4.6"
-		} else {
-			testModelID = "claude-fable-5-1"
-		}
+	if detail == "" {
+		return fmt.Sprintf("Qoder upstream returned HTTP %d", failoverErr.StatusCode)
 	}
-	testModelID = account.GetMappedModel(testModelID)
-	testPrompt := strings.TrimSpace(prompt)
-	if testPrompt == "" {
-		testPrompt = "Reply with exactly: ok"
-	}
-
-	body, err := json.Marshal(map[string]any{
-		"model": testModelID,
-		"messages": []map[string]string{
-			{"role": "user", "content": testPrompt},
-		},
-		"stream": false,
-	})
-	if err != nil {
-		return s.sendErrorAndEnd(c, "Failed to build Cursor test request")
-	}
-
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.Flush()
-	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
-
-	recorder := httptest.NewRecorder()
-	probeContext, _ := gin.CreateTestContext(recorder)
-	probeContext.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body)).WithContext(c.Request.Context())
-	result, forwardErr := s.cursorGatewayService.ForwardAsChatCompletions(
-		c.Request.Context(), probeContext, account, body, nil,
-	)
-	responseBody := recorder.Body.Bytes()
-	if forwardErr != nil || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices {
-		message := strings.TrimSpace(gjson.GetBytes(responseBody, "error.message").String())
-		if message == "" && forwardErr != nil {
-			message = forwardErr.Error()
-		}
-		if message == "" {
-			message = fmt.Sprintf("Cursor proxy returned HTTP %d", recorder.Code)
-		}
-		return s.sendErrorAndEnd(c, message)
-	}
-
-	text := gjson.GetBytes(responseBody, "choices.0.message.content").String()
-	if strings.TrimSpace(text) == "" {
-		return s.sendErrorAndEnd(c, "Cursor proxy returned no assistant text")
-	}
-	resolvedModel := strings.TrimSpace(gjson.GetBytes(responseBody, "model").String())
-	if resolvedModel == "" && result != nil {
-		resolvedModel = strings.TrimSpace(result.Model)
-	}
-	if resolvedModel != "" && resolvedModel != testModelID {
-		s.sendEvent(c, TestEvent{Type: "status", Text: "Resolved model: " + resolvedModel, Model: resolvedModel})
-	}
-	s.sendEvent(c, TestEvent{Type: "content", Text: text})
-	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true, Model: resolvedModel})
-	return nil
+	return fmt.Sprintf("Qoder upstream returned HTTP %d: %s", failoverErr.StatusCode, detail)
 }
 
 // testOpenCodeGoAccountConnection probes the native endpoint for the selected

@@ -116,10 +116,6 @@ func DetectModelPlatform(model string) (string, bool) {
 			return PlatformMiniMax, true
 		case "codebuddy", "workbuddy":
 			return PlatformCodeBuddy, true
-		case "cursor":
-			return PlatformCursor, true
-		case "cursor_sand", "sand":
-			return PlatformCursorSand, true
 		case "qoder", "qd":
 			return PlatformQoder, true
 		}

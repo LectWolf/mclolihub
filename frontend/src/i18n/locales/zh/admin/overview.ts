@@ -926,8 +926,6 @@ export default {
         minimax: 'MiniMax',
         codebuddy: 'CodeBuddy',
         opencode_go: 'OpenCode',
-        cursor_sand: 'Cursor Sand',
-        cursor: 'Cursor IDE',
         qoder: 'Qoder',
         composite: 'Composite',
       },

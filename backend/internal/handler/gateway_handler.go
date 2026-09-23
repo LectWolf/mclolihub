@@ -43,7 +43,6 @@ type GatewayHandler struct {
 	openAIGatewayService      *service.OpenAIGatewayService
 	geminiCompatService       *service.GeminiMessagesCompatService
 	antigravityGatewayService *service.AntigravityGatewayService
-	cursorGatewayService      *service.CursorGatewayService
 	qoderGatewayService       *service.QoderGatewayService
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
@@ -126,7 +125,6 @@ func NewGatewayHandler(
 	openAIGatewayService *service.OpenAIGatewayService,
 	geminiCompatService *service.GeminiMessagesCompatService,
 	antigravityGatewayService *service.AntigravityGatewayService,
-	cursorGatewayService *service.CursorGatewayService,
 	qoderGatewayService *service.QoderGatewayService,
 	userService *service.UserService,
 	concurrencyService *service.ConcurrencyService,
@@ -164,7 +162,6 @@ func NewGatewayHandler(
 		openAIGatewayService:      openAIGatewayService,
 		geminiCompatService:       geminiCompatService,
 		antigravityGatewayService: antigravityGatewayService,
-		cursorGatewayService:      cursorGatewayService,
 		qoderGatewayService:       qoderGatewayService,
 		userService:               userService,
 		billingCacheService:       billingCacheService,
@@ -1005,7 +1002,15 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
-			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
+			setActualUpstreamEndpoint(c, "")
+			if shouldUseQoderProxy(account) {
+				if h.qoderGatewayService == nil {
+					err = errors.New("qoder proxy service is not configured")
+				} else {
+					setActualUpstreamEndpoint(c, EndpointQoderAgentChat)
+					result, err = h.qoderGatewayService.ForwardAsAnthropic(requestCtx, c, account, attemptBody)
+				}
+			} else if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
 				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, attemptBody, hasBoundSession)
 			} else {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, attemptParsedReq)

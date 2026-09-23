@@ -288,17 +288,7 @@ func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
 
-// IsCursorSand reports InferenceService/Stream (Grok Bot / sand quota) accounts.
-func (a *Account) IsCursorSand() bool {
-	return a != nil && a.Platform == PlatformCursorSand
-}
-
-// IsCursor reports AgentService/Run (Cursor IDE quota) accounts.
-func (a *Account) IsCursor() bool {
-	return a != nil && a.Platform == PlatformCursor
-}
-
-// IsQoder reports Qoder agent-chat accounts (personal access token).
+// IsQoder reports Qoder agent-chat accounts (personal access token or device login).
 func (a *Account) IsQoder() bool {
 	return a != nil && a.Platform == PlatformQoder
 }

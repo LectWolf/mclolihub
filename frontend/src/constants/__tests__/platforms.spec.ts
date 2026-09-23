@@ -13,8 +13,6 @@ const concretePlatforms = [
   'minimax',
   'codebuddy',
   'opencode_go',
-  'cursor_sand',
-  'cursor',
   'qoder'
 ]
 

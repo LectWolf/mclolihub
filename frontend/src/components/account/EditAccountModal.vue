@@ -28,7 +28,7 @@
 
       <!-- API Key fields (only for apikey type) -->
       <div v-if="account.type === 'apikey'" class="space-y-4">
-        <div v-if="(!isCNApiKeyAccount || editApiProtocol !== 'adaptive') && !isCursorProxyAccount && account.platform !== 'qoder'">
+        <div v-if="(!isCNApiKeyAccount || editApiProtocol !== 'adaptive') && account.platform !== 'qoder'">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
             v-model="editBaseUrl"
@@ -204,7 +204,7 @@
           </div>
           <p class="input-hint mt-2">{{ t('admin.accounts.cnProviders.zhipuTeam.hint') }}</p>
         </div>
-        <div v-if="!isCursorProxyAccount && account.platform !== 'qoder'">
+        <div v-if="account.platform !== 'qoder'">
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
           <input
             v-model="editApiKey"
@@ -228,35 +228,17 @@
           />
           <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
         </div>
-        <CursorProxyFields
-          v-else-if="account.platform === 'cursor_sand' || account.platform === 'cursor'"
-          :platform="account.platform === 'cursor_sand' ? 'cursor_sand' : 'cursor'"
-          mode="edit"
-          :renewal-credential="cursorSandRenewalCredential"
-          :grok-bot-token="cursorGrokBotToken"
-          :session-token="cursorSessionToken"
-          :machine-id="cursorMachineId"
-          :client-version="cursorClientVersion"
-          :cli-logging-in="cursorCLILoggingIn"
-          :cli-hint="cursorCLIHint"
-          :proxy-id="form.proxy_id"
-          @update:renewal-credential="cursorSandRenewalCredential = $event"
-          @update:grok-bot-token="cursorGrokBotToken = $event"
-          @update:session-token="cursorSessionToken = $event"
-          @update:machine-id="cursorMachineId = $event"
-          @update:client-version="cursorClientVersion = $event"
-          @start-cli-login="startCursorCLILogin"
-          @grok-oauth-complete="onSandGrokOAuthComplete"
-        />
         <QoderProxyFields
-          v-else-if="account.platform === 'qoder'"
+          v-else
           mode="edit"
           :personal-token="qoderPersonalToken"
           :machine-id="qoderMachineId"
           :region="qoderRegion"
+          :proxy-id="form.proxy_id"
+          :device-login-user="qoderDeviceLoginUser"
           @update:personal-token="qoderPersonalToken = $event"
           @update:machine-id="qoderMachineId = $event"
-          @update:region="qoderRegion = $event"
+          @update:region="onQoderRegionChange"
           @oauth="onQoderOAuth"
         />
 
@@ -3111,8 +3093,7 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import OpenCodeGoProtocolRulesEditor from '@/components/account/OpenCodeGoProtocolRulesEditor.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
-import CursorProxyFields from '@/components/account/CursorProxyFields.vue'
-import QoderProxyFields from '@/components/account/QoderProxyFields.vue'
+import QoderProxyFields, { type QoderOAuthResult } from '@/components/account/QoderProxyFields.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import {
   applyAntigravityProjectID,
@@ -3241,9 +3222,9 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-const isCursorProxyAccount = computed(
-  () => props.account?.platform === 'cursor_sand' || props.account?.platform === 'cursor'
-)
+// ── Qoder：个人访问令牌 / 设备登录 ──
+// 敏感键（personal_token / access_token / refresh_token）不会回显，只能通过
+// credentials_status.has_<key> 判断是否存在；留空提交时后端保留原值。
 const qoderPersonalToken = ref('')
 const qoderMachineId = ref('')
 const qoderRegion = ref<'cn' | 'global'>('cn')
@@ -3251,70 +3232,67 @@ const qoderAccessToken = ref('')
 const qoderRefreshToken = ref('')
 const qoderUserID = ref('')
 const qoderExpiresAt = ref('')
-const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
+const qoderLoginName = ref('')
+const qoderLoginEmail = ref('')
+const qoderLoginRegion = ref<'cn' | 'global' | ''>('')
+const qoderSavedDeviceLogin = ref(false)
+const qoderSavedLoginUser = ref('')
+const qoderSavedRegion = ref<'cn' | 'global'>('global')
+// 已保存的设备登录只在同一站点、且没有换成新个人令牌时继续使用。
+const qoderKeepsSavedDeviceLogin = computed(
+  () =>
+    qoderSavedDeviceLogin.value &&
+    !qoderPersonalToken.value.trim() &&
+    qoderRegion.value === qoderSavedRegion.value
+)
+const qoderDeviceLoginUser = computed(() => {
+  if (qoderAccessToken.value) {
+    return qoderLoginEmail.value || qoderLoginName.value || qoderUserID.value || '-'
+  }
+  if (qoderKeepsSavedDeviceLogin.value) {
+    return qoderSavedLoginUser.value || '-'
+  }
+  return ''
+})
+const clearQoderNewDeviceLogin = () => {
+  qoderAccessToken.value = ''
+  qoderRefreshToken.value = ''
+  qoderUserID.value = ''
+  qoderExpiresAt.value = ''
+  qoderLoginName.value = ''
+  qoderLoginEmail.value = ''
+  qoderLoginRegion.value = ''
+}
+const onQoderOAuth = (payload: QoderOAuthResult) => {
   qoderAccessToken.value = payload.accessToken
   qoderRefreshToken.value = payload.refreshToken
   qoderUserID.value = payload.userId
   qoderExpiresAt.value = payload.expiresAt
   qoderMachineId.value = payload.machineId
   qoderRegion.value = payload.region
+  qoderLoginRegion.value = payload.region
+  qoderLoginName.value = payload.name
+  qoderLoginEmail.value = payload.email
 }
-const cursorSandRenewalCredential = ref('')
-const cursorGrokBotToken = ref('')
-const cursorGrokRefreshToken = ref('')
-const cursorSessionToken = ref('')
-const cursorMachineId = ref('')
-const cursorClientVersion = ref('3.21.12')
-const cursorCLILoggingIn = ref(false)
-const cursorCLIHint = ref('调用 Cursor CLI 同款 loginDeepControl：浏览器登录后自动回填 token。也可手动粘贴。')
-const cursorCLIRefreshToken = ref('')
-let cursorCLIPollTimer: ReturnType<typeof setInterval> | null = null
-
-const stopCursorCLIPoll = () => {
-  if (cursorCLIPollTimer) {
-    clearInterval(cursorCLIPollTimer)
-    cursorCLIPollTimer = null
+// 设备登录令牌只在签发它的站点有效，切换版本后需要重新登录。
+const onQoderRegionChange = (region: 'cn' | 'global') => {
+  qoderRegion.value = region
+  if (qoderLoginRegion.value && qoderLoginRegion.value !== region) {
+    clearQoderNewDeviceLogin()
   }
-  cursorCLILoggingIn.value = false
 }
-
-const onSandGrokOAuthComplete = (payload: { accessToken: string; refreshToken?: string }) => {
-  cursorGrokBotToken.value = payload.accessToken
-  cursorGrokRefreshToken.value = payload.refreshToken || ''
-}
-
-const startCursorCLILogin = async () => {
-  stopCursorCLIPoll()
-  cursorCLILoggingIn.value = true
-  cursorCLIHint.value = '正在打开 Cursor CLI 登录页…'
-  try {
-    const sess = await adminAPI.accounts.startCursorCLILogin()
-    window.open(sess.login_url, '_blank', 'noopener')
-    cursorCLIHint.value = '请在打开的窗口完成登录，完成后会自动回填 token。'
-    let ticks = 0
-    cursorCLIPollTimer = setInterval(async () => {
-      ticks += 1
-      if (ticks > 90) {
-        stopCursorCLIPoll()
-        cursorCLIHint.value = '登录超时，请重试或手动粘贴 token。'
-        return
-      }
-      try {
-        const result = await adminAPI.accounts.pollCursorCLILogin(sess.uuid, sess.verifier)
-        if (result.status === 'ok' && result.access_token) {
-          cursorSessionToken.value = result.access_token
-          cursorCLIRefreshToken.value = result.refresh_token || ''
-          stopCursorCLIPoll()
-          cursorCLIHint.value = result.email ? `CLI 登录成功（${result.email}）` : 'CLI 登录成功，token 已回填。'
-        }
-      } catch {
-        /* keep polling */
-      }
-    }, 2000)
-  } catch (err: any) {
-    stopCursorCLIPoll()
-    cursorCLIHint.value = err?.message || '无法启动 CLI 登录'
-  }
+const syncQoderFormFromAccount = (account: Account) => {
+  const creds = (account.credentials || {}) as Record<string, unknown>
+  const status = account.credentials_status || {}
+  qoderPersonalToken.value = ''
+  clearQoderNewDeviceLogin()
+  qoderRegion.value = creds.qoder_region === 'cn' ? 'cn' : 'global'
+  qoderSavedRegion.value = qoderRegion.value
+  qoderMachineId.value = String(creds.machine_id || '')
+  qoderSavedDeviceLogin.value = Boolean(
+    status.has_access_token || status.has_refresh_token || creds.access_token || creds.refresh_token
+  )
+  qoderSavedLoginUser.value = String(creds.email || creds.name || creds.user_id || '')
 }
 
 // ── 国产供应商（Kimi / Zhipu / DeepSeek）account_mode / api_protocol 编辑 ──
@@ -4510,23 +4488,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     selectedErrorCodes.value = []
   }
   editApiKey.value = ''
-  cursorSandRenewalCredential.value = ''
-  cursorGrokBotToken.value = ''
-  cursorGrokRefreshToken.value = ''
-  cursorSessionToken.value = ''
-  cursorCLIRefreshToken.value = ''
-  stopCursorCLIPoll()
-  cursorCLIHint.value = '调用 Cursor CLI 同款 loginDeepControl：浏览器登录后自动回填 token。也可手动粘贴。'
-  const cursorCreds = (newAccount.credentials || {}) as Record<string, unknown>
-  cursorMachineId.value = String(cursorCreds.machine_id || '')
-  cursorClientVersion.value = String(cursorCreds.client_version || '3.21.12')
-  qoderPersonalToken.value = ''
-  qoderAccessToken.value = ''
-  qoderRefreshToken.value = ''
-  qoderUserID.value = ''
-  qoderExpiresAt.value = ''
-  qoderRegion.value = cursorCreds.qoder_region === 'cn' ? 'cn' : 'global'
-  qoderMachineId.value = String(cursorCreds.machine_id || '')
+  syncQoderFormFromAccount(newAccount)
 }
 
 async function loadTLSProfiles() {
@@ -5207,52 +5169,39 @@ const handleSubmit = async () => {
       // 用户填入新值则覆盖；留空时优先看 credentials_status.has_api_key；
       // 若后端尚未升级（无 credentials_status），回退读旧结构 currentCredentials.api_key。
       // 两者都无才报错。
-      const hasExistingApiKey = Boolean(
-        props.account.credentials_status?.has_api_key
-        || props.account.credentials_status?.has_sand_inference_renewal_credential
-        || props.account.credentials_status?.has_session_token
-        || props.account.credentials_status?.has_personal_token
-        || props.account.credentials_status?.has_grok_bot_token
-        || currentCredentials.api_key
-        || currentCredentials.sand_inference_renewal_credential
-        || currentCredentials.session_token
-        || currentCredentials.personal_token
-        || currentCredentials.grok_bot_token
-      )
-      if (isCursorProxyAccount.value) {
-        if (props.account.platform === 'cursor_sand') {
-          if (cursorSandRenewalCredential.value.trim()) {
-            newCredentials.sand_inference_renewal_credential = cursorSandRenewalCredential.value.trim()
-          }
-          if (cursorGrokBotToken.value.trim()) {
-            newCredentials.grok_bot_token = cursorGrokBotToken.value.trim()
-          }
-          if (cursorGrokRefreshToken.value.trim()) {
-            newCredentials.refresh_token = cursorGrokRefreshToken.value.trim()
-          }
-        } else if (cursorSessionToken.value.trim()) {
-          newCredentials.session_token = cursorSessionToken.value.trim()
+      const hasExistingApiKey =
+        props.account.credentials_status?.has_api_key ?? Boolean(currentCredentials.api_key)
+      if (props.account.platform === 'qoder') {
+        const newPersonalToken = qoderPersonalToken.value.trim()
+        const newAccessToken = qoderAccessToken.value.trim()
+        const hasSavedPersonalToken = Boolean(
+          props.account.credentials_status?.has_personal_token || currentCredentials.personal_token
+        )
+        if (!newPersonalToken && !newAccessToken && !qoderKeepsSavedDeviceLogin.value && !hasSavedPersonalToken) {
+          appStore.showError(t('admin.accounts.qoderProxy.credentialRequired'))
+          return
         }
-        if (cursorCLIRefreshToken.value.trim()) {
-          newCredentials.refresh_token = cursorCLIRefreshToken.value.trim()
-        }
-        if (cursorMachineId.value.trim()) {
-          newCredentials.machine_id = cursorMachineId.value.trim()
-        } else {
-          delete newCredentials.machine_id
-        }
-        if (cursorClientVersion.value.trim()) {
-          newCredentials.client_version = cursorClientVersion.value.trim()
-        }
-      } else if (props.account.platform === 'qoder') {
-        if (qoderPersonalToken.value.trim()) {
-          newCredentials.personal_token = qoderPersonalToken.value.trim()
-        }
+        // Qoder 不使用 base_url。
+        delete newCredentials.base_url
         newCredentials.qoder_region = qoderRegion.value
-        if (qoderAccessToken.value.trim()) newCredentials.access_token = qoderAccessToken.value.trim()
-        if (qoderRefreshToken.value.trim()) newCredentials.refresh_token = qoderRefreshToken.value.trim()
-        if (qoderUserID.value.trim()) newCredentials.user_id = qoderUserID.value.trim()
-        if (qoderExpiresAt.value.trim()) newCredentials.expires_at = qoderExpiresAt.value.trim()
+        if (newPersonalToken) newCredentials.personal_token = newPersonalToken
+        if (newAccessToken) {
+          newCredentials.access_token = newAccessToken
+          newCredentials.refresh_token = qoderRefreshToken.value.trim()
+          newCredentials.user_id = qoderUserID.value.trim()
+          newCredentials.expires_at = qoderExpiresAt.value.trim()
+          newCredentials.name = qoderLoginName.value.trim()
+          newCredentials.email = qoderLoginEmail.value.trim()
+        } else if (qoderSavedDeviceLogin.value && !qoderKeepsSavedDeviceLogin.value) {
+          // 换成新的个人令牌或切换了版本：旧设备登录作废。敏感键缺省时后端会保留原值，
+          // 必须显式置空才能清掉。
+          newCredentials.access_token = ''
+          newCredentials.refresh_token = ''
+          delete newCredentials.user_id
+          delete newCredentials.expires_at
+          delete newCredentials.name
+          delete newCredentials.email
+        }
         if (qoderMachineId.value.trim()) {
           newCredentials.machine_id = qoderMachineId.value.trim()
         } else {
