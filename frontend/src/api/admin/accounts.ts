@@ -483,43 +483,6 @@ export async function startCursorCLILogin(): Promise<{ login_url: string; uuid: 
   return data
 }
 
-export async function startQoderOAuth(
-  region: 'cn' | 'global',
-  machineId?: string
-): Promise<{ login_url: string; nonce: string; verifier: string; machine_id: string; region: string }> {
-  const { data } = await apiClient.post<{
-    login_url: string
-    nonce: string
-    verifier: string
-    machine_id: string
-    region: string
-  }>('/admin/accounts/qoder/oauth/start', { region, machine_id: machineId || '' })
-  return data
-}
-
-export async function pollQoderOAuth(
-  region: string,
-  nonce: string,
-  verifier: string
-): Promise<{
-  status: string
-  access_token?: string
-  refresh_token?: string
-  user_id?: string
-  expires_at?: string
-  region?: string
-}> {
-  const { data } = await apiClient.post<{
-    status: string
-    access_token?: string
-    refresh_token?: string
-    user_id?: string
-    expires_at?: string
-    region?: string
-  }>('/admin/accounts/qoder/oauth/poll', { region, nonce, verifier })
-  return data
-}
-
 export async function pollCursorCLILogin(
   uuid: string,
   verifier: string
@@ -530,6 +493,75 @@ export async function pollCursorCLILogin(
     refresh_token?: string
     email?: string
   }>('/admin/accounts/cursor/cli-login/poll', { uuid, verifier })
+  return data
+}
+
+export async function startQoderOAuth(
+  region: 'cn' | 'global',
+  machineId?: string
+): Promise<QoderOAuthStartResult> {
+  const { data } = await apiClient.post<QoderOAuthStartResult>('/admin/accounts/qoder/oauth/start', {
+    region,
+    machine_id: machineId || ''
+  })
+  return data
+}
+
+export interface QoderOAuthStartResult {
+  login_url: string
+  nonce: string
+  verifier: string
+  machine_id: string
+  region: string
+}
+
+export interface QoderOAuthPollResult {
+  status: 'pending' | 'ok'
+  access_token?: string
+  refresh_token?: string
+  user_id?: string
+  name?: string
+  email?: string
+  expires_at?: string
+  region?: string
+}
+
+export async function pollQoderOAuth(
+  region: string,
+  nonce: string,
+  verifier: string,
+  proxyId?: number | null
+): Promise<QoderOAuthPollResult> {
+  const payload: Record<string, unknown> = { region, nonce, verifier }
+  if (proxyId) payload.proxy_id = proxyId
+  const { data } = await apiClient.post<QoderOAuthPollResult>('/admin/accounts/qoder/oauth/poll', payload)
+  return data
+}
+
+export interface QoderQuotaPool {
+  kind: 'plan' | 'addon' | 'org' | 'package' | string
+  name?: string
+  total: number
+  used: number
+  remaining: number
+  available: boolean
+  expires_at?: string
+}
+
+export interface QoderQuotaSnapshot {
+  plan_type?: string
+  unit?: string
+  exceeded: boolean
+  resets_at?: string
+  pools: QoderQuotaPool[]
+  credential: 'device' | 'pat' | string
+  checked_at: string
+}
+
+export async function getQoderQuota(id: number, refresh = true): Promise<QoderQuotaSnapshot> {
+  const { data } = await apiClient.get<QoderQuotaSnapshot>(`/admin/accounts/${id}/qoder-quota`, {
+    params: { refresh }
+  })
   return data
 }
 
@@ -1231,6 +1263,7 @@ export const accountsAPI = {
   pollCursorCLILogin,
   startQoderOAuth,
   pollQoderOAuth,
+  getQoderQuota,
   exchangeCode,
   refreshOpenAIToken,
   batchCreate,

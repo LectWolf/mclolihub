@@ -430,6 +430,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/cursor/cli-login/poll", h.Admin.Account.PollCursorCLILogin)
 		accounts.POST("/qoder/oauth/start", h.Admin.Account.StartQoderOAuth)
 		accounts.POST("/qoder/oauth/poll", h.Admin.Account.PollQoderOAuth)
+		accounts.GET("/:id/qoder-quota", h.Admin.Account.GetQoderQuota)
 
 		// Spark 影子账号
 		accounts.POST("/:id/shadow", h.Admin.OpenAIOAuth.CreateShadow)

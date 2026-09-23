@@ -606,6 +606,7 @@
         :account="account"
         @updated="handleOpenCodeGoUsageUpdated"
       />
+      <QoderQuotaCell v-if="account.platform === 'qoder'" :account="account" />
       <!-- Today stats row (requests, tokens, cost, user_cost) -->
       <div
         v-if="todayStats"
@@ -664,7 +665,7 @@
 
       <!-- No data at all -->
       <div
-        v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota && !account.ollama_cloud_usage?.eligible && !account.opencode_go_usage?.eligible"
+        v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota && !account.ollama_cloud_usage?.eligible && !account.opencode_go_usage?.eligible && account.platform !== 'qoder'"
         class="text-xs text-gray-400"
       >-</div>
     </div>
@@ -689,6 +690,7 @@ import CodeBuddyCreditsCell from './CodeBuddyCreditsCell.vue'
 import OllamaCloudUsageCell from './OllamaCloudUsageCell.vue'
 import { cnQuotaCellVisible as cnQuotaCellVisibleFn, cnBalanceCellVisible as cnBalanceCellVisibleFn } from './credentialsBuilder'
 import OpenCodeGoUsageCell from './OpenCodeGoUsageCell.vue'
+import QoderQuotaCell from './QoderQuotaCell.vue'
 
 // Module-level cache shared across all AccountUsageCell instances
 const _usageCache = new Map<number, { data: AccountUsageInfo; ts: number }>()

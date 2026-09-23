@@ -35,6 +35,10 @@ const (
 
 const EndpointAntigravityGenerateContent = "/v1internal:streamGenerateContent"
 
+// EndpointQoderAgentChat is the Qoder agent SSE endpoint every Qoder request is
+// forwarded to, whatever the inbound protocol.
+const EndpointQoderAgentChat = "/algo/api/v2/service/pro/sse/agent_chat_generation"
+
 // gin.Context keys used by the middleware and helpers below.
 const (
 	ctxKeyInboundEndpoint        = "_gateway_inbound_endpoint"

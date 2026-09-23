@@ -254,6 +254,9 @@
           :personal-token="qoderPersonalToken"
           :machine-id="qoderMachineId"
           :region="qoderRegion"
+          :proxy-id="form.proxy_id"
+          :device-login-user="qoderDeviceLoginUser"
+          :has-saved-personal-token="Boolean(account.credentials_status?.has_personal_token || account.credentials_status?.has_pat || account.credentials_status?.has_api_key)"
           @update:personal-token="qoderPersonalToken = $event"
           @update:machine-id="qoderMachineId = $event"
           @update:region="qoderRegion = $event"
@@ -3420,11 +3423,20 @@ const qoderRegion = ref<'cn' | 'global'>('cn')
 const qoderAccessToken = ref('')
 const qoderRefreshToken = ref('')
 const qoderUserID = ref('')
+const qoderName = ref('')
+const qoderEmail = ref('')
 const qoderExpiresAt = ref('')
-const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
+const qoderDeviceLoginUser = computed(() => {
+  if (qoderEmail.value || qoderName.value) return qoderEmail.value || qoderName.value
+  const creds = (props.account?.credentials || {}) as Record<string, unknown>
+  return String(creds.email || creds.name || '')
+})
+const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; name?: string; email?: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
   qoderAccessToken.value = payload.accessToken
   qoderRefreshToken.value = payload.refreshToken
   qoderUserID.value = payload.userId
+  qoderName.value = payload.name || ''
+  qoderEmail.value = payload.email || ''
   qoderExpiresAt.value = payload.expiresAt
   qoderMachineId.value = payload.machineId
   qoderRegion.value = payload.region
@@ -5421,6 +5433,8 @@ const handleSubmit = async () => {
         newCredentials.qoder_region = qoderRegion.value
         if (qoderAccessToken.value.trim()) newCredentials.access_token = qoderAccessToken.value.trim()
         if (qoderRefreshToken.value.trim()) newCredentials.refresh_token = qoderRefreshToken.value.trim()
+        if (qoderName.value.trim()) newCredentials.name = qoderName.value.trim()
+        if (qoderEmail.value.trim()) newCredentials.email = qoderEmail.value.trim()
         if (qoderUserID.value.trim()) newCredentials.user_id = qoderUserID.value.trim()
         if (qoderExpiresAt.value.trim()) newCredentials.expires_at = qoderExpiresAt.value.trim()
         if (qoderMachineId.value.trim()) {

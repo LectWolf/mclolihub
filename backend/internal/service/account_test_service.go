@@ -450,21 +450,21 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	if s.qoderGatewayService == nil {
 		return s.sendErrorAndEnd(c, "Qoder proxy service is not configured")
 	}
-	if strings.TrimSpace(qoderPersonalToken(account)) == "" && strings.TrimSpace(account.GetCredential("access_token")) == "" && strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
+	if qoderPersonalToken(account) == "" && !qoderHasDeviceLogin(account) {
 		return s.sendErrorAndEnd(c, "No Qoder personal access token or device login available")
 	}
 
-	testModelID := strings.TrimSpace(modelID)
-	if testModelID == "" {
-		testModelID = "auto"
+	requestModel := strings.TrimSpace(modelID)
+	if requestModel == "" {
+		requestModel = "auto"
 	}
-	testModelID = account.GetMappedModel(testModelID)
+	testModelID := account.GetMappedModel(requestModel)
 	testPrompt := strings.TrimSpace(prompt)
 	if testPrompt == "" {
 		testPrompt = "Reply with exactly: ok"
 	}
 	body, err := json.Marshal(map[string]any{
-		"model": testModelID,
+		"model": requestModel,
 		"messages": []map[string]string{
 			{"role": "user", "content": testPrompt},
 		},
@@ -490,6 +490,10 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	responseBody := recorder.Body.Bytes()
 	if forwardErr != nil || recorder.Code < http.StatusOK || recorder.Code >= http.StatusMultipleChoices {
 		message := strings.TrimSpace(gjson.GetBytes(responseBody, "error.message").String())
+		var failoverErr *UpstreamFailoverError
+		if message == "" && errors.As(forwardErr, &failoverErr) {
+			message = qoderFailoverTestMessage(failoverErr)
+		}
 		if message == "" && forwardErr != nil {
 			message = forwardErr.Error()
 		}
@@ -502,16 +506,34 @@ func (s *AccountTestService) testQoderAccountConnection(c *gin.Context, account 
 	if strings.TrimSpace(text) == "" {
 		return s.sendErrorAndEnd(c, "Qoder proxy returned no assistant text")
 	}
-	resolvedModel := strings.TrimSpace(gjson.GetBytes(responseBody, "model").String())
-	if resolvedModel == "" && result != nil {
-		resolvedModel = strings.TrimSpace(result.Model)
+	resolvedModel := testModelID
+	if result != nil && strings.TrimSpace(result.UpstreamResponseModel) != "" {
+		resolvedModel = strings.TrimSpace(result.UpstreamResponseModel)
 	}
-	if resolvedModel != "" && resolvedModel != testModelID {
+	if resolvedModel != "" && resolvedModel != requestModel {
 		s.sendEvent(c, TestEvent{Type: "status", Text: "Resolved model: " + resolvedModel, Model: resolvedModel})
 	}
 	s.sendEvent(c, TestEvent{Type: "content", Text: text})
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true, Model: resolvedModel})
 	return nil
+}
+
+func qoderFailoverTestMessage(failoverErr *UpstreamFailoverError) string {
+	detail := strings.TrimSpace(extractUpstreamErrorMessage(failoverErr.ResponseBody))
+	if detail == "" {
+		detail = truncateString(strings.TrimSpace(string(failoverErr.ResponseBody)), 300)
+	}
+	detail = sanitizeUpstreamErrorMessage(detail)
+	if failoverErr.IsCredentialFailure() {
+		if detail == "" {
+			return failoverErr.ClientMessage
+		}
+		return failoverErr.ClientMessage + ": " + detail
+	}
+	if detail == "" {
+		return fmt.Sprintf("Qoder upstream returned HTTP %d", failoverErr.StatusCode)
+	}
+	return fmt.Sprintf("Qoder upstream returned HTTP %d: %s", failoverErr.StatusCode, detail)
 }
 
 func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {

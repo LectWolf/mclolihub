@@ -67,6 +67,7 @@ type AccountHandler struct {
 	ollamaCloudUsage        *service.OllamaCloudUsageService
 	cfg                     *config.Config
 	opencodeGoUsage         *service.OpenCodeGoUsageService
+	qoderGateway            *service.QoderGatewayService
 }
 
 // SetUpstreamBillingProbeService attaches the optional remote billing probe service.
@@ -80,6 +81,11 @@ func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUs
 
 func (h *AccountHandler) SetOpenCodeGoUsageService(usage *service.OpenCodeGoUsageService) {
 	h.opencodeGoUsage = usage
+}
+
+// SetQoderGatewayService attaches the Qoder gateway used for credits queries.
+func (h *AccountHandler) SetQoderGatewayService(gateway *service.QoderGatewayService) {
+	h.qoderGateway = gateway
 }
 
 // NewAccountHandler creates a new admin account handler

@@ -59,7 +59,8 @@ func RegisterGatewayRoutes(
 		switch getGroupPlatform(c) {
 		case service.PlatformOpenAI, service.PlatformCodeBuddy, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo:
 			h.OpenAIGateway.CountTokens(c)
-		case service.PlatformGrok:
+		case service.PlatformGrok, service.PlatformQoder:
+			// 上游没有兼容的计数端点：本地估算，不选号、不发上游请求。
 			h.OpenAIGateway.GrokCountTokens(c)
 		default:
 			h.Gateway.CountTokens(c)

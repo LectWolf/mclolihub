@@ -285,11 +285,6 @@ func ProvideAccountTestService(
 	service.SetOpenAIGatewayService(openAIGatewayService)
 	service.SetCursorGatewayService(cursorGatewayService)
 	service.SetQoderGatewayService(qoderGatewayService)
-	if writer, ok := accountRepo.(interface {
-		UpdateCredentials(ctx context.Context, id int64, credentials map[string]any) error
-	}); ok {
-		qoderGatewayService.SetCredentialWriter(writer)
-	}
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)
 	return service

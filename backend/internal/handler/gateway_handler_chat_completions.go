@@ -342,6 +342,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				}
 				return
 			}
+			setActualUpstreamEndpoint(c, EndpointQoderAgentChat)
 			result, err = h.qoderGatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, parsedReq)
 		} else if shouldUseCursorProxy(account) {
 			if h.cursorGatewayService == nil {

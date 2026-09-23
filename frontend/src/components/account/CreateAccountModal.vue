@@ -1510,6 +1510,8 @@
           :personal-token="qoderPersonalToken"
           :machine-id="qoderMachineId"
           :region="qoderRegion"
+          :proxy-id="form.proxy_id"
+          :device-login-user="qoderDeviceLoginUser"
           @update:personal-token="qoderPersonalToken = $event"
           @update:machine-id="qoderMachineId = $event"
           @update:region="qoderRegion = $event"
@@ -4405,16 +4407,20 @@ const qoderRegion = ref<'cn' | 'global'>('cn')
 const qoderAccessToken = ref('')
 const qoderRefreshToken = ref('')
 const qoderUserID = ref('')
+const qoderName = ref('')
+const qoderEmail = ref('')
 const qoderExpiresAt = ref('')
-const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
+const qoderDeviceLoginUser = computed(() => qoderEmail.value || qoderName.value)
+const onQoderOAuth = (payload: { accessToken: string; refreshToken: string; userId: string; name?: string; email?: string; expiresAt: string; machineId: string; region: 'cn' | 'global' }) => {
   qoderAccessToken.value = payload.accessToken
   qoderRefreshToken.value = payload.refreshToken
   qoderUserID.value = payload.userId
+  qoderName.value = payload.name || ''
+  qoderEmail.value = payload.email || ''
   qoderExpiresAt.value = payload.expiresAt
   qoderMachineId.value = payload.machineId
   qoderRegion.value = payload.region
 }
-const selectCursorPlatform = (platform: 'cursor_sand' | 'cursor') => {
   form.platform = platform
   accountCategory.value = 'apikey'
 }
@@ -6118,6 +6124,8 @@ const handleSubmit = async () => {
     if (access) credentials.access_token = access
     if (qoderRefreshToken.value.trim()) credentials.refresh_token = qoderRefreshToken.value.trim()
     if (qoderUserID.value.trim()) credentials.user_id = qoderUserID.value.trim()
+    if (qoderName.value.trim()) credentials.name = qoderName.value.trim()
+    if (qoderEmail.value.trim()) credentials.email = qoderEmail.value.trim()
     if (qoderExpiresAt.value.trim()) credentials.expires_at = qoderExpiresAt.value.trim()
     if (qoderMachineId.value.trim()) credentials.machine_id = qoderMachineId.value.trim()
     const modelMapping = buildModelMappingObject(

@@ -5,7 +5,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestPKCEChallengeLength(t *testing.T) {
@@ -117,4 +120,50 @@ func (f roundTrip) RoundTrip(req *http.Request) (*http.Response, error) { return
 
 func errorsIsPending(err error) bool {
 	return err == ErrLoginPending
+}
+
+func TestTokenCacheSharesConcurrentExchange(t *testing.T) {
+	var exchanges atomic.Int32
+	release := make(chan struct{})
+	client := &http.Client{Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
+		switch {
+		case strings.HasSuffix(req.URL.Path, "/jobToken/exchange"):
+			exchanges.Add(1)
+			<-release
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"token":"jt-1","expires_in":3600}`))}, nil
+		default:
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"id":"user-1"}`))}, nil
+		}
+	})}
+	cache := NewTokenCache()
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			identity, err := cache.ResolveRegion(t.Context(), client, RegionCN, "pt-1", "machine-1")
+			if err != nil || identity.JobToken != "jt-1" || identity.MachineID != "machine-1" {
+				t.Errorf("identity %+v err %v", identity, err)
+			}
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	if got := exchanges.Load(); got != 1 {
+		t.Fatalf("exchanges %d, want 1", got)
+	}
+}
+
+func TestRefreshLoginRejected(t *testing.T) {
+	client := &http.Client{Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host != "openapi.qoder.com.cn" {
+			t.Fatalf("host %s", req.URL.Host)
+		}
+		return &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"message":"invalid refresh token"}`))}, nil
+	})}
+	_, err := RefreshLogin(t.Context(), client, RegionCN, "drt-dead")
+	if !IsRejected(err) || IsAuthError(err) {
+		t.Fatalf("err %v", err)
+	}
 }
