@@ -421,9 +421,10 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 
 		// Antigravity 默认模型映射
 		accounts.GET("/antigravity/default-model-mapping", h.Admin.Account.GetAntigravityDefaultModelMapping)
-		// Qoder 设备登录（PKCE）
+		// Qoder 设备登录（PKCE）与额度查询
 		accounts.POST("/qoder/oauth/start", h.Admin.Account.StartQoderOAuth)
 		accounts.POST("/qoder/oauth/poll", h.Admin.Account.PollQoderOAuth)
+		accounts.GET("/:id/qoder-quota", h.Admin.Account.GetQoderQuota)
 
 		// Spark 影子账号
 		accounts.POST("/:id/shadow", h.Admin.OpenAIOAuth.CreateShadow)

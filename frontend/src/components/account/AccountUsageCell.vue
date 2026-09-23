@@ -619,6 +619,9 @@
         <div class="h-3 w-12 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
       </div>
 
+      <!-- Qoder: official credits (plan / add-on / org / packages) -->
+      <QoderQuotaCell v-if="account.platform === 'qoder'" :account="account" />
+
       <!-- API Key accounts with quota limits: show progress bars -->
       <UsageProgressBar
         v-if="quotaDailyBar"
@@ -643,7 +646,7 @@
 
       <!-- No data at all -->
       <div
-        v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota && !account.ollama_cloud_usage?.eligible"
+        v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota && !account.ollama_cloud_usage?.eligible && account.platform !== 'qoder'"
         class="text-xs text-gray-400"
       >-</div>
     </div>
@@ -666,6 +669,7 @@ import CNProviderQuotaCell from './CNProviderQuotaCell.vue'
 import CNProviderBalanceCell from './CNProviderBalanceCell.vue'
 import CodeBuddyCreditsCell from './CodeBuddyCreditsCell.vue'
 import OllamaCloudUsageCell from './OllamaCloudUsageCell.vue'
+import QoderQuotaCell from './QoderQuotaCell.vue'
 import { cnQuotaCellVisible as cnQuotaCellVisibleFn, cnBalanceCellVisible as cnBalanceCellVisibleFn } from './credentialsBuilder'
 
 // Module-level cache shared across all AccountUsageCell instances

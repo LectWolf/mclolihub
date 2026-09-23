@@ -65,6 +65,7 @@ type AccountHandler struct {
 	grokImportProber        grokImportProber
 	upstreamBillingProbe    *service.UpstreamBillingProbeService
 	ollamaCloudUsage        *service.OllamaCloudUsageService
+	qoderGateway            *service.QoderGatewayService
 	cfg                     *config.Config
 }
 
@@ -75,6 +76,11 @@ func (h *AccountHandler) SetUpstreamBillingProbeService(probe *service.UpstreamB
 
 func (h *AccountHandler) SetOllamaCloudUsageService(usage *service.OllamaCloudUsageService) {
 	h.ollamaCloudUsage = usage
+}
+
+// SetQoderGatewayService attaches the Qoder gateway used for credits queries.
+func (h *AccountHandler) SetQoderGatewayService(gateway *service.QoderGatewayService) {
+	h.qoderGateway = gateway
 }
 
 // NewAccountHandler creates a new admin account handler

@@ -72,7 +72,9 @@ type qoderFakeUpstream struct {
 	exchanges atomic.Int32
 	refreshes atomic.Int32
 	chats     atomic.Int32
+	quotas    atomic.Int32
 	chat      func(req *http.Request, body []byte, attempt int32) *http.Response
+	quota     func(req *http.Request, attempt int32) *http.Response
 }
 
 func (f *qoderFakeUpstream) client() *http.Client {
@@ -86,6 +88,8 @@ func (f *qoderFakeUpstream) client() *http.Client {
 			return qoderJSON(http.StatusOK, `{"token":"dt-new","refresh_token":"drt-new","expires_in":3600}`), nil
 		case strings.HasSuffix(req.URL.Path, "/userinfo"):
 			return qoderJSON(http.StatusOK, `{"id":"user-1","name":"Ada","email":"ada@example.com"}`), nil
+		case strings.HasSuffix(req.URL.Path, "/quota/usage") && f.quota != nil:
+			return f.quota(req, f.quotas.Add(1)), nil
 		case strings.Contains(req.URL.Path, "/agent_chat_generation"):
 			body, err := io.ReadAll(req.Body)
 			require.NoError(f.t, err)

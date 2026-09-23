@@ -236,6 +236,7 @@
           :region="qoderRegion"
           :proxy-id="form.proxy_id"
           :device-login-user="qoderDeviceLoginUser"
+          :has-saved-personal-token="qoderHasSavedPersonalToken"
           @update:personal-token="qoderPersonalToken = $event"
           @update:machine-id="qoderMachineId = $event"
           @update:region="onQoderRegionChange"
@@ -3253,6 +3254,12 @@ const qoderDeviceLoginUser = computed(() => {
     return qoderSavedLoginUser.value || '-'
   }
   return ''
+})
+const qoderHasSavedPersonalToken = computed(() => {
+  const account = props.account
+  if (!account || account.platform !== 'qoder') return false
+  const creds = (account.credentials || {}) as Record<string, unknown>
+  return Boolean(account.credentials_status?.has_personal_token || creds.personal_token)
 })
 const clearQoderNewDeviceLogin = () => {
   qoderAccessToken.value = ''

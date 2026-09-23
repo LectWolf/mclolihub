@@ -519,6 +519,40 @@ export async function pollQoderOAuth(
   return data
 }
 
+/** One credit pool of a Qoder account: plan credits, add-on, org package or a dedicated package. */
+export interface QoderQuotaPool {
+  kind: 'plan' | 'addon' | 'org' | 'package' | string
+  name?: string
+  total: number
+  used: number
+  remaining: number
+  available: boolean
+  expires_at?: string
+}
+
+/** Qoder credits snapshot, also stored on the account as extra.qoder_quota. */
+export interface QoderQuotaSnapshot {
+  plan_type?: string
+  unit?: string
+  exceeded: boolean
+  resets_at?: string
+  pools: QoderQuotaPool[]
+  /** Credential that answered the query: device login or personal access token. */
+  credential: 'device' | 'pat' | string
+  checked_at: string
+}
+
+/**
+ * Query the Qoder credits of an account. refresh=false serves the stored
+ * snapshot while it is fresh (5 minutes); the default asks Qoder.
+ */
+export async function getQoderQuota(id: number, refresh = true): Promise<QoderQuotaSnapshot> {
+  const { data } = await apiClient.get<QoderQuotaSnapshot>(`/admin/accounts/${id}/qoder-quota`, {
+    params: { refresh }
+  })
+  return data
+}
+
 /**
  * Exchange authorization code for tokens
  * @param endpoint - API endpoint path
@@ -1158,6 +1192,7 @@ export const accountsAPI = {
   generateAuthUrl,
   startQoderOAuth,
   pollQoderOAuth,
+  getQoderQuota,
   exchangeCode,
   refreshOpenAIToken,
   batchCreate,

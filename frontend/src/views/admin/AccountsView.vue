@@ -259,7 +259,7 @@
             <div class="flex min-w-0 flex-col gap-1">
               <div class="flex flex-wrap items-center gap-1">
                 <PlatformTypeBadge :platform="row.platform" :type="row.type"
-                  :auth-mode="getOpenAIAuthMode(row)"
+                  :auth-mode="getOpenAIAuthMode(row) || getQoderAuthMode(row)"
                   :plan-type="getAccountPlanType(row)"
                   :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
                   :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
@@ -280,6 +280,15 @@
               >
                 <span :class="['h-1.5 w-1.5 rounded-full', getOpenAICompactMeta(row)?.dotClass]" />
                 <span>{{ getOpenAICompactMeta(row)?.label }}</span>
+              </div>
+              <div
+                v-if="getQoderMeta(row)"
+                class="inline-flex max-w-[12rem] items-center gap-1 pl-0.5 text-[11px] font-medium leading-4 text-emerald-700 dark:text-emerald-300"
+                :title="getQoderMeta(row)?.title"
+                data-test="qoder-account-meta"
+              >
+                <Icon name="globe" size="xs" class="shrink-0" />
+                <span class="truncate">{{ getQoderMeta(row)?.label }}</span>
               </div>
             </div>
           </template>
@@ -1680,6 +1689,9 @@ function getAccountPlanType(row: any): string | undefined {
       row.parent_plan_type
     )
   }
+  if (row.platform === 'qoder') {
+    return firstNonBlankString(row.extra?.qoder_quota?.plan_type)
+  }
   return firstNonBlankString(row.credentials?.plan_type, row.parent_plan_type)
 }
 
@@ -1687,6 +1699,34 @@ function getOpenAIAuthMode(row: any): string | undefined {
   if (!row || row.platform !== 'openai' || row.type !== 'oauth') return undefined
   const authMode = row.credentials?.auth_mode
   return typeof authMode === 'string' && authMode.trim() ? authMode : undefined
+}
+
+// Qoder 账号统一存为 apikey：有设备登录令牌时网关优先用它，个人访问令牌作为兜底。
+function getQoderAuthMode(row: any): 'device' | 'pat' | undefined {
+  if (!row || row.platform !== 'qoder') return undefined
+  const status = (row.credentials_status || {}) as Record<string, unknown>
+  if (status.has_access_token || status.has_refresh_token) return 'device'
+  if (status.has_personal_token || status.has_pat || status.has_api_key) return 'pat'
+  return undefined
+}
+
+function getQoderMeta(row: any): { label: string; title: string } | null {
+  if (!row || row.platform !== 'qoder') return null
+  const creds = (row.credentials || {}) as Record<string, unknown>
+  const region = creds.qoder_region === 'cn'
+    ? t('admin.accounts.qoderProxy.regionCN')
+    : t('admin.accounts.qoderProxy.regionGlobal')
+  const user = firstNonBlankString(creds.email, creds.name)
+  const authMode = getQoderAuthMode(row)
+  const credential = authMode === 'device'
+    ? t('admin.accounts.qoderQuota.credential.device')
+    : authMode === 'pat'
+      ? t('admin.accounts.qoderQuota.credential.pat')
+      : ''
+  return {
+    label: user ? `${region} · ${user}` : region,
+    title: [region, credential, user].filter(Boolean).join(' · ')
+  }
 }
 
 // Antigravity 订阅等级辅助函数

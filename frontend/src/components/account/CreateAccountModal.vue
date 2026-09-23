@@ -174,13 +174,13 @@
             CodeBuddy
           </button>
         </div>
-        <!-- Multi-protocol API-key providers: Kimi / Zhipu GLM / DeepSeek / OpenCode -->
+        <!-- Multi-protocol providers: Kimi / Zhipu GLM / DeepSeek / MiniMax / OpenCode / Qoder -->
         <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
           <button
             type="button"
             @click="selectCNPlatform('kimi')"
             :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'kimi'
                 ? 'bg-white text-pink-600 shadow-sm dark:bg-dark-600 dark:text-pink-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -193,7 +193,7 @@
             type="button"
             @click="selectCNPlatform('zhipu')"
             :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'zhipu'
                 ? 'bg-white text-indigo-600 shadow-sm dark:bg-dark-600 dark:text-indigo-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -206,7 +206,7 @@
             type="button"
             @click="selectCNPlatform('deepseek')"
             :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'deepseek'
                 ? 'bg-white text-teal-600 shadow-sm dark:bg-dark-600 dark:text-teal-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -219,7 +219,7 @@
             type="button"
             @click="selectCNPlatform('minimax')"
             :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'minimax'
                 ? 'bg-white text-rose-600 shadow-sm dark:bg-dark-600 dark:text-rose-400'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -232,7 +232,7 @@
             type="button"
             @click="selectOpenCodeGoPlatform()"
             :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'opencode_go'
                 ? 'bg-white text-amber-700 shadow-sm dark:bg-dark-600 dark:text-amber-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -241,13 +241,12 @@
             <PlatformIcon platform="opencode_go" size="sm" />
             OpenCode
           </button>
-        </div>
-        <div class="mt-2 flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700">
           <button
             type="button"
+            data-test="platform-qoder"
             @click="selectQoderPlatform()"
             :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-all',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium transition-all',
               form.platform === 'qoder'
                 ? 'bg-white text-emerald-700 shadow-sm dark:bg-dark-600 dark:text-emerald-300'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
@@ -257,9 +256,13 @@
             Qoder
           </button>
         </div>
-        <p v-if="form.platform === 'qoder'" class="input-hint mt-2">
-          {{ t('admin.accounts.qoderProxy.platformHint') }}
-        </p>
+        <div
+          v-if="form.platform === 'qoder'"
+          class="mt-2 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-900/10 dark:text-emerald-200"
+        >
+          <Icon name="infoCircle" size="sm" class="mt-px shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span>{{ t('admin.accounts.qoderProxy.platformHint') }}</span>
+        </div>
       </div>
 
       <!-- Account Type Selection (Anthropic) -->

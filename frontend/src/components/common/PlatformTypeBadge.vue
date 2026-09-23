@@ -7,9 +7,9 @@
         <span>{{ platformLabel }}</span>
       </span>
       <span :class="['inline-flex items-center gap-1 px-1.5 py-1', typeClass]">
-        <!-- OAuth icon -->
+        <!-- OAuth icon (Qoder device login is a browser login too) -->
         <svg
-          v-if="type === 'oauth'"
+          v-if="type === 'oauth' || isQoderDeviceLogin"
           class="h-3 w-3"
           fill="none"
           viewBox="0 0 24 24"
@@ -93,10 +93,20 @@ const normalizedAuthMode = computed(() =>
   (props.authMode || '').trim().toLowerCase().replace(/[\s_-]+/g, '')
 )
 
+// Qoder accounts are stored as apikey whichever credential they hold; authMode
+// tells a device login from a personal access token.
+const isQoderDeviceLogin = computed(
+  () => props.platform === 'qoder' && normalizedAuthMode.value === 'device'
+)
+
 const typeLabel = computed(() => {
   if (props.platform === 'openai' && props.type === 'oauth') {
     if (normalizedAuthMode.value === 'agentidentity') return 'Agent Identity'
     if (normalizedAuthMode.value === 'personalaccesstoken') return 'PAT'
+  }
+  if (props.platform === 'qoder') {
+    if (isQoderDeviceLogin.value) return 'OAuth'
+    if (normalizedAuthMode.value === 'pat') return 'PAT'
   }
   switch (props.type) {
     case 'oauth':
@@ -123,6 +133,15 @@ const planLabel = computed(() => {
   if (props.platform === 'openai') {
     const label = openAIPlanTypeLabel(props.planType)
     if (label) return label
+  }
+  if (props.platform === 'qoder') {
+    // Qoder userType values look like "personal_standard" or "teams".
+    return (props.planType || '')
+      .trim()
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
   }
   switch (normalizedPlanType.value) {
     case 'plus':
@@ -203,6 +222,9 @@ const platformClass = computed(() => {
   if (props.platform === 'codebuddy') {
     return 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400'
   }
+  if (props.platform === 'qoder') {
+    return 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+  }
   return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
 })
 
@@ -230,6 +252,9 @@ const typeClass = computed(() => {
   }
   if (props.platform === 'minimax') {
     return 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'
+  }
+  if (props.platform === 'qoder') {
+    return 'bg-emerald-100/70 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
   }
   return 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
 })
