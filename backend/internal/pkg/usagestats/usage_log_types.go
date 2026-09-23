@@ -48,6 +48,8 @@ type DashboardStats struct {
 	ErrorAccounts     int64 `json:"error_accounts"`     // 异常账户数 (status=error)
 	RateLimitAccounts int64 `json:"ratelimit_accounts"` // 限流账户数
 	OverloadAccounts  int64 `json:"overload_accounts"`  // 过载账户数
+	// 账号健康分布（互斥分类，合计等于 TotalAccounts）
+	AccountHealth AccountHealthStats `json:"account_health"`
 
 	// 累计 Token 使用统计
 	TotalRequests            int64   `json:"total_requests"`
@@ -71,12 +73,33 @@ type DashboardStats struct {
 	TodayActualCost          float64 `json:"today_actual_cost"`  // 今日实际扣除
 	TodayAccountCost         float64 `json:"today_account_cost"` // 今日账号成本
 
+	// 昨日同时段统计（昨日 00:00 至当前时刻前 24 小时，按配置时区），用于和今日数据对比
+	YesterdayRequests    int64   `json:"yesterday_requests"`
+	YesterdayTokens      int64   `json:"yesterday_tokens"`
+	YesterdayCost        float64 `json:"yesterday_cost"`         // 昨日同时段标准计费
+	YesterdayActualCost  float64 `json:"yesterday_actual_cost"`  // 昨日同时段实际扣除
+	YesterdayAccountCost float64 `json:"yesterday_account_cost"` // 昨日同时段账号成本
+
 	// 系统运行统计
-	AverageDurationMs float64 `json:"average_duration_ms"` // 平均响应时间
+	AverageDurationMs      float64 `json:"average_duration_ms"`       // 平均响应时间（统计范围内）
+	TodayAverageDurationMs float64 `json:"today_average_duration_ms"` // 今日平均响应时间
 
 	// 性能指标
 	Rpm int64 `json:"rpm"` // 近5分钟平均每分钟请求数
 	Tpm int64 `json:"tpm"` // 近5分钟平均每分钟Token数
+}
+
+// AccountHealthStats 账号健康分布。各分类互斥，口径与账号列表的状态筛选
+// （active / rate_limited / temp_unschedulable / unschedulable / 按状态）一致。
+type AccountHealthStats struct {
+	Available           int64 `json:"available"`            // 可调度：active + schedulable，且未限流、未临时不可调度
+	RateLimited         int64 `json:"rate_limited"`         // 限流中（active，未临时不可调度）
+	TempUnschedulable   int64 `json:"temp_unschedulable"`   // 临时不可调度（active）
+	Unschedulable       int64 `json:"unschedulable"`        // 已暂停调度（active 但 schedulable=false）
+	Error               int64 `json:"error"`                // 异常
+	BalanceInsufficient int64 `json:"balance_insufficient"` // 上游余额不足
+	Inactive            int64 `json:"inactive"`             // 已停用
+	Other               int64 `json:"other"`                // 其他状态
 }
 
 // TrendDataPoint represents a single point in trend data
@@ -88,8 +111,9 @@ type TrendDataPoint struct {
 	CacheCreationTokens int64   `json:"cache_creation_tokens"`
 	CacheReadTokens     int64   `json:"cache_read_tokens"`
 	TotalTokens         int64   `json:"total_tokens"`
-	Cost                float64 `json:"cost"`        // 标准计费
-	ActualCost          float64 `json:"actual_cost"` // 实际扣除
+	Cost                float64 `json:"cost"`         // 标准计费
+	ActualCost          float64 `json:"actual_cost"`  // 实际扣除
+	AccountCost         float64 `json:"account_cost"` // 账号成本（仅管理员接口返回，用户接口需剥离）
 }
 
 // ModelStat represents usage statistics for a single model

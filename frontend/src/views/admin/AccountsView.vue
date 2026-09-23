@@ -498,6 +498,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
@@ -1075,6 +1076,23 @@ const syncAccountListDerivedParams = () => {
   requestParams.include_scheduler_score = shouldIncludeSchedulerScore() ? '1' : '0'
 }
 
+// 仪表盘「账号池」分类会带 ?status= 跳转过来，这里只接受状态筛选支持的取值。
+const ACCOUNT_STATUS_QUERY_VALUES = new Set([
+  'active',
+  'inactive',
+  'error',
+  'rate_limited',
+  'temp_unschedulable',
+  'unschedulable',
+  'balance_insufficient'
+])
+const route = useRoute()
+const initialStatusFilter = (() => {
+  const raw = route?.query?.status
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' && ACCOUNT_STATUS_QUERY_VALUES.has(value) ? value : ''
+})()
+
 const {
   items: accounts,
   loading,
@@ -1090,7 +1108,7 @@ const {
   initialParams: {
     platform: '',
     type: '',
-    status: '',
+    status: initialStatusFilter,
     privacy_mode: '',
     group: '',
     search: '',

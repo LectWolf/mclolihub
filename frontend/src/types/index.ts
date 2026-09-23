@@ -1899,6 +1899,7 @@ export interface DashboardStats {
   error_accounts: number // 异常账户数
   ratelimit_accounts: number // 限流账户数
   overload_accounts: number // 过载账户数
+  account_health?: AccountHealthStats // 账号健康分布（互斥分类，合计等于账号总数）
 
   // 累计 Token 使用统计
   total_requests: number
@@ -1922,13 +1923,33 @@ export interface DashboardStats {
   today_actual_cost: number // 今日实际扣除
   today_account_cost: number // 今日账号成本
 
+  // 昨日同时段统计（昨日 00:00 至当前时刻前 24 小时），用于同比
+  yesterday_requests?: number
+  yesterday_tokens?: number
+  yesterday_cost?: number // 昨日同时段标准计费
+  yesterday_actual_cost?: number // 昨日同时段实际扣除
+  yesterday_account_cost?: number // 昨日同时段账号成本
+
   // 系统运行统计
   average_duration_ms: number // 平均响应时间
+  today_average_duration_ms?: number // 今日平均响应时间
   uptime: number // 系统运行时间(秒)
 
   // 性能指标
   rpm: number // 近5分钟平均每分钟请求数
   tpm: number // 近5分钟平均每分钟Token数
+}
+
+/** 账号健康分布，口径与账号列表的状态筛选一致。 */
+export interface AccountHealthStats {
+  available: number // 可调度
+  rate_limited: number // 限流中
+  temp_unschedulable: number // 临时不可调度
+  unschedulable: number // 已暂停调度
+  error: number // 异常
+  balance_insufficient: number // 上游余额不足
+  inactive: number // 已停用
+  other: number // 其他状态
 }
 
 export interface UsageStatsResponse {
@@ -1961,6 +1982,7 @@ export interface TrendDataPoint {
   total_tokens: number
   cost: number // 标准计费
   actual_cost: number // 实际扣除
+  account_cost?: number // 账号成本（仅管理员接口返回）
 }
 
 export interface ModelStat {

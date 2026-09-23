@@ -44,6 +44,19 @@ type userGroupStat struct {
 	ActualCost  float64 `json:"actual_cost"`
 }
 
+// userTrendPoint 是用户侧趋势数据，不含账号成本等管理员口径字段。
+type userTrendPoint struct {
+	Date                string  `json:"date"`
+	Requests            int64   `json:"requests"`
+	InputTokens         int64   `json:"input_tokens"`
+	OutputTokens        int64   `json:"output_tokens"`
+	CacheCreationTokens int64   `json:"cache_creation_tokens"`
+	CacheReadTokens     int64   `json:"cache_read_tokens"`
+	TotalTokens         int64   `json:"total_tokens"`
+	Cost                float64 `json:"cost"`
+	ActualCost          float64 `json:"actual_cost"`
+}
+
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
 	usageService   *service.UsageService
@@ -480,7 +493,7 @@ func (h *UsageHandler) DashboardTrend(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{
-		"trend":       trend,
+		"trend":       userTrendFromUsageStats(trend),
 		"start_date":  parsed.StartTime.Format("2006-01-02"),
 		"end_date":    parsed.EndTime.Add(-24 * time.Hour).Format("2006-01-02"),
 		"granularity": granularity,
@@ -552,7 +565,7 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 			response.ErrorFrom(c, err)
 			return
 		}
-		resp["trend"] = trend
+		resp["trend"] = userTrendFromUsageStats(trend)
 	}
 	if includeModels {
 		models, err := h.usageService.GetModelStatsWithFiltersBySource(c.Request.Context(), parsed.StartTime, parsed.EndTime, parsed.Filters, usagestats.ModelSourceRequested)
@@ -572,6 +585,24 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 	}
 
 	response.Success(c, resp)
+}
+
+func userTrendFromUsageStats(trend []usagestats.TrendDataPoint) []userTrendPoint {
+	out := make([]userTrendPoint, 0, len(trend))
+	for _, point := range trend {
+		out = append(out, userTrendPoint{
+			Date:                point.Date,
+			Requests:            point.Requests,
+			InputTokens:         point.InputTokens,
+			OutputTokens:        point.OutputTokens,
+			CacheCreationTokens: point.CacheCreationTokens,
+			CacheReadTokens:     point.CacheReadTokens,
+			TotalTokens:         point.TotalTokens,
+			Cost:                point.Cost,
+			ActualCost:          point.ActualCost,
+		})
+	}
+	return out
 }
 
 func userModelStatsFromUsageStats(stats []usagestats.ModelStat) []userModelStat {

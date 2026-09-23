@@ -34,6 +34,7 @@ import {
 } from 'chart.js'
 import { Line } from 'vue-chartjs'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
+import { trendAxisTicks } from './trendAxis'
 import type { TrendDataPoint } from '@/types'
 
 ChartJS.register(
@@ -168,6 +169,7 @@ const lineOptions = computed(() => ({
         color: chartColors.value.grid
       },
       ticks: {
+        ...trendAxisTicks,
         color: chartColors.value.text,
         font: {
           size: 10

@@ -26,6 +26,7 @@ type userUsageRepoCapture struct {
 	stats        *usagestats.UsageStats
 	modelStats   []usagestats.ModelStat
 	groupStats   []usagestats.GroupStat
+	trendPoints  []usagestats.TrendDataPoint
 }
 
 func (s *userUsageRepoCapture) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
@@ -58,6 +59,9 @@ func (s *userUsageRepoCapture) GetUsageTrendWithFilters(ctx context.Context, sta
 		Stream:      stream,
 		BillingType: billingType,
 	}
+	if s.trendPoints != nil {
+		return s.trendPoints, nil
+	}
 	return []usagestats.TrendDataPoint{}, nil
 }
 
@@ -89,6 +93,7 @@ func newUserUsageRequestTypeTestRouter(repo *userUsageRepoCapture) *gin.Engine {
 	})
 	router.GET("/usage", handler.List)
 	router.GET("/usage/stats", handler.Stats)
+	router.GET("/usage/dashboard/trend", handler.DashboardTrend)
 	router.GET("/usage/dashboard/models", handler.DashboardModels)
 	router.GET("/usage/dashboard/snapshot-v2", handler.DashboardSnapshotV2)
 	return router
@@ -364,5 +369,34 @@ func TestUserUsageSnapshotRejectsInvalidIncludeFlags(t *testing.T) {
 		router.ServeHTTP(rec, req)
 
 		require.Equal(t, http.StatusBadRequest, rec.Code, query)
+	}
+}
+
+func TestUserUsageTrendOmitsAccountCost(t *testing.T) {
+	repo := &userUsageRepoCapture{
+		trendPoints: []usagestats.TrendDataPoint{{
+			Date:        "2026-03-01",
+			Requests:    3,
+			TotalTokens: 40,
+			Cost:        0.12,
+			ActualCost:  0.09,
+			AccountCost: 0.05,
+		}},
+	}
+	router := newUserUsageRequestTypeTestRouter(repo)
+
+	for _, path := range []string{
+		"/usage/dashboard/trend?start_date=2026-03-01&end_date=2026-03-02",
+		"/usage/dashboard/snapshot-v2?include_trend=true&include_model_stats=false&start_date=2026-03-01&end_date=2026-03-02",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code, path)
+		body := rec.Body.String()
+		require.Contains(t, body, `"actual_cost":0.09`, path)
+		require.Contains(t, body, `"requests":3`, path)
+		require.NotContains(t, body, "account_cost", path)
 	}
 }

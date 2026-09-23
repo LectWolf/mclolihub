@@ -11,6 +11,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
+// accountStatusInactive 是管理员停用账号时写入的状态（见 admin account handler 的 status 校验）。
+const accountStatusInactive = "inactive"
+
 // getPerformanceStats 获取 RPM 和 TPM（近5分钟平均值，可选按用户过滤）
 func (r *usageLogRepository) getPerformanceStats(ctx context.Context, userID int64) (rpm, tpm int64, err error) {
 	fiveMinutesAgo := time.Now().Add(-5 * time.Minute)
@@ -165,29 +168,50 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 		return err
 	}
 
+	// health_* 为互斥分类，口径与账号列表的状态筛选（account_repo.go ListWithFilters）保持一致。
 	accountStatsQuery := `
 		SELECT
 			COUNT(*) as total_accounts,
 			COUNT(CASE WHEN status = $1 AND schedulable = true THEN 1 END) as normal_accounts,
 			COUNT(CASE WHEN status = $2 THEN 1 END) as error_accounts,
 			COUNT(CASE WHEN rate_limited_at IS NOT NULL AND rate_limit_reset_at > $3 THEN 1 END) as ratelimit_accounts,
-			COUNT(CASE WHEN overload_until IS NOT NULL AND overload_until > $4 THEN 1 END) as overload_accounts
+			COUNT(CASE WHEN overload_until IS NOT NULL AND overload_until > $4 THEN 1 END) as overload_accounts,
+			COUNT(CASE WHEN status = $1 AND COALESCE(temp_unschedulable_until > $3, false) THEN 1 END) as health_temp_unschedulable,
+			COUNT(CASE WHEN status = $1 AND NOT COALESCE(temp_unschedulable_until > $3, false)
+				AND COALESCE(rate_limit_reset_at > $3, false) THEN 1 END) as health_rate_limited,
+			COUNT(CASE WHEN status = $1 AND NOT COALESCE(temp_unschedulable_until > $3, false)
+				AND NOT COALESCE(rate_limit_reset_at > $3, false) AND schedulable = false THEN 1 END) as health_unschedulable,
+			COUNT(CASE WHEN status = $1 AND NOT COALESCE(temp_unschedulable_until > $3, false)
+				AND NOT COALESCE(rate_limit_reset_at > $3, false) AND schedulable = true THEN 1 END) as health_available,
+			COUNT(CASE WHEN status = $5 THEN 1 END) as health_balance_insufficient,
+			COUNT(CASE WHEN status = $6 THEN 1 END) as health_inactive
 		FROM accounts
 		WHERE deleted_at IS NULL
 	`
+	health := &stats.AccountHealth
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
 		accountStatsQuery,
-		[]any{service.StatusActive, service.StatusError, now, now},
+		[]any{service.StatusActive, service.StatusError, now, now, service.StatusBalanceInsufficient, accountStatusInactive},
 		&stats.TotalAccounts,
 		&stats.NormalAccounts,
 		&stats.ErrorAccounts,
 		&stats.RateLimitAccounts,
 		&stats.OverloadAccounts,
+		&health.TempUnschedulable,
+		&health.RateLimited,
+		&health.Unschedulable,
+		&health.Available,
+		&health.BalanceInsufficient,
+		&health.Inactive,
 	); err != nil {
 		return err
 	}
+	health.Error = stats.ErrorAccounts
+	classified := health.Available + health.RateLimited + health.TempUnschedulable + health.Unschedulable +
+		health.Error + health.BalanceInsufficient + health.Inactive
+	health.Other = max(stats.TotalAccounts-classified, 0)
 
 	return nil
 }
@@ -239,10 +263,12 @@ func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Conte
 			total_cost as today_cost,
 			actual_cost as today_actual_cost,
 			account_cost as today_account_cost,
+			total_duration_ms as today_duration_ms,
 			active_users as active_users
 		FROM usage_dashboard_daily
 		WHERE bucket_date = $1::date
 	`
+	var todayDurationMs int64
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
@@ -256,6 +282,7 @@ func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Conte
 		&stats.TodayCost,
 		&stats.TodayActualCost,
 		&stats.TodayAccountCost,
+		&todayDurationMs,
 		&stats.ActiveUsers,
 	); err != nil {
 		if err != sql.ErrNoRows {
@@ -263,6 +290,13 @@ func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Conte
 		}
 	}
 	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
+	if stats.TodayRequests > 0 {
+		stats.TodayAverageDurationMs = float64(todayDurationMs) / float64(stats.TodayRequests)
+	}
+
+	if err := r.fillYesterdaySamePeriodAggregated(ctx, stats, todayUTC, now); err != nil {
+		return err
+	}
 
 	hourlyActiveQuery := `
 		SELECT active_users
@@ -279,8 +313,81 @@ func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Conte
 	return nil
 }
 
+// fillYesterdaySamePeriodAggregated 统计昨日同时段的用量，供今日数据做同比。
+// 今日数据来自预聚合表，只覆盖到聚合水位，因此对比窗口的终点也取「水位前 24 小时」，
+// 避免聚合延迟让昨日窗口比今日多出一截。整点部分读小时预聚合表，末尾不足一小时的部分直接扫 usage_logs。
+func (r *usageLogRepository) fillYesterdaySamePeriodAggregated(ctx context.Context, stats *DashboardStats, todayStart, now time.Time) error {
+	cutoff := now
+	var watermark time.Time
+	if err := scanSingleRow(ctx, r.sql, "SELECT last_aggregated_at FROM usage_dashboard_aggregation_watermark WHERE id = 1", nil, &watermark); err != nil {
+		if err != sql.ErrNoRows {
+			return err
+		}
+	} else if watermark.Before(cutoff) {
+		cutoff = watermark
+	}
+
+	loc := timezone.Location()
+	yesterdayStart := todayStart.In(loc).AddDate(0, 0, -1)
+	yesterdayEnd := cutoff.In(loc).AddDate(0, 0, -1)
+	if yesterdayEnd.Before(yesterdayStart) {
+		yesterdayEnd = yesterdayStart
+	}
+	// 小时桶按配置时区的整点切分，与 upsertHourlyAggregates 的 date_trunc 口径一致。
+	partialStart := time.Date(yesterdayEnd.Year(), yesterdayEnd.Month(), yesterdayEnd.Day(), yesterdayEnd.Hour(), 0, 0, 0, loc)
+	if partialStart.Before(yesterdayStart) {
+		partialStart = yesterdayStart
+	}
+
+	query := `
+		SELECT
+			hourly.requests + tail.requests,
+			hourly.tokens + tail.tokens,
+			hourly.cost + tail.cost,
+			hourly.actual_cost + tail.actual_cost,
+			hourly.account_cost + tail.account_cost
+		FROM (
+			SELECT
+				COALESCE(SUM(total_requests), 0) AS requests,
+				COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS tokens,
+				COALESCE(SUM(total_cost), 0) AS cost,
+				COALESCE(SUM(actual_cost), 0) AS actual_cost,
+				COALESCE(SUM(account_cost), 0) AS account_cost
+			FROM usage_dashboard_hourly
+			WHERE bucket_start >= $1 AND bucket_start < $2
+		) hourly
+		CROSS JOIN (
+			SELECT
+				COUNT(*) AS requests,
+				COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS tokens,
+				COALESCE(SUM(total_cost), 0) AS cost,
+				COALESCE(SUM(actual_cost), 0) AS actual_cost,
+				COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) AS account_cost
+			FROM usage_logs
+			WHERE created_at >= $2 AND created_at < $3
+		) tail
+	`
+	return scanSingleRow(
+		ctx,
+		r.sql,
+		query,
+		[]any{yesterdayStart, partialStart, yesterdayEnd},
+		&stats.YesterdayRequests,
+		&stats.YesterdayTokens,
+		&stats.YesterdayCost,
+		&stats.YesterdayActualCost,
+		&stats.YesterdayAccountCost,
+	)
+}
+
 func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Context, stats *DashboardStats, startUTC, endUTC, todayUTC, now time.Time) error {
 	todayEnd := todayUTC.Add(24 * time.Hour)
+	// 昨日同时段：昨日 00:00 至当前时刻前 24 小时（按配置时区的日历日计算）。
+	yesterdayStart := todayUTC.AddDate(0, 0, -1)
+	yesterdayEnd := now.AddDate(0, 0, -1)
+	if yesterdayEnd.Before(yesterdayStart) {
+		yesterdayEnd = yesterdayStart
+	}
 	combinedStatsQuery := `
 		WITH scoped AS (
 			SELECT
@@ -294,8 +401,8 @@ func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Co
 				COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1) AS account_cost,
 				COALESCE(duration_ms, 0) AS duration_ms
 			FROM usage_logs
-			WHERE created_at >= LEAST($1::timestamptz, $3::timestamptz)
-				AND created_at < GREATEST($2::timestamptz, $4::timestamptz)
+			WHERE created_at >= LEAST($1::timestamptz, $3::timestamptz, $5::timestamptz)
+				AND created_at < GREATEST($2::timestamptz, $4::timestamptz, $6::timestamptz)
 		)
 		SELECT
 			COUNT(*) FILTER (WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz) AS total_requests,
@@ -314,15 +421,21 @@ func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Co
 			COALESCE(SUM(cache_read_tokens) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_cache_read_tokens,
 			COALESCE(SUM(total_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_cost,
 			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_actual_cost,
-			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_account_cost
+			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_account_cost,
+			COALESCE(SUM(duration_ms) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_duration_ms,
+			COUNT(*) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz) AS yesterday_requests,
+			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_tokens,
+			COALESCE(SUM(total_cost) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_cost,
+			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_actual_cost,
+			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_account_cost
 		FROM scoped
 	`
-	var totalDurationMs int64
+	var totalDurationMs, todayDurationMs int64
 	if err := scanSingleRow(
 		ctx,
 		r.sql,
 		combinedStatsQuery,
-		[]any{startUTC, endUTC, todayUTC, todayEnd},
+		[]any{startUTC, endUTC, todayUTC, todayEnd, yesterdayStart, yesterdayEnd},
 		&stats.TotalRequests,
 		&stats.TotalInputTokens,
 		&stats.TotalOutputTokens,
@@ -340,6 +453,12 @@ func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Co
 		&stats.TodayCost,
 		&stats.TodayActualCost,
 		&stats.TodayAccountCost,
+		&todayDurationMs,
+		&stats.YesterdayRequests,
+		&stats.YesterdayTokens,
+		&stats.YesterdayCost,
+		&stats.YesterdayActualCost,
+		&stats.YesterdayAccountCost,
 	); err != nil {
 		return err
 	}
@@ -349,6 +468,9 @@ func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Co
 	}
 
 	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
+	if stats.TodayRequests > 0 {
+		stats.TodayAverageDurationMs = float64(todayDurationMs) / float64(stats.TodayRequests)
+	}
 
 	hourStart := now.UTC().Truncate(time.Hour)
 	hourEnd := hourStart.Add(time.Hour)

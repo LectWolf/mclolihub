@@ -7,214 +7,241 @@
       </div>
 
       <template v-else-if="stats">
-        <!-- Row 1: Core Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <!-- Total API Keys -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30">
-                <Icon name="key" size="md" class="text-blue-600 dark:text-blue-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.apiKeys') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ stats.total_api_keys }}
-                </p>
-                <p class="text-xs text-green-600 dark:text-green-400">
-                  {{ stats.active_api_keys }} {{ t('common.active') }}
-                </p>
-              </div>
+        <!-- Today Overview -->
+        <section class="space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.dashboard.todayOverview') }}
+              </h2>
+              <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                <span>{{ t('admin.dashboard.deltaCaption') }}</span>
+                <span v-if="generatedAtLabel" data-testid="stats-generated-at">
+                  · {{ t('admin.dashboard.statsUpdatedAt', { time: generatedAtLabel }) }}
+                </span>
+                <span
+                  v-if="statsLagging"
+                  data-testid="stats-stale"
+                  class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                  :title="statsStaleHint"
+                >
+                  <Icon name="exclamationTriangle" size="xs" :stroke-width="2" />
+                  {{ t('admin.dashboard.statsStale') }}
+                </span>
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <AutoRefreshButton
+                :enabled="autoRefresh.enabled.value"
+                :interval-seconds="autoRefresh.intervalSeconds.value"
+                :countdown="autoRefresh.countdown.value"
+                :intervals="autoRefresh.intervals"
+                @update:enabled="autoRefresh.setEnabled"
+                @update:interval="autoRefresh.setInterval"
+              />
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="refreshing"
+                @click="refreshAll()"
+              >
+                <Icon name="refresh" size="sm" :class="refreshing ? 'animate-spin' : ''" />
+                {{ t('common.refresh') }}
+              </button>
             </div>
           </div>
 
-          <!-- Service Accounts -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
-                <Icon name="server" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.accounts') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ stats.total_accounts }}
-                </p>
-                <p class="text-xs">
-                  <span class="text-green-600 dark:text-green-400"
-                    >{{ stats.normal_accounts }} {{ t('common.active') }}</span
-                  >
-                  <span v-if="stats.error_accounts > 0" class="ml-1 text-red-500"
-                    >{{ stats.error_accounts }} {{ t('common.error') }}</span
-                  >
-                </p>
-              </div>
-            </div>
+          <!-- Row 1: today's business -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <DashboardStatTile
+              :label="t('admin.dashboard.todaySpend')"
+              :hint="t('admin.dashboard.todaySpendHint')"
+              icon="dollar"
+              icon-class="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+              :value="formatUsd(stats.today_actual_cost)"
+              :delta="spendDelta"
+              :delta-hint="yesterdayHint(stats.yesterday_actual_cost, formatUsd)"
+            >
+              <p>
+                {{ t('admin.dashboard.standardCostValue', { value: formatUsd(stats.today_cost) }) }}
+                · {{ t('admin.dashboard.cumulativeValue', { value: formatUsd(stats.total_actual_cost) }) }}
+              </p>
+            </DashboardStatTile>
+
+            <DashboardStatTile
+              :label="t('admin.dashboard.todayProfit')"
+              :hint="t('admin.dashboard.todayProfitHint')"
+              icon="trendingUp"
+              icon-class="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+              :value="formatUsd(todayProfit)"
+              :value-class="todayProfit < 0 ? '!text-red-600 dark:!text-red-400' : ''"
+              :delta="profitDelta"
+              :delta-hint="yesterdayHint(yesterdayProfit, formatUsd)"
+            >
+              <p>
+                {{ t('admin.dashboard.accountCostValue', { value: formatUsd(stats.today_account_cost) }) }}
+                · {{ t('admin.dashboard.marginValue', { value: formatPercent(todayMargin) }) }}
+              </p>
+            </DashboardStatTile>
+
+            <DashboardStatTile
+              :label="t('admin.dashboard.todayRequests')"
+              icon="chart"
+              icon-class="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400"
+              :value="formatInteger(stats.today_requests)"
+              :delta="requestsDelta"
+              :delta-hint="yesterdayHint(stats.yesterday_requests, formatInteger)"
+            >
+              <p>{{ t('admin.dashboard.cumulativeValue', { value: formatInteger(stats.total_requests) }) }}</p>
+            </DashboardStatTile>
+
+            <DashboardStatTile
+              :label="t('admin.dashboard.todayTokens')"
+              icon="cube"
+              icon-class="bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+              :value="formatTokens(stats.today_tokens)"
+              :value-title="tokenBreakdown"
+              :delta="tokensDelta"
+              :delta-hint="yesterdayHint(stats.yesterday_tokens, formatTokens)"
+            >
+              <p>
+                {{ t('admin.dashboard.cacheHitValue', { value: formatPercent(todayCacheHitRate) }) }}
+                · {{ t('admin.dashboard.cumulativeValue', { value: formatTokens(stats.total_tokens) }) }}
+              </p>
+            </DashboardStatTile>
           </div>
 
-          <!-- Today Requests -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30">
-                <Icon name="chart" size="md" class="text-green-600 dark:text-green-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.todayRequests') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ stats.today_requests }}
-                </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('common.total') }}: {{ formatNumber(stats.total_requests) }}
-                </p>
-              </div>
-            </div>
-          </div>
+          <!-- Row 2: resources & live load -->
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <AccountHealthCard
+              class="sm:col-span-2"
+              :health="accountHealth"
+              :total="toFiniteNumber(stats.total_accounts)"
+              :normal-fallback="toFiniteNumber(stats.normal_accounts)"
+              :error-fallback="toFiniteNumber(stats.error_accounts)"
+              :overloaded="toFiniteNumber(stats.overload_accounts)"
+            />
 
-          <!-- New Users Today -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30">
-                <Icon name="userPlus" size="md" class="text-emerald-600 dark:text-emerald-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.users') }}
-                </p>
-                <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                  +{{ stats.today_new_users }}
-                </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('common.total') }}: {{ formatNumber(stats.total_users) }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+            <DashboardStatTile
+              :label="t('admin.dashboard.usersCard')"
+              icon="users"
+              icon-class="bg-sky-100 text-sky-600 dark:bg-sky-900/30 dark:text-sky-400"
+              :value="formatInteger(stats.total_users)"
+            >
+              <p>
+                <span class="font-medium text-emerald-700 dark:text-emerald-400">
+                  {{ t('admin.dashboard.newUsersValue', { n: formatInteger(stats.today_new_users) }) }}
+                </span>
+                · {{ t('admin.dashboard.activeUsersValue', { n: formatInteger(stats.active_users) }) }}
+                · {{ t('admin.dashboard.hourlyActiveUsersValue', { n: formatInteger(stats.hourly_active_users) }) }}
+              </p>
+              <p>
+                {{ t('admin.dashboard.apiKeysValue', {
+                  total: formatInteger(stats.total_api_keys),
+                  active: formatInteger(stats.active_api_keys)
+                }) }}
+              </p>
+            </DashboardStatTile>
 
-        <!-- Row 2: Token Stats -->
-        <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <!-- Today Tokens -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30">
-                <Icon name="cube" size="md" class="text-amber-600 dark:text-amber-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.todayTokens') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ formatTokens(stats.today_tokens) }}
-                </p>
-                <p class="text-xs">
-                  <span
-                    class="text-green-600 dark:text-green-400"
-                    :title="t('admin.dashboard.actual')"
-                    >${{ formatCost(stats.today_actual_cost) }}</span
-                  >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
-                  <span
-                    class="text-orange-500 dark:text-orange-400"
-                    :title="t('admin.dashboard.accountCost')"
-                    >${{ formatCost(stats.today_account_cost) }}</span
-                  >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
-                  <span
-                    class="text-gray-400 dark:text-gray-500"
-                    :title="t('admin.dashboard.standard')"
-                    >${{ formatCost(stats.today_cost) }}</span
-                  >
-                </p>
-              </div>
-            </div>
+            <DashboardStatTile
+              :label="t('admin.dashboard.realtimeLoad')"
+              :hint="t('admin.dashboard.realtimeLoadHint')"
+              icon="bolt"
+              icon-class="bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400"
+              :value="formatTokens(stats.rpm)"
+              unit="RPM"
+            >
+              <p>
+                {{ formatTokens(stats.tpm) }} TPM
+                · {{ t('admin.dashboard.todayAvgResponseValue', { value: formatDuration(todayAverageDuration) }) }}
+              </p>
+              <p v-if="stats.uptime > 0">{{ t('admin.dashboard.uptimeValue', { value: uptimeLabel }) }}</p>
+            </DashboardStatTile>
           </div>
+        </section>
 
-          <!-- Total Tokens -->
+        <!-- Analytics -->
+        <section class="space-y-4">
           <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30">
-                <Icon name="database" size="md" class="text-indigo-600 dark:text-indigo-400" :stroke-width="2" />
+            <div class="flex flex-wrap items-center gap-4">
+              <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.dashboard.analysisTitle') }}
+              </h2>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >{{ t('admin.dashboard.timeRange') }}:</span
+                >
+                <DateRangePicker
+                  v-model:start-date="startDate"
+                  v-model:end-date="endDate"
+                  @change="onDateRangeChange"
+                />
               </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.totalTokens') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ formatTokens(stats.total_tokens) }}
-                </p>
-                <p class="text-xs">
-                  <span
-                    class="text-green-600 dark:text-green-400"
-                    :title="t('admin.dashboard.actual')"
-                    >${{ formatCost(stats.total_actual_cost) }}</span
-                  >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
-                  <span
-                    class="text-orange-500 dark:text-orange-400"
-                    :title="t('admin.dashboard.accountCost')"
-                    >${{ formatCost(stats.total_account_cost) }}</span
-                  >
-                  <span class="text-gray-400 dark:text-gray-500"> / </span>
-                  <span
-                    class="text-gray-400 dark:text-gray-500"
-                    :title="t('admin.dashboard.standard')"
-                    >${{ formatCost(stats.total_cost) }}</span
-                  >
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Performance (RPM/TPM) -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-violet-100 p-2 dark:bg-violet-900/30">
-                <Icon name="bolt" size="md" class="text-violet-600 dark:text-violet-400" :stroke-width="2" />
-              </div>
-              <div class="flex-1">
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.performance') }}
-                </p>
-                <div class="flex items-baseline gap-2">
-                  <p class="text-xl font-bold text-gray-900 dark:text-white">
-                    {{ formatTokens(stats.rpm) }}
-                  </p>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">RPM</span>
-                </div>
-                <div class="flex items-baseline gap-2">
-                  <p class="text-sm font-semibold text-violet-600 dark:text-violet-400">
-                    {{ formatTokens(stats.tpm) }}
-                  </p>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">TPM</span>
+              <div class="ml-auto flex items-center gap-2">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >{{ t('admin.dashboard.granularity') }}:</span
+                >
+                <div class="w-28">
+                  <Select
+                    v-model="granularity"
+                    :options="granularityOptions"
+                    @change="loadChartData"
+                  />
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Avg Response Time -->
-          <div class="card p-4">
-            <div class="flex items-center gap-3">
-              <div class="rounded-lg bg-rose-100 p-2 dark:bg-rose-900/30">
-                <Icon name="clock" size="md" class="text-rose-600 dark:text-rose-400" :stroke-width="2" />
-              </div>
-              <div>
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.avgResponse') }}
-                </p>
-                <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ formatDuration(stats.average_duration_ms) }}
-                </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ stats.active_users }} {{ t('admin.dashboard.activeUsers') }}
-                </p>
+          <!-- 重新加载时保留上一帧，只降低不透明度，避免图表闪成加载态 -->
+          <div class="space-y-6 transition-opacity" :class="chartsRefreshing ? 'opacity-60' : ''">
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <ModelDistributionChart
+                :model-stats="modelStats"
+                :enable-ranking-view="true"
+                :ranking-items="rankingItems"
+                :ranking-total-actual-cost="rankingTotalActualCost"
+                :ranking-total-requests="rankingTotalRequests"
+                :ranking-total-tokens="rankingTotalTokens"
+                :loading="chartsLoading && modelStats.length === 0"
+                :ranking-loading="rankingLoading && rankingItems.length === 0"
+                :ranking-error="rankingError"
+                :start-date="startDate"
+                :end-date="endDate"
+                @ranking-click="goToUserUsage"
+              />
+              <GroupDistributionChart
+                :group-stats="groupStats"
+                :loading="chartsLoading && groupStats.length === 0"
+                :start-date="startDate"
+                :end-date="endDate"
+              />
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading && trendData.length === 0" />
+              <SpendTrendChart :trend-data="trendData" :loading="chartsLoading && trendData.length === 0" />
+            </div>
+
+            <!-- User Usage Trend (Full Width) -->
+            <div class="card p-4">
+              <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.dashboard.userUsageTrend') }}
+              </h3>
+              <div class="h-64">
+                <div v-if="userTrendLoading && !userTrendChartData" class="flex h-full items-center justify-center">
+                  <LoadingSpinner size="md" />
+                </div>
+                <Line v-else-if="userTrendChartData" :data="userTrendChartData" :options="lineOptions" />
+                <div
+                  v-else
+                  class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
+                >
+                  {{ t('admin.dashboard.noDataAvailable') }}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
         <!-- Quick Actions -->
         <div class="card p-4">
@@ -263,78 +290,6 @@
             </button>
           </div>
         </div>
-
-        <!-- Charts Section -->
-        <div class="space-y-6">
-          <!-- Date Range Filter -->
-          <div class="card p-4">
-            <div class="flex flex-wrap items-center gap-4">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >{{ t('admin.dashboard.timeRange') }}:</span
-                >
-                <DateRangePicker
-                  v-model:start-date="startDate"
-                  v-model:end-date="endDate"
-                  @change="onDateRangeChange"
-                />
-              </div>
-              <button @click="loadDashboardStats" :disabled="chartsLoading" class="btn btn-secondary">
-                {{ t('common.refresh') }}
-              </button>
-              <div class="ml-auto flex items-center gap-2">
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >{{ t('admin.dashboard.granularity') }}:</span
-                >
-                <div class="w-28">
-                  <Select
-                    v-model="granularity"
-                    :options="granularityOptions"
-                    @change="loadChartData"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Charts Grid -->
-          <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <ModelDistributionChart
-              :model-stats="modelStats"
-              :enable-ranking-view="true"
-              :ranking-items="rankingItems"
-              :ranking-total-actual-cost="rankingTotalActualCost"
-              :ranking-total-requests="rankingTotalRequests"
-              :ranking-total-tokens="rankingTotalTokens"
-              :loading="chartsLoading"
-              :ranking-loading="rankingLoading"
-              :ranking-error="rankingError"
-              :start-date="startDate"
-              :end-date="endDate"
-              @ranking-click="goToUserUsage"
-            />
-            <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
-          </div>
-
-          <!-- User Usage Trend (Full Width) -->
-          <div class="card p-4">
-            <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.dashboard.recentUsage') }} (Top 12)
-            </h3>
-            <div class="h-64">
-              <div v-if="userTrendLoading" class="flex h-full items-center justify-center">
-                <LoadingSpinner size="md" />
-              </div>
-              <Line v-else-if="userTrendChartData" :data="userTrendChartData" :options="lineOptions" />
-              <div
-                v-else
-                class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400"
-              >
-                {{ t('admin.dashboard.noDataAvailable') }}
-              </div>
-            </div>
-          </div>
-        </div>
       </template>
     </div>
   </AppLayout>
@@ -352,6 +307,7 @@ import type {
   DashboardStats,
   TrendDataPoint,
   ModelStat,
+  GroupStat,
   UserUsageTrendPoint,
   UserSpendingRankingItem
 } from '@/types'
@@ -360,9 +316,30 @@ import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import Select from '@/components/common/Select.vue'
+import AutoRefreshButton from '@/components/common/AutoRefreshButton.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
+import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
+import DashboardStatTile from '@/components/admin/dashboard/DashboardStatTile.vue'
+import AccountHealthCard from '@/components/admin/dashboard/AccountHealthCard.vue'
+import SpendTrendChart from '@/components/admin/dashboard/SpendTrendChart.vue'
+import {
+  cacheHitRate,
+  computeDelta,
+  formatDuration,
+  formatPercent,
+  formatTokens,
+  formatUptime,
+  formatUsd,
+  isMeaningfulTimestamp,
+  profitMargin,
+  resolveAccountHealth,
+  toFiniteNumber
+} from '@/components/admin/dashboard/dashboardMetrics'
+import { trendAxisTicks } from '@/components/charts/trendAxis'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { formatDateTime, formatTime } from '@/utils/format'
 
 import {
   Chart as ChartJS,
@@ -391,7 +368,9 @@ const appStore = useAppStore()
 const router = useRouter()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 const stats = ref<DashboardStats | null>(null)
+const generatedAt = ref('')
 const loading = ref(false)
+const refreshing = ref(false)
 const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
 const rankingLoading = ref(false)
@@ -400,6 +379,7 @@ const rankingError = ref(false)
 // Chart data
 const trendData = ref<TrendDataPoint[]>([])
 const modelStats = ref<ModelStat[]>([])
+const groupStats = ref<GroupStat[]>([])
 const userTrend = ref<UserUsageTrendPoint[]>([])
 const rankingItems = ref<UserSpendingRankingItem[]>([])
 const rankingTotalActualCost = ref(0)
@@ -409,6 +389,11 @@ let chartLoadSeq = 0
 let usersTrendLoadSeq = 0
 let rankingLoadSeq = 0
 const rankingLimit = 12
+
+interface LoadOptions {
+  /** 静默刷新（自动刷新）：不切换加载态、不弹错误提示，保持当前画面 */
+  silent?: boolean
+}
 
 // Helper function to format date in local timezone
 const formatLocalDate = (date: Date): string => {
@@ -435,6 +420,77 @@ const granularityOptions = computed(() => [
   { value: 'day', label: t('admin.dashboard.day') },
   { value: 'hour', label: t('admin.dashboard.hour') }
 ])
+
+const chartsRefreshing = computed(
+  () => chartsLoading.value || userTrendLoading.value || rankingLoading.value
+)
+
+// Today overview metrics
+const todayProfit = computed(
+  () => toFiniteNumber(stats.value?.today_actual_cost) - toFiniteNumber(stats.value?.today_account_cost)
+)
+const yesterdayProfit = computed(
+  () => toFiniteNumber(stats.value?.yesterday_actual_cost) - toFiniteNumber(stats.value?.yesterday_account_cost)
+)
+const todayMargin = computed(() => profitMargin(stats.value?.today_actual_cost, stats.value?.today_account_cost))
+const todayCacheHitRate = computed(() =>
+  cacheHitRate(
+    stats.value?.today_input_tokens,
+    stats.value?.today_cache_read_tokens,
+    stats.value?.today_cache_creation_tokens
+  )
+)
+const todayAverageDuration = computed(
+  () => stats.value?.today_average_duration_ms ?? stats.value?.average_duration_ms ?? 0
+)
+const accountHealth = computed(() => resolveAccountHealth(stats.value))
+
+// 旧版后端没有昨日同时段字段时不展示涨跌幅
+const hasYesterdayStats = computed(() => stats.value?.yesterday_requests !== undefined)
+const spendDelta = computed(() =>
+  hasYesterdayStats.value ? computeDelta(stats.value?.today_actual_cost, stats.value?.yesterday_actual_cost) : null
+)
+const profitDelta = computed(() =>
+  hasYesterdayStats.value ? computeDelta(todayProfit.value, yesterdayProfit.value) : null
+)
+const requestsDelta = computed(() =>
+  hasYesterdayStats.value ? computeDelta(stats.value?.today_requests, stats.value?.yesterday_requests) : null
+)
+const tokensDelta = computed(() =>
+  hasYesterdayStats.value ? computeDelta(stats.value?.today_tokens, stats.value?.yesterday_tokens) : null
+)
+
+const yesterdayHint = (value: number | undefined, format: (value: number) => string): string => {
+  const previous = toFiniteNumber(value)
+  if (previous === 0) return t('admin.dashboard.noYesterdayData')
+  return t('admin.dashboard.yesterdaySamePeriod', { value: format(previous) })
+}
+
+const tokenBreakdown = computed(() =>
+  t('admin.dashboard.tokenBreakdown', {
+    input: formatTokens(stats.value?.today_input_tokens),
+    output: formatTokens(stats.value?.today_output_tokens),
+    cacheWrite: formatTokens(stats.value?.today_cache_creation_tokens),
+    cacheRead: formatTokens(stats.value?.today_cache_read_tokens)
+  })
+)
+
+const uptimeLabel = computed(() =>
+  formatUptime(stats.value?.uptime, {
+    day: t('admin.dashboard.uptimeUnits.day'),
+    hour: t('admin.dashboard.uptimeUnits.hour'),
+    minute: t('admin.dashboard.uptimeUnits.minute')
+  })
+)
+
+const generatedAtLabel = computed(() => (generatedAt.value ? formatTime(generatedAt.value) : ''))
+// 预聚合水位是真实时间且已过期时才提示延迟（未启用预聚合时水位为 1970 年，统计直接来自明细）
+const statsLagging = computed(
+  () => Boolean(stats.value?.stats_stale) && isMeaningfulTimestamp(stats.value?.stats_updated_at)
+)
+const statsStaleHint = computed(() =>
+  t('admin.dashboard.statsStaleHint', { time: formatDateTime(stats.value?.stats_updated_at) })
+)
 
 // Dark mode detection
 const isDarkMode = computed(() => {
@@ -487,6 +543,7 @@ const lineOptions = computed(() => ({
         color: chartColors.value.grid
       },
       ticks: {
+        ...trendAxisTicks,
         color: chartColors.value.text,
         font: {
           size: 10
@@ -570,45 +627,8 @@ const userTrendChartData = computed(() => {
   }
 })
 
-// Format helpers
-const formatTokens = (value: number | undefined): string => {
-  if (value === undefined || value === null) return '0'
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(2)}B`
-  } else if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(2)}M`
-  } else if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(2)}K`
-  }
-  return value.toLocaleString()
-}
-
-const toFiniteNumber = (value: unknown): number => {
-  const numberValue = Number(value)
-  return Number.isFinite(numberValue) ? numberValue : 0
-}
-
-const formatNumber = (value: number | null | undefined): string => {
+const formatInteger = (value: number | null | undefined): string => {
   return toFiniteNumber(value).toLocaleString()
-}
-
-const formatCost = (value: number | null | undefined): string => {
-  const safeValue = toFiniteNumber(value)
-  if (safeValue >= 1000) {
-    return (safeValue / 1000).toFixed(2) + 'K'
-  } else if (safeValue >= 1) {
-    return safeValue.toFixed(2)
-  } else if (safeValue >= 0.01) {
-    return safeValue.toFixed(3)
-  }
-  return safeValue.toFixed(4)
-}
-
-const formatDuration = (ms: number): string => {
-  if (ms >= 1000) {
-    return `${(ms / 1000).toFixed(2)}s`
-  }
-  return `${Math.round(ms)}ms`
 }
 
 const goToUserUsage = (item: UserSpendingRankingItem) => {
@@ -644,12 +664,14 @@ const onDateRangeChange = (range: {
 }
 
 // Load data
-const loadDashboardSnapshot = async (includeStats: boolean) => {
+const loadDashboardSnapshot = async (includeStats: boolean, { silent = false }: LoadOptions = {}) => {
   const currentSeq = ++chartLoadSeq
   if (includeStats && !stats.value) {
     loading.value = true
   }
-  chartsLoading.value = true
+  if (!silent) {
+    chartsLoading.value = true
+  }
   try {
     const response = await adminAPI.dashboard.getSnapshotV2({
       start_date: startDate.value,
@@ -658,18 +680,22 @@ const loadDashboardSnapshot = async (includeStats: boolean) => {
       include_stats: includeStats,
       include_trend: true,
       include_model_stats: true,
-      include_group_stats: false,
+      include_group_stats: true,
       include_users_trend: false
     })
     if (currentSeq !== chartLoadSeq) return
     if (includeStats && response.stats) {
       stats.value = response.stats
+      generatedAt.value = response.generated_at || ''
     }
     trendData.value = response.trend || []
     modelStats.value = response.models || []
+    groupStats.value = response.groups || []
   } catch (error) {
     if (currentSeq !== chartLoadSeq) return
-    appStore.showError(t('admin.dashboard.failedToLoad'))
+    if (!silent) {
+      appStore.showError(t('admin.dashboard.failedToLoad'))
+    }
     console.error('Error loading dashboard snapshot:', error)
   } finally {
     if (currentSeq === chartLoadSeq) {
@@ -679,9 +705,11 @@ const loadDashboardSnapshot = async (includeStats: boolean) => {
   }
 }
 
-const loadUsersTrend = async () => {
+const loadUsersTrend = async ({ silent = false }: LoadOptions = {}) => {
   const currentSeq = ++usersTrendLoadSeq
-  userTrendLoading.value = true
+  if (!silent) {
+    userTrendLoading.value = true
+  }
   try {
     const response = await adminAPI.dashboard.getUserUsageTrend({
       start_date: startDate.value,
@@ -694,7 +722,10 @@ const loadUsersTrend = async () => {
   } catch (error) {
     if (currentSeq !== usersTrendLoadSeq) return
     console.error('Error loading users trend:', error)
-    userTrend.value = []
+    // 静默刷新失败时保留上一帧数据
+    if (!silent) {
+      userTrend.value = []
+    }
   } finally {
     if (currentSeq === usersTrendLoadSeq) {
       userTrendLoading.value = false
@@ -702,10 +733,12 @@ const loadUsersTrend = async () => {
   }
 }
 
-const loadUserSpendingRanking = async () => {
+const loadUserSpendingRanking = async ({ silent = false }: LoadOptions = {}) => {
   const currentSeq = ++rankingLoadSeq
-  rankingLoading.value = true
-  rankingError.value = false
+  if (!silent) {
+    rankingLoading.value = true
+    rankingError.value = false
+  }
   try {
     const response = await adminAPI.dashboard.getUserSpendingRanking({
       start_date: startDate.value,
@@ -717,14 +750,17 @@ const loadUserSpendingRanking = async () => {
     rankingTotalActualCost.value = response.total_actual_cost || 0
     rankingTotalRequests.value = response.total_requests || 0
     rankingTotalTokens.value = response.total_tokens || 0
+    rankingError.value = false
   } catch (error) {
     if (currentSeq !== rankingLoadSeq) return
     console.error('Error loading user spending ranking:', error)
-    rankingItems.value = []
-    rankingTotalActualCost.value = 0
-    rankingTotalRequests.value = 0
-    rankingTotalTokens.value = 0
-    rankingError.value = true
+    if (!silent) {
+      rankingItems.value = []
+      rankingTotalActualCost.value = 0
+      rankingTotalRequests.value = 0
+      rankingTotalTokens.value = 0
+      rankingError.value = true
+    }
   } finally {
     if (currentSeq === rankingLoadSeq) {
       rankingLoading.value = false
@@ -732,12 +768,18 @@ const loadUserSpendingRanking = async () => {
   }
 }
 
-const loadDashboardStats = async () => {
-  await Promise.all([
-    loadDashboardSnapshot(true),
-    loadUsersTrend(),
-    loadUserSpendingRanking()
-  ])
+const refreshAll = async (options: LoadOptions = {}) => {
+  refreshing.value = true
+  try {
+    await Promise.all([
+      loadDashboardSnapshot(true, options),
+      loadUsersTrend(options),
+      loadUserSpendingRanking(options)
+    ])
+  } finally {
+    refreshing.value = false
+    autoRefresh.resetCountdown()
+  }
 }
 
 const loadChartData = async () => {
@@ -748,9 +790,21 @@ const loadChartData = async () => {
   ])
 }
 
+// snapshot 接口服务端缓存 30 秒，更短的刷新间隔拿不到新数据
+const autoRefresh = useAutoRefresh({
+  storageKey: 'admin-dashboard-auto-refresh',
+  intervals: [30, 60, 120, 300] as const,
+  defaultInterval: 60,
+  onRefresh: () => refreshAll({ silent: true }),
+  shouldPause: () => document.hidden || loading.value || refreshing.value
+})
+
 onMounted(() => {
   void refreshBatchImageAccess()
-  loadDashboardStats()
+  void refreshAll()
+  if (autoRefresh.enabled.value) {
+    autoRefresh.start()
+  }
 })
 </script>
 
