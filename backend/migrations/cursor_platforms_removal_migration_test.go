@@ -8,7 +8,7 @@ import (
 )
 
 func TestCursorPlatformsRemovalMigration(t *testing.T) {
-	content, err := FS.ReadFile("260_remove_cursor_platforms.sql")
+	content, err := FS.ReadFile("262_remove_cursor_platforms.sql")
 	require.NoError(t, err)
 
 	sql := strings.Join(strings.Fields(string(content)), " ")

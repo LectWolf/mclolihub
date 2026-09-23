@@ -6,6 +6,7 @@
 --   3. 从两处平台 CHECK 约束中移除 cursor_sand / cursor（保留 qoder）。
 --
 -- 258/259 已发布且受 checksum 保护，不能改写，这里用新迁移收紧约束。
+-- Numbered 262 on this fork after 260/261 from upstream Sub2API 0.2.8.
 -- 整个文件在同一事务内执行；UPDATE/DELETE 重复执行影响 0 行，DROP ... IF EXISTS 保证约束可重建。
 
 UPDATE accounts
