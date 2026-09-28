@@ -29,6 +29,7 @@ type GroupHealthService struct {
 	lockCache   LeaderLockCache
 	db          *sql.DB
 	instanceID  string
+	quality     *GroupQualityChecker
 
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -57,10 +58,41 @@ func (s *GroupHealthService) Start() {
 			s.lifecycleMu.Unlock()
 			return
 		}
-		s.wg.Add(1)
+		s.wg.Add(2)
 		s.lifecycleMu.Unlock()
 		go s.loop()
+		go s.qualityLoop()
 	})
+}
+func (s *GroupHealthService) Quality() *GroupQualityChecker {
+	if s == nil || s.db == nil || s.accountRepo == nil {
+		return nil
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.quality == nil {
+		s.quality = newGroupQualityChecker(s.db, s.accountRepo, s.testService, s.lockCache, s.instanceID)
+	}
+	return s.quality
+}
+
+func (s *GroupHealthService) qualityLoop() {
+	defer s.wg.Done()
+	checker := s.Quality()
+	if checker == nil {
+		return
+	}
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	checker.Run(s.ctx)
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			checker.Run(s.ctx)
+		}
+	}
 }
 
 func (s *GroupHealthService) Stop() {

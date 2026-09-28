@@ -159,6 +159,23 @@
 
       <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
         <div class="card-header !py-3">
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.qualityTitle') }}</h3>
+          <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ t('channelMonitorV2.settings.qualityHint') }}</p>
+        </div>
+        <div class="max-h-[min(40vh,280px)] overflow-y-auto px-3 py-2 sm:px-4">
+          <div class="grid grid-cols-1 gap-1">
+            <div v-for="group in groups" :key="'quality-' + group.id" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm">
+              <span class="min-w-0 flex-1 truncate font-medium text-gray-800 dark:text-gray-100">{{ group.name }}</span>
+              <small v-if="qualityOf(group.id)?.enabled" class="shrink-0 text-xs text-gray-400">{{ qualityStatusLabel(qualityOf(group.id)?.status) }}</small>
+              <Toggle :model-value="Boolean(qualityOf(group.id)?.enabled)" :disabled="qualityBusy === group.id" :aria-label="t('channelMonitorV2.settings.qualityTitle')" @update:model-value="toggleQuality(group.id, $event)" />
+            </div>
+          </div>
+          <p v-if="groups.length === 0" class="empty-state py-8 text-sm text-gray-400">{{ t('channelMonitorV2.settings.groupsEmpty') }}</p>
+        </div>
+      </div>
+
+      <div class="card overflow-hidden !rounded-3xl !border-0 shadow-sm ring-1 ring-gray-900/5 dark:!bg-dark-800 dark:ring-dark-700">
+        <div class="card-header !py-3">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.errorsTitle') }}</h3>
           <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">
             {{ t('channelMonitorV2.settings.errorsHint') }}
@@ -275,6 +292,7 @@ import {
   type MonitorConfig,
 } from '@/api/channelMonitorV2'
 import { adminAPI } from '@/api/admin'
+import { listQuality, setQualityEnabled, type GroupQualityStatus } from '@/api/admin/qualityCheck'
 import type { AdminGroup } from '@/types'
 
 const { t, te } = useI18n()
@@ -284,6 +302,8 @@ const saving = ref(false)
 const draft = ref<MonitorConfig | null>(null)
 const original = ref('')
 const groups = ref<AdminGroup[]>([])
+const qualityByGroup = ref<Record<number, GroupQualityStatus>>({})
+const qualityBusy = ref(0)
 
 const dirty = computed(() => (draft.value ? JSON.stringify(draft.value) !== original.value : false))
 const namedModelCount = computed(
@@ -373,6 +393,24 @@ function toggleIgnoredCategory(category: string) {
   draft.value.ignored_error_categories = [...current].sort()
 }
 
+function qualityOf(id: number) {
+  return qualityByGroup.value[id]
+}
+function qualityStatusLabel(status?: string) {
+  const key = `channelMonitorV2.settings.qualityStatus.${status || 'unknown'}`
+  return te(key) ? t(key) : status || ''
+}
+async function toggleQuality(id: number, enabled: boolean) {
+  qualityBusy.value = id
+  try {
+    const status = await setQualityEnabled(id, enabled)
+    qualityByGroup.value = { ...qualityByGroup.value, [id]: status }
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.qualitySaveFailed')))
+  } finally {
+    qualityBusy.value = 0
+  }
+}
 function categoryLabel(category: string) {
   const key = `channelMonitorV2.errorCategories.${category}`
   return te(key) ? t(key) : category
@@ -412,10 +450,15 @@ function normalizeConfig(value: MonitorConfig): MonitorConfig {
 async function load() {
   loading.value = true
   try {
-    const [value, groupRows] = await Promise.all([getConfig(), adminAPI.groups.getAllIncludingInactive()])
+    const [value, groupRows, qualityRows] = await Promise.all([
+      getConfig(),
+      adminAPI.groups.getAllIncludingInactive(),
+      listQuality().catch(() => [] as GroupQualityStatus[]),
+    ])
     const normalized = normalizeConfig(value)
     draft.value = structuredClone(normalized)
     groups.value = groupRows
+    qualityByGroup.value = Object.fromEntries(qualityRows.map((row) => [row.group_id, row]))
     original.value = JSON.stringify(normalized)
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.loadFailed')))

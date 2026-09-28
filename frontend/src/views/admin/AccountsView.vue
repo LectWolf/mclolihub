@@ -335,6 +335,16 @@
               @usage-loaded="handleAccountUsageLoaded(row.id, $event)"
             />
           </template>
+          <template #cell-custom_usage="{ row }">
+            <CustomUsageCell
+              :key="row.id + ':' + customUsagePageKey"
+              :account="row"
+              :state="customUsageStates[row.id]"
+              @refresh="refreshCustomUsage(row.id)"
+              @configure="customUsageAccount = row"
+              @visibility="setCustomUsageVisible(row.id, $event)"
+            />
+          </template>
           <template #cell-proxy="{ row }">
             <div class="flex flex-col gap-1">
               <div v-if="row.proxy" class="flex items-center gap-2">
@@ -475,7 +485,13 @@
       :selected-types="selTypes"
       :target="bulkEditTarget ?? undefined"
       :proxies="proxies"
-      :groups="groups"
+    <CustomUsageConfigModal
+      :show="customUsageAccount !== null"
+      :account="customUsageAccount"
+      @close="customUsageAccount = null"
+      @saved="handleCustomUsageSaved"
+    />
+    <AccountActionMenu :show="menu.show" :account="menu.acc" :anchor-rect="menu.anchorRect" @close="menu.show = false" @custom-usage="openCustomUsage" @test="handleTest" @stats="handleViewStats" @schedule="handleSchedule" @duplicate="handleDuplicateAccount" @reauth="handleReAuth" @refresh-token="handleRefresh" @recover-state="handleRecoverState" @reset-quota="handleResetQuota" @set-privacy="handleSetPrivacy" @create-spark-shadow="handleCreateSparkShadow" />
       @close="showBulkEdit = false"
       @updated="handleBulkUpdated"
     />
@@ -530,6 +546,10 @@ import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vu
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
 import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
 import UpstreamBillingRateCell from '@/components/account/UpstreamBillingRateCell.vue'
+import CustomUsageCell from '@/components/account/CustomUsageCell.vue'
+import CustomUsageConfigModal from '@/components/account/CustomUsageConfigModal.vue'
+import { useCustomUsage } from '@/composables/useCustomUsage'
+import type { CustomUsageConfig } from '@/api/admin/customUsage'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
@@ -1118,6 +1138,24 @@ const {
     sort_order: sortState.sort_order
   }
 })
+
+const customUsageAccount = ref<AccountListItem | null>(null)
+const customUsagePageKey = computed(() => JSON.stringify([pagination.page, pagination.page_size, params]))
+const customUsageActive = computed(() => !loading.value && customUsageAccount.value === null && !hiddenColumns.has('custom_usage'))
+const {
+  states: customUsageStates,
+  setVisible: setCustomUsageVisible,
+  refresh: refreshCustomUsage,
+  configSaved: customUsageConfigSaved
+} = useCustomUsage(accounts, customUsageActive, customUsagePageKey)
+const handleCustomUsageSaved = (id: number, config: Pick<CustomUsageConfig, 'enabled' | 'interval_minutes'>) => {
+  customUsageConfigSaved(id, config)
+  appStore.showSuccess(t('admin.accounts.customUsage.saved'))
+}
+const openCustomUsage = (account: Account) => {
+  const { groups: _groups, ...item } = account
+  customUsageAccount.value = item
+}
 
 const {
   selectedSet,
@@ -1856,6 +1894,7 @@ const allColumns = computed(() => {
     c.push({ key: 'groups', label: t('admin.accounts.columns.groups'), sortable: false })
   }
   c.push({ key: 'usage', label: t('admin.accounts.columns.usageWindows'), sortable: false })
+  c.push({ key: 'custom_usage', label: t('admin.accounts.customUsage.column'), sortable: false })
   c.push(
     { key: 'proxy', label: t('admin.accounts.columns.proxy'), sortable: false },
     { key: 'priority', label: t('admin.accounts.columns.priority'), sortable: true },

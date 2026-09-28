@@ -106,6 +106,14 @@ export default {
       groupsSelected: '{count} groups selected',
       groupsAll: 'All groups',
       groupsEmpty: 'No groups available',
+      qualityTitle: 'Degradation check',
+      qualityHint: 'Enable per group. This does not run on a fixed interval. An account is tested only after both are true: at least 30 minutes since the last check, and at least $5 of actual cost in that window. The probe is the default pelican animation. Scheduling pauses only after two degraded results in a row, and resumes after a pass. Accounts whose connection test cannot send that prompt (Claude’s built-in test) are skipped and are not paused for it.',
+      qualitySaveFailed: 'Failed to save the degradation check',
+      qualityStatus: {
+        unknown: 'No result yet',
+        healthy: 'Healthy',
+        suspect: 'Suspected degradation',
+      },
       errorsTitle: 'Error categories and ignores',
       errorsHint:
         'Checked “ignore” categories are excluded from error rate and health score, but still appear greyed in the error breakdown. Unmatched errors roll into “Other”.',

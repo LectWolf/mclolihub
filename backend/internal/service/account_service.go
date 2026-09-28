@@ -167,10 +167,18 @@ type AccountBulkUpdate struct {
 	Schedulable    *bool
 	Credentials    map[string]any
 	Extra          map[string]any
-	ProbeEnabled   *bool
+	ProbeEnabled        *bool
+	CustomUsageExpected *AccountCustomUsageExpected
 	// EnsureCodexFingerprintSeed asks the repository to atomically preserve an
 	// existing valid Codex fingerprint seed or create one for eligible rows.
 	EnsureCodexFingerprintSeed bool
+}
+
+// AccountCustomUsageExpected rejects a balance-query save when the account
+// credentials or saved query config changed after the form was loaded.
+type AccountCustomUsageExpected struct {
+	Credentials map[string]any
+	Config      any
 }
 
 // CreateAccountRequest 创建账号请求

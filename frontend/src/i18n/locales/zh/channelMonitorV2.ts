@@ -104,6 +104,14 @@ export default {
       groupsSelected: '已选择 {count} 个分组',
       groupsAll: '全部分组',
       groupsEmpty: '没有可选择的分组',
+      qualityTitle: '降智检测',
+      qualityHint: '按分组开启。不会按固定间隔探测。同一账号要同时满足两件事后才测一次：距上次检测至少 30 分钟，且这期间实际扣费达到 5 美元。用默认鹈鹕动画题；连续两次判定降智才暂停调度，恢复正常后放回。不接受这道题的账号（例如 Claude 内置连接测试）会跳过，不会因此被暂停。',
+      qualitySaveFailed: '降智检测开关保存失败',
+      qualityStatus: {
+        unknown: '暂无结果',
+        healthy: '正常',
+        suspect: '疑似降智',
+      },
       errorsTitle: '错误分类与忽略',
       errorsHint:
         '勾选「忽略」的类别不计入错误率与健康分，仍在错误原因列表中以灰色显示并标记忽略。未匹配的错误归入「其他」。',
