@@ -99,13 +99,8 @@ func AnthropicToChatCompletionsRequest(req *AnthropicRequest) (*ChatCompletionsR
 		}
 	}
 
-	// Reasoning effort: output_config.effort maps 1:1 (max→xhigh). thinking.type
-	// itself is ignored (the Responses bridge behaves identically).
-	effort := "medium"
-	if req.OutputConfig != nil && req.OutputConfig.Effort != "" {
-		effort = req.OutputConfig.Effort
-	}
-	out.ReasoningEffort = mapAnthropicEffortToResponses(effort)
+	// Match the Responses bridge, including an explicit thinking disable.
+	out.ReasoningEffort = anthropicReasoningEffort(req)
 
 	// parallel_tool_calls is a tool parameter, so it follows the same rule as
 	// tool_choice above: chat upstreams reject it when no tools are declared
