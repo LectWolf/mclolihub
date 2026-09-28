@@ -116,7 +116,7 @@ func (c *GroupQualityChecker) List(ctx context.Context) ([]GroupQualityStatus, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]GroupQualityStatus, 0)
 	for rows.Next() {
 		var item GroupQualityStatus
@@ -176,7 +176,7 @@ func (c *GroupQualityChecker) clearPauses(ctx context.Context, groupID int64) {
 		slog.Warn("group_quality: list pauses failed", "group_id", groupID, "error", err)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	for rows.Next() {
 		var id int64
@@ -311,7 +311,7 @@ func (c *GroupQualityChecker) listCandidates(ctx context.Context, dueBefore time
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []qualityCandidate
 	for rows.Next() {
 		var item qualityCandidate
@@ -373,13 +373,13 @@ func runQualityProbe(ctx context.Context, tests *AccountTestService, accountID i
 	text, errMsg := parseTestSSEOutput(recorder.Body.String())
 	if err != nil || errMsg != "" {
 		if errMsg != "" {
-			return "", errString(errMsg)
+			return "", qualityProbeError(errMsg)
 		}
 		return "", err
 	}
 	return text, nil
 }
 
-type errString string
+type qualityProbeError string
 
-func (e errString) Error() string { return string(e) }
+func (e qualityProbeError) Error() string { return string(e) }

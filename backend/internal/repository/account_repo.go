@@ -3244,7 +3244,6 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		idx++
 		whereClause += " AND COALESCE(extra -> 'custom_usage_config', 'null'::jsonb) = $" + itoa(idx) + "::jsonb"
 		args = append(args, expectedConfig)
-		idx++
 	}
 	query := "UPDATE accounts SET " + joinClauses(setClauses, ", ") + whereClause
 
