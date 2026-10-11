@@ -33,12 +33,19 @@ const (
 	PlatformDeepseek  = "deepseek"  // DeepSeek
 	PlatformMiniMax   = "minimax"   // MiniMax (M 系列)
 	PlatformCodeBuddy = "codebuddy" // WorkBuddy / CodeBuddy (Tencent)
+	PlatformTypeSafe  = "typesafe"  // TypeSafe AI System One (Jev)
 	// PlatformOpenCodeGo 是 OpenCode 平台（账号类型 Zen 按量 / Go 订阅）。
-	// 值保持 opencode_go 以兼容已落库的分组、配额与 Composite 路由 CHECK。
+	// 值保持 opencode_go 以兼容已落库的账号、分组、配额与 Composite 路由。
 	PlatformOpenCodeGo = "opencode_go"
 	// PlatformQoder: agent_chat_generation SSE (COSY 签名)。
 	// 凭据为个人访问令牌（personal_token）或设备登录令牌（access_token + refresh_token）。
-	PlatformQoder     = "qoder"
+	PlatformQoder = "qoder"
+	// PlatformCommandCode 是 Command Code Provider API（多模型聚合，积分计费，
+	// 订阅套餐另有 5 小时 / 每周滚动窗口）。
+	PlatformCommandCode = "command_code"
+	// PlatformCline 是 Cline API（多模型聚合，OpenAI 兼容 Chat Completions；按量积分计费，
+	// 另有 ClinePass 订阅）。
+	PlatformCline     = "cline"
 	PlatformComposite = "composite"
 )
 
@@ -198,6 +205,8 @@ var DefaultBedrockModelMapping = map[string]string{
 	"claude-opus-4-1":          "us.anthropic.claude-opus-4-1-20250805-v1:0",
 	"claude-opus-4-20250514":   "us.anthropic.claude-opus-4-20250514-v1:0",
 	// Claude Sonnet
+	// Sonnet 5.5 is available on bedrock-runtime through Global inference only.
+	"claude-sonnet-5-5":          "global.anthropic.claude-sonnet-5-5",
 	"claude-sonnet-5":            "us.anthropic.claude-sonnet-5-v1",
 	"claude-sonnet-4-6-thinking": "us.anthropic.claude-sonnet-4-6",
 	"claude-sonnet-4-6":          "us.anthropic.claude-sonnet-4-6",

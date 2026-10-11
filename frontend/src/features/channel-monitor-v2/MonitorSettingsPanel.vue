@@ -316,6 +316,7 @@ import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { platformLabel as catalogPlatformLabel } from '@/utils/platformColors'
 import { getChannelMonitorMode, isChannelMonitorV2Mode } from '@/utils/featureFlags'
 import {
   getConfig,
@@ -499,22 +500,9 @@ function categoryLabel(category: string) {
 }
 
 function platformLabel(value: string) {
-  return (
-    {
-      anthropic: 'Claude',
-      openai: 'OpenAI',
-      grok: 'Grok',
-      kiro: 'Kiro',
-      gemini: 'Gemini',
-      antigravity: 'Antigravity',
-      kimi: 'Kimi',
-      zhipu: 'Zhipu GLM',
-      deepseek: 'DeepSeek',
-      minimax: 'MiniMax',
-      codebuddy: 'CodeBuddy',
-      composite: 'Composite',
-    } as Record<string, string>
-  )[value] || value
+  if (value === 'anthropic') return 'Claude'
+  if (value === 'kiro') return 'Kiro'
+  return catalogPlatformLabel(value)
 }
 
 function normalizeConfig(value: MonitorConfig): MonitorConfig {

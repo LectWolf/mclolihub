@@ -3,6 +3,8 @@
 package service
 
 import (
+	"context"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -121,4 +123,73 @@ func TestAccountTestService_OpenCodeGoEmptyModelDefaultsToChatCatalogID(t *testi
 	require.Len(t, upstream.requests, 1)
 	require.Equal(t, "https://opencode.ai/zen/go/v1/chat/completions", upstream.requests[0].URL.String())
 	require.True(t, strings.Contains(recorder.Body.String(), DefaultOpenCodeGoTestModel))
+}
+
+func TestAccountTestService_ModelRoutedProbesMapOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		model    string
+		path     string
+		response func() *http.Response
+	}{
+		{"chat", "deepseek-v4-flash", "/v1/chat/completions", adaptiveCNChatTestResponse},
+		{"anthropic", "minimax-m3", "/v1/messages", adaptiveCNAnthropicTestResponse},
+		{"responses", "grok-4.6", "/v1/responses", adaptiveCNResponsesTestResponse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			account := openCodeGoTestAccount(407)
+			account.Credentials["model_mapping"] = map[string]any{"public-alias": tc.model, tc.model: "wrong-second-mapping"}
+			svc, upstream := adaptiveCNAccountTestService(account, tc.response())
+			c, recorder := newTestContext()
+			err := svc.TestAccountConnection(c, account.ID, "public-alias", "custom quality prompt", AccountTestModeDefault)
+			require.NoError(t, err)
+			require.Len(t, upstream.requests, 1)
+			require.Equal(t, "/zen/go"+tc.path, upstream.requests[0].URL.Path)
+			require.Equal(t, tc.model, gjson.GetBytes(upstream.lastBody, "model").String())
+			require.Contains(t, recorder.Body.String(), `"model":"`+tc.model+`"`)
+			if tc.name == "responses" {
+				require.Equal(t, "custom quality prompt", gjson.GetBytes(upstream.lastBody, "input.0.content.0.text").String())
+			}
+		})
+	}
+}
+
+func TestAccountTestService_ModelRoutedVisualKeepsResolvedModelAndPayload(t *testing.T) {
+	for _, tc := range []struct {
+		protocol string
+		response func() *http.Response
+		imageKey string
+	}{
+		{APIProtocolChatCompletions, adaptiveCNChatTestResponse, "messages.0.content.2.image_url.url"},
+		{APIProtocolResponses, adaptiveCNResponsesTestResponse, "input.0.content.2.image_url"},
+	} {
+		t.Run(tc.protocol, func(t *testing.T) {
+			account := openCodeGoTestAccount(408)
+			account.Credentials["api_protocol"] = tc.protocol
+			account.Credentials["model_mapping"] = map[string]any{"resolved-model": "gpt-image-1"}
+			svc, upstream := adaptiveCNAccountTestService(account, tc.response())
+			c, recorder := newTestContext()
+			ctx := context.WithValue(c.Request.Context(), pelicanQualityContextKey{}, &pelicanVisualContext{
+				ModelID: "resolved-model", Reference: pelicanVisualFrame{PNG: "reference"},
+				Frames: []pelicanVisualFrame{{PNG: "candidate"}},
+			})
+			c.Request = c.Request.WithContext(ctx)
+			err := svc.TestAccountConnection(c, account.ID, "public-alias", "review", AccountTestModeDefault)
+			require.NoError(t, err)
+			require.Len(t, upstream.requests, 1)
+			require.Equal(t, "resolved-model", gjson.GetBytes(upstream.lastBody, "model").String())
+			require.Equal(t, "data:image/png;base64,reference", gjson.GetBytes(upstream.lastBody, tc.imageKey).String())
+			require.Contains(t, recorder.Body.String(), `"model":"resolved-model"`)
+		})
+	}
+}
+
+func TestAccountTestService_ModelRoutedQualityRejectsAnthropic(t *testing.T) {
+	account := openCodeGoTestAccount(409)
+	svc, upstream := adaptiveCNAccountTestService(account)
+	c, _ := newTestContext()
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), pelicanQualityContextKey{}, true))
+	err := svc.TestAccountConnection(c, account.ID, "minimax-m3", "quality prompt", AccountTestModeDefault)
+	require.ErrorContains(t, err, "supported text and vision protocol")
+	require.Empty(t, upstream.requests)
 }

@@ -18,14 +18,19 @@ import (
 const accountTestSuppressCompletionContextKey = "account_test_suppress_completion"
 
 // testCNProviderAdaptiveConnection verifies every native endpoint used by an
-// adaptive CN-provider account. Zhipu uses Chat Completions plus Anthropic;
-// DeepSeek and Kimi additionally use their native Responses endpoints.
+// adaptive account of a provider that routes by inbound protocol. Zhipu uses
+// Chat Completions plus Anthropic; DeepSeek and Kimi additionally use their
+// native Responses endpoints. Endpoints the provider profile does not offer are
+// skipped.
 func (s *AccountTestService) testCNProviderAdaptiveConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
-	testModelID := strings.TrimSpace(modelID)
-	if testModelID == "" {
-		testModelID = openai.DefaultTestModel
+	requestedModelID := strings.TrimSpace(modelID)
+	if requestedModelID == "" {
+		requestedModelID = account.providerDefaultTestModel()
 	}
-	testModelID = account.GetMappedModel(testModelID)
+	if requestedModelID == "" {
+		requestedModelID = openai.DefaultTestModel
+	}
+	testModelID := resolveAccountTestModel(c.Request.Context(), account, requestedModelID)
 
 	authToken := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
 	if authToken == "" {
@@ -36,16 +41,18 @@ func (s *AccountTestService) testCNProviderAdaptiveConnection(c *gin.Context, ac
 	// completion events until every native adaptive endpoint has passed.
 	c.Set(accountTestSuppressCompletionContextKey, true)
 	defer c.Set(accountTestSuppressCompletionContextKey, false)
-	if err := s.testCNProviderChatCompletionsConnection(c, account, modelID, prompt); err != nil {
+	if err := s.testCNProviderChatCompletionsResolvedConnection(c, account, testModelID, prompt); err != nil {
 		return err
 	}
 
-	if err := s.testCNProviderAdaptiveAnthropicConnection(c, account, testModelID, authToken); err != nil {
-		return err
+	if account.providerSupportsProtocol(APIProtocolAnthropic) {
+		if err := s.testCNProviderAdaptiveAnthropicConnection(c, account, testModelID, authToken, prompt); err != nil {
+			return err
+		}
 	}
 
 	if account.SupportsNativeCNResponses() {
-		if err := s.testCNProviderAdaptiveResponsesConnection(c, account, testModelID, authToken); err != nil {
+		if err := s.testCNProviderAdaptiveResponsesConnection(c, account, testModelID, authToken, prompt); err != nil {
 			return err
 		}
 	}
@@ -55,7 +62,7 @@ func (s *AccountTestService) testCNProviderAdaptiveConnection(c *gin.Context, ac
 	return nil
 }
 
-func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Context, account *Account, testModelID string, authToken string) error {
+func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Context, account *Account, testModelID string, authToken string, prompts ...string) error {
 	ctx := c.Request.Context()
 	baseURL, err := s.validateUpstreamBaseURL(account.GetCNProtocolBaseURL(APIProtocolAnthropic))
 	if err != nil {
@@ -67,6 +74,7 @@ func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Co
 	if err != nil {
 		return s.sendErrorAndEnd(c, "Failed to create adaptive Anthropic test payload")
 	}
+	applyAccountTestAnthropicPrompt(payload, prompts...)
 	payloadBytes, _ := json.Marshal(payload)
 
 	s.sendEvent(c, TestEvent{Type: "status", Text: "正在通过原生 /v1/messages 测试自适应 Anthropic 端点"})
@@ -94,7 +102,7 @@ func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Co
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		errMsg := fmt.Sprintf("Adaptive Anthropic endpoint returned %d: %s", resp.StatusCode, string(body))
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
@@ -110,7 +118,7 @@ func (s *AccountTestService) testCNProviderAdaptiveAnthropicConnection(c *gin.Co
 }
 
 func (s *AccountTestService) processCNProviderAdaptiveAnthropicStream(c *gin.Context, body io.Reader) error {
-	reader := bufio.NewReader(body)
+	reader := bufio.NewReader(pelicanQualityStreamReader(c.Request.Context(), body))
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -154,7 +162,7 @@ func (s *AccountTestService) processCNProviderAdaptiveAnthropicStream(c *gin.Con
 	}
 }
 
-func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Context, account *Account, testModelID string, authToken string) error {
+func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Context, account *Account, testModelID string, authToken string, prompts ...string) error {
 	ctx := c.Request.Context()
 	baseURL, err := s.validateUpstreamBaseURL(account.GetCNProtocolBaseURL(APIProtocolResponses))
 	if err != nil {
@@ -162,10 +170,11 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 	}
 	apiURL := buildOpenAIResponsesURLForPlatform(account.Platform, baseURL)
 
-	payload := createOpenAITestPayload(testModelID, false)
+	payload := createOpenAITestPayload(testModelID, false, prompts...)
 	// DeepSeek / Kimi native Responses endpoints are stateless and do not need
 	// the OpenAI probe's synthetic instructions.
 	delete(payload, "instructions")
+	applyPelicanVisualPayload(ctx, payload, true)
 	payloadBytes, _ := json.Marshal(payload)
 	payloadBytes = normalizeDeepSeekResponsesRequestBody(account, payloadBytes)
 
@@ -189,7 +198,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		errMsg := fmt.Sprintf("Adaptive Responses endpoint returned %d: %s", resp.StatusCode, string(body))
 		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
@@ -220,13 +229,22 @@ func (s *AccountTestService) doCNProviderAdaptiveRequest(req *http.Request, acco
 // GetAnthropicProtocolBaseURL (same resolution as real /v1/messages forwarding,
 // including per-platform defaults) and the shared API-key auth header.
 func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, account *Account, modelID string) error {
-	ctx := c.Request.Context()
-
 	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = account.providerDefaultTestModel()
+	}
 	if testModelID == "" {
 		testModelID = claude.DefaultTestModel
 	}
-	testModelID = account.GetMappedModel(testModelID)
+	testModelID = resolveAccountTestModel(c.Request.Context(), account, testModelID)
+	return s.testCNProviderAnthropicResolvedConnection(c, account, testModelID)
+}
+
+func (s *AccountTestService) testCNProviderAnthropicResolvedConnection(c *gin.Context, account *Account, testModelID string) error {
+	ctx := c.Request.Context()
+	if isPelicanQualityRequest(ctx) {
+		return s.sendErrorAndEnd(c, "Quality evaluation requires a supported text and vision protocol")
+	}
 
 	authToken := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
 	if authToken == "" {
@@ -237,10 +255,10 @@ func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, a
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid Anthropic base URL: %s", err.Error()))
 	}
-	if hint := cnAnthropicBaseURLMisconfigHint(baseURL); hint != "" {
+	if hint := cnAnthropicBaseURLMisconfigHint(baseURL, account.routesByModel()); hint != "" {
 		return s.sendErrorAndEnd(c, hint)
 	}
-	apiURL := strings.TrimRight(baseURL, "/") + "/v1/messages"
+	apiURL := nativeAnthropicMessagesURL(account, baseURL)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -279,7 +297,7 @@ func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, a
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		errMsg := fmt.Sprintf("Anthropic endpoint returned %d: %s", resp.StatusCode, string(body))
 		if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && s.accountRepo != nil {
 			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
@@ -295,7 +313,9 @@ func (s *AccountTestService) testCNProviderAnthropicConnection(c *gin.Context, a
 // endpoint (paas path, version segment, or chat/completions / responses
 // suffix). The naive {base}/v1/messages join would 404 (e.g.
 // .../api/paas/v4/v1/messages) with no hint about the actual misconfiguration.
-func cnAnthropicBaseURLMisconfigHint(baseURL string) string {
+// versionAware is set for providers whose join is version-aware (see
+// nativeAnthropicMessagesURL), where a trailing version segment is valid.
+func cnAnthropicBaseURLMisconfigHint(baseURL string, versionAware bool) string {
 	parsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return ""
@@ -307,7 +327,7 @@ func cnAnthropicBaseURLMisconfigHint(baseURL string) string {
 	openAICompatShaped := strings.Contains(path, "/paas/") ||
 		strings.HasSuffix(path, "/chat/completions") ||
 		strings.HasSuffix(path, "/responses") ||
-		openAIBaseURLHasVersionSuffix(path)
+		(!versionAware && openAIBaseURLHasVersionSuffix(path))
 	if !openAICompatShaped {
 		return ""
 	}
@@ -317,4 +337,11 @@ func cnAnthropicBaseURLMisconfigHint(baseURL string) string {
 			"(e.g. https://open.bigmodel.cn/api/anthropic) or switch api_protocol to chat_completions/adaptive.",
 		baseURL,
 	)
+}
+
+func applyAccountTestAnthropicPrompt(payload map[string]any, prompts ...string) {
+	if len(prompts) == 0 || strings.TrimSpace(prompts[0]) == "" {
+		return
+	}
+	payload["messages"] = []map[string]any{{"role": "user", "content": strings.TrimSpace(prompts[0])}}
 }

@@ -150,7 +150,7 @@ func prepareNativeOpenAIInputTokensCountRequest(body []byte, account *Account) (
 }
 
 func shouldEstimateOpenAIInputTokensLocally(account *Account) bool {
-	if account == nil || account.IsGrok() || account.IsCNProvider() || account.Type == AccountTypeUpstream {
+	if account == nil || account.IsGrok() || account.RoutesProtocolByInbound() || account.Type == AccountTypeUpstream {
 		return true
 	}
 	if account.Type != AccountTypeAPIKey {
@@ -264,18 +264,15 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		return fmt.Errorf("count_tokens: missing account")
 	}
 
-	// 国产供应商、OpenCode 与 CodeBuddy（全部协议，含 anthropic）：一律本地估算，不发上游请求。
+	// Multi-protocol providers and custom gateways use local token estimation.
 	// 依据（2026-08 核实）：三家的 Anthropic 兼容层均未提供
 	// /v1/messages/count_tokens——DeepSeek 官方 anthropic_api 文档无此端点
 	// （且注明 anthropic-version 头被忽略），聚合网关 OpenModel 明确标注
 	// count_tokens 为 "Anthropic only"，Kimi/智谱亦无任何文档承诺。转发上游
 	// 只会常态 404，且错误还会流入账号处置逻辑误伤整账号调度；Claude Code
 	// 高频调用此端点，本地 tiktoken 估算是与 Grok 一致的既有方案。
-	//
-	// CodeBuddy 同理且更严重：它只暴露 /v2/chat/completions 与 /v3/config，
-	// 没有 /v1/responses/input_tokens；而其账号又没有 base_url，落到下面的
-	// 分支会带着 CodeBuddy 令牌去打 api.openai.com 默认地址。
-	if account.IsCNProvider() || account.IsCodeBuddy() || account.IsOpenCodeGo() {
+	// Custom gateways must not send their credentials to the default OpenAI URL.
+	if account.IsMultiProtocolAPIKey() || account.IsCodeBuddy() || account.IsQoder() {
 		estimated, err := estimateAnthropicCountTokensLocally(body)
 		if err != nil {
 			writeAnthropicCountTokensError(c, http.StatusBadRequest, "invalid_request_error", "Failed to parse request body")
