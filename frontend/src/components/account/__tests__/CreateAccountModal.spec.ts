@@ -668,7 +668,7 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     await flushPromises()
     expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
       platform: 'qoder', type: 'apikey',
-      credentials: { qoder_region: 'cn', personal_token: 'pt-local' },
+      credentials: expect.objectContaining({ qoder_region: 'cn', personal_token: 'pt-local', model_mapping: expect.objectContaining({ auto: 'auto', qmodel: 'qmodel' }) }),
       upstream_billing_probe_enabled: false,
     }))
     wrapper.unmount()

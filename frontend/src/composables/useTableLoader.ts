@@ -35,12 +35,14 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
   })
 
   let abortController: AbortController | null = null
+  let disposed = false
 
   const isAbortError = (error: any) => {
     return error?.name === 'AbortError' || error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError'
   }
 
   const load = async () => {
+    if (disposed) return
     if (abortController) {
       abortController.abort()
     }
@@ -55,6 +57,7 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
         toRaw(params) as P,
         { signal: currentController.signal }
       )
+      if (disposed || currentController.signal.aborted) return
 
       items.value = response.items || []
       pagination.total = response.total || 0
@@ -93,6 +96,7 @@ export function useTableLoader<T, P extends Record<string, any>>(options: TableL
   }
 
   onUnmounted(() => {
+    disposed = true
     abortController?.abort()
   })
 

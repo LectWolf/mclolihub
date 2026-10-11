@@ -146,6 +146,9 @@ jobs:
           UPSTREAM_VERSION: ${{ needs.validate.outputs.upstream_version }}
         run: |
           mkdir -p package dist
+          mkdir -p package/scripts
+          cp -R backend/scripts/quality-renderer package/scripts/quality-renderer
+          cp backend/scripts/quality-renderer/README.md package/QUALITY_RENDERER.md
           BINARY=sub2api
           if [[ "$GOOS" == "windows" ]]; then
             BINARY=sub2api.exe
@@ -157,9 +160,9 @@ jobs:
 
           ARCHIVE="sub2api_${VERSION}_${GOOS}_${GOARCH}.${{ matrix.extension }}"
           if [[ "$GOOS" == "windows" ]]; then
-            (cd package && zip -9 "../dist/$ARCHIVE" "$BINARY")
+            (cd package && zip -9 -r "../dist/$ARCHIVE" "$BINARY" scripts QUALITY_RENDERER.md)
           else
-            tar -C package -czf "dist/$ARCHIVE" "$BINARY"
+            tar -C package -czf "dist/$ARCHIVE" "$BINARY" scripts QUALITY_RENDERER.md
           fi
 
       - name: Upload packaged binary
@@ -280,5 +283,7 @@ jobs:
             ```bash
             docker pull ghcr.io/lectwolf/mclolihub:${{ needs.validate.outputs.version }}
             ```
+
+            安装包包含降智检测渲染脚本；二进制部署启用检测前按 `QUALITY_RENDERER.md` 安装 Node/Chromium 依赖。Docker 镜像已内置运行环境。
           files: dist/*
           fail_on_unmatched_files: true

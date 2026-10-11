@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useTableLoader } from '@/composables/useTableLoader'
+import { onUnmounted } from 'vue'
 
 // Mock @vueuse/core 的 useDebounceFn
 vi.mock('@vueuse/core', () => ({
@@ -174,6 +175,19 @@ describe('useTableLoader', () => {
       await vi.runAllTimersAsync()
 
       expect(fetchFn).toHaveBeenCalledTimes(1)
+    })
+
+    it('组件卸载后不执行待处理的防抖加载', async () => {
+      const fetchFn = createMockFetchFn()
+      const { debouncedReload } = useTableLoader({ fetchFn })
+      debouncedReload()
+
+      const dispose = vi.mocked(onUnmounted).mock.calls.at(-1)?.[0]
+      expect(dispose).toBeDefined()
+      dispose!()
+      await vi.advanceTimersByTimeAsync(300)
+
+      expect(fetchFn).not.toHaveBeenCalled()
     })
 
     it('reload 重置到第 1 页', async () => {
