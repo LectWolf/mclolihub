@@ -162,15 +162,47 @@
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('channelMonitorV2.settings.qualityTitle') }}</h3>
           <p class="mt-0.5 text-xs text-gray-500 dark:text-dark-400">{{ t('channelMonitorV2.settings.qualityHint') }}</p>
         </div>
-        <div class="max-h-[min(40vh,280px)] overflow-y-auto px-3 py-2 sm:px-4">
-          <div class="grid grid-cols-1 gap-1">
-            <div v-for="group in groups" :key="'quality-' + group.id" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm">
-              <span class="min-w-0 flex-1 truncate font-medium text-gray-800 dark:text-gray-100">{{ group.name }}</span>
-              <small v-if="qualityOf(group.id)?.enabled" class="shrink-0 text-xs text-gray-400">{{ qualityStatusLabel(qualityOf(group.id)?.status) }}</small>
-              <Toggle :model-value="Boolean(qualityOf(group.id)?.enabled)" :disabled="qualityBusy === group.id" :aria-label="t('channelMonitorV2.settings.qualityTitle')" @update:model-value="toggleQuality(group.id, $event)" />
-            </div>
+        <p v-if="qualityLoading" class="px-5 py-3 text-sm" role="status">{{ t('channelMonitorV2.settings.loading') }}</p>
+        <div v-else-if="qualityLoadError" class="px-5 py-3" role="alert">
+          <p class="text-sm text-red-600">{{ t('channelMonitorV2.settings.qualityLoadFailed') }}</p>
+          <button type="button" class="btn btn-ghost btn-sm" @click="loadQuality">{{ t('channelMonitorV2.settings.qualityRetry') }}</button>
+        </div>
+        <div v-else class="divide-y divide-gray-100 px-5 dark:divide-dark-700">
+          <div v-for="group in groups" :key="'quality-' + group.id" class="space-y-3 py-4" :data-quality-group="group.id">
+            <template v-if="qualityDrafts[group.id]">
+              <div class="flex flex-wrap items-center gap-3 text-sm">
+                <strong class="min-w-0 flex-1 break-words">{{ group.name }}</strong>
+                <small class="text-gray-500">{{ qualityStatusLabel(qualityOf(group.id)?.status) }}</small>
+                <Toggle v-model="qualityDrafts[group.id].enabled" :disabled="qualityBusy[group.id]" :aria-label="t('channelMonitorV2.settings.qualityTitle') + ': ' + group.name" />
+              </div>
+              <div class="grid gap-3 sm:grid-cols-3">
+                <label>
+                  <span class="input-label">{{ t('channelMonitorV2.settings.qualitySpend') }}</span>
+                  <input :value="qualityDrafts[group.id].spend" class="input" type="number" min="0.01" max="1000000" step="any" :disabled="qualityBusy[group.id]" :aria-invalid="Boolean(qualityErrors[group.id])" data-quality-spend @input="qualityDrafts[group.id].spend = ($event.target as HTMLInputElement).value" />
+                </label>
+                <label>
+                  <span class="input-label">{{ t('channelMonitorV2.settings.qualityInterval') }}</span>
+                  <input :value="qualityDrafts[group.id].interval" class="input" type="number" min="1" max="10080" step="1" :disabled="qualityBusy[group.id]" :aria-invalid="Boolean(qualityErrors[group.id])" data-quality-interval @input="qualityDrafts[group.id].interval = ($event.target as HTMLInputElement).value" />
+                </label>
+                <label>
+                  <span class="input-label">{{ t('channelMonitorV2.settings.qualityModel') }}</span>
+                  <input v-model="qualityDrafts[group.id].model" class="input" type="text" :placeholder="t('channelMonitorV2.settings.qualityDefaultModel')" :disabled="qualityBusy[group.id]" data-quality-model />
+                </label>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <button type="button" class="btn btn-primary btn-sm" :disabled="qualityBusy[group.id] || !qualityDirty(group.id)" @click="saveQuality(group.id)" data-quality-save>
+                  <Icon name="check" size="sm" />
+                  {{ t(qualityBusy[group.id] ? 'channelMonitorV2.settings.qualitySaving' : 'channelMonitorV2.settings.qualitySave') }}
+                </button>
+                <p v-if="qualityErrors[group.id]" class="text-sm text-red-600" role="alert">{{ qualityErrors[group.id] }}</p>
+              </div>
+            </template>
           </div>
           <p v-if="groups.length === 0" class="empty-state py-8 text-sm text-gray-400">{{ t('channelMonitorV2.settings.groupsEmpty') }}</p>
+          <details v-if="qualityDefaultPrompt" class="py-4 text-sm">
+            <summary class="cursor-pointer font-medium">{{ t('channelMonitorV2.settings.qualityPrompt') }}</summary>
+            <pre class="mt-3 max-h-72 overflow-y-auto whitespace-pre-wrap break-words font-sans text-xs leading-relaxed">{{ qualityDefaultPrompt }}</pre>
+          </details>
         </div>
       </div>
 
@@ -292,7 +324,7 @@ import {
   type MonitorConfig,
 } from '@/api/channelMonitorV2'
 import { adminAPI } from '@/api/admin'
-import { listQuality, setQualityEnabled, type GroupQualityStatus } from '@/api/admin/qualityCheck'
+import { listQuality, saveQualitySettings, type GroupQualityStatus } from '@/api/admin/qualityCheck'
 import type { AdminGroup } from '@/types'
 
 const { t, te } = useI18n()
@@ -303,7 +335,14 @@ const draft = ref<MonitorConfig | null>(null)
 const original = ref('')
 const groups = ref<AdminGroup[]>([])
 const qualityByGroup = ref<Record<number, GroupQualityStatus>>({})
-const qualityBusy = ref(0)
+interface QualityDraft { enabled: boolean; spend: string; interval: string; model: string }
+const qualityDrafts = ref<Record<number, QualityDraft>>({})
+const qualityOriginal = ref<Record<number, string>>({})
+const qualityBusy = ref<Record<number, boolean>>({})
+const qualityErrors = ref<Record<number, string>>({})
+const qualityLoading = ref(true)
+const qualityLoadError = ref(false)
+const qualityDefaultPrompt = computed(() => Object.values(qualityByGroup.value).find(row => row.default_prompt)?.default_prompt || '')
 
 const dirty = computed(() => (draft.value ? JSON.stringify(draft.value) !== original.value : false))
 const namedModelCount = computed(
@@ -400,15 +439,58 @@ function qualityStatusLabel(status?: string) {
   const key = `channelMonitorV2.settings.qualityStatus.${status || 'unknown'}`
   return te(key) ? t(key) : status || ''
 }
-async function toggleQuality(id: number, enabled: boolean) {
-  qualityBusy.value = id
+function qualityDraft(row?: GroupQualityStatus): QualityDraft {
+  return { enabled: row?.enabled ?? false, spend: String(row?.min_spend_usd ?? 5), interval: String(row?.min_interval_minutes ?? 30), model: row?.model_id ?? '' }
+}
+function qualityDirty(id: number) {
+  return JSON.stringify(qualityDrafts.value[id]) !== qualityOriginal.value[id]
+}
+async function loadQuality() {
+  qualityLoading.value = true
+  qualityLoadError.value = false
   try {
-    const status = await setQualityEnabled(id, enabled)
-    qualityByGroup.value = { ...qualityByGroup.value, [id]: status }
-  } catch (error) {
-    appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.qualitySaveFailed')))
+    const rows = await listQuality()
+    qualityByGroup.value = Object.fromEntries(rows.map(row => [row.group_id, row]))
+    for (const group of groups.value) {
+      if (qualityDrafts.value[group.id]) continue
+      const value = qualityDraft(qualityByGroup.value[group.id])
+      qualityDrafts.value[group.id] = value
+      qualityOriginal.value[group.id] = JSON.stringify(value)
+    }
+  } catch {
+    qualityLoadError.value = true
   } finally {
-    qualityBusy.value = 0
+    qualityLoading.value = false
+  }
+}
+async function saveQuality(id: number) {
+  const value = qualityDrafts.value[id]
+  if (!value || qualityBusy.value[id]) return
+  const spendText = String(value.spend).trim()
+  const intervalText = String(value.interval).trim()
+  const spend = Number(spendText)
+  const interval = Number(intervalText)
+  const decimal = /^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+  if (!decimal.test(spendText) || !Number.isFinite(spend) || spend < 0.01 || spend > 1000000) {
+    qualityErrors.value[id] = t('channelMonitorV2.settings.qualitySpendInvalid')
+    return
+  }
+  if (!/^\d+$/.test(intervalText) || !Number.isSafeInteger(interval) || interval < 1 || interval > 10080) {
+    qualityErrors.value[id] = t('channelMonitorV2.settings.qualityIntervalInvalid')
+    return
+  }
+  qualityErrors.value[id] = ''
+  qualityBusy.value[id] = true
+  try {
+    const status = await saveQualitySettings(id, { enabled: value.enabled, min_spend_usd: spend, min_interval_minutes: interval, model_id: value.model.trim() })
+    qualityByGroup.value[id] = status
+    qualityDrafts.value[id] = qualityDraft(status)
+    qualityOriginal.value[id] = JSON.stringify(qualityDrafts.value[id])
+    appStore.showSuccess(t('channelMonitorV2.settings.saveSuccess'))
+  } catch {
+    qualityErrors.value[id] = t('channelMonitorV2.settings.qualitySaveFailed')
+  } finally {
+    qualityBusy.value[id] = false
   }
 }
 function categoryLabel(category: string) {
@@ -450,15 +532,14 @@ function normalizeConfig(value: MonitorConfig): MonitorConfig {
 async function load() {
   loading.value = true
   try {
-    const [value, groupRows, qualityRows] = await Promise.all([
+    const [value, groupRows] = await Promise.all([
       getConfig(),
       adminAPI.groups.getAllIncludingInactive(),
-      listQuality().catch(() => [] as GroupQualityStatus[]),
     ])
     const normalized = normalizeConfig(value)
     draft.value = structuredClone(normalized)
     groups.value = groupRows
-    qualityByGroup.value = Object.fromEntries(qualityRows.map((row) => [row.group_id, row]))
+    await loadQuality()
     original.value = JSON.stringify(normalized)
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.loadFailed')))
@@ -479,7 +560,6 @@ async function save() {
     appStore.showSuccess(t('channelMonitorV2.settings.saveSuccess'))
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, t('channelMonitorV2.settings.saveFailed')))
-    await load()
   } finally {
     saving.value = false
   }

@@ -154,6 +154,7 @@ func RegisterUserRoutes(
 			monitorV2.GET("/matrix", h.ChannelMonitorV2.Matrix)
 			monitorV2.GET("/errors", h.ChannelMonitorV2.Errors)
 			monitorV2.GET("/users", h.ChannelMonitorV2.Users)
+			monitorV2.GET("/quality-preview/:resultID", h.ChannelMonitorV2.QualityPreview)
 		}
 
 		authenticated.GET("/group-health", h.GroupHealth.UserList)

@@ -1175,6 +1175,13 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	if _, err := s.accountRepo.BulkUpdate(ctx, input.AccountIDs, repoUpdates); err != nil {
 		return nil, err
 	}
+	if input.Schedulable != nil {
+		if repo, ok := s.accountRepo.(manualQualitySchedulingRepository); ok {
+			if err := repo.SetManualQualitySchedulable(ctx, input.AccountIDs, *input.Schedulable); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// 将 proxy 变更传播到每个目标账号的 spark 影子账号
 	if repoUpdates.ProxyID != nil {
@@ -1340,7 +1347,13 @@ func (s *adminServiceImpl) SetAccountError(ctx context.Context, id int64, errorM
 }
 
 func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, schedulable bool) (*Account, error) {
-	if err := s.accountRepo.SetSchedulable(ctx, id, schedulable); err != nil {
+	var schedulingErr error
+	if repo, ok := s.accountRepo.(manualQualitySchedulingRepository); ok {
+		schedulingErr = repo.SetManualQualitySchedulable(ctx, []int64{id}, schedulable)
+	} else {
+		schedulingErr = s.accountRepo.SetSchedulable(ctx, id, schedulable)
+	}
+	if err := schedulingErr; err != nil {
 		return nil, err
 	}
 	updated, err := s.accountRepo.GetByID(ctx, id)

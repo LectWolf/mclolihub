@@ -56,6 +56,7 @@
       :length="timelineLength"
       :data-through-ms="dataThroughMs"
     />
+    <ChannelMonitorV3QualityPreview :group-id="row.group_id" :enabled="row.quality_enabled" :latest="row.latest_quality" />
   </article>
 </template>
 
@@ -77,6 +78,7 @@ import { formatMultiplier } from '@/utils/formatters'
 import ProviderIcon from './ProviderIcon.vue'
 import ChannelMonitorV3HoverTip from './ChannelMonitorV3HoverTip.vue'
 import ChannelMonitorV3Timeline from './ChannelMonitorV3Timeline.vue'
+import ChannelMonitorV3QualityPreview from './ChannelMonitorV3QualityPreview.vue'
 
 const props = defineProps<{
   row: MonitorMatrixRow

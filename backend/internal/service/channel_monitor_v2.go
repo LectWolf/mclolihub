@@ -260,14 +260,16 @@ type ChannelMonitorV2ProbeEvent struct {
 }
 
 type ChannelMonitorV2MatrixRow struct {
-	Platform     string                        `json:"platform"`
-	GroupID      *int64                        `json:"group_id,omitempty"`
-	GroupName    string                        `json:"group_name,omitempty"`
-	Model        string                        `json:"model,omitempty"`
-	Metrics      ChannelMonitorV2Metric        `json:"metrics"`
-	Health       ChannelMonitorV2Health        `json:"health"`
-	Buckets      []ChannelMonitorV2TrendPoint  `json:"buckets"`
-	ProbeBuckets []ChannelMonitorV2ProbeBucket `json:"probe_buckets,omitempty"`
+	Platform       string                        `json:"platform"`
+	GroupID        *int64                        `json:"group_id,omitempty"`
+	GroupName      string                        `json:"group_name,omitempty"`
+	Model          string                        `json:"model,omitempty"`
+	Metrics        ChannelMonitorV2Metric        `json:"metrics"`
+	Health         ChannelMonitorV2Health        `json:"health"`
+	Buckets        []ChannelMonitorV2TrendPoint  `json:"buckets"`
+	ProbeBuckets   []ChannelMonitorV2ProbeBucket `json:"probe_buckets,omitempty"`
+	QualityEnabled bool                          `json:"quality_enabled,omitempty"`
+	LatestQuality  *GroupQualityResult           `json:"latest_quality,omitempty"`
 }
 
 type ChannelMonitorV2Matrix struct {
@@ -556,6 +558,9 @@ func (s *ChannelMonitorV2Service) Matrix(ctx context.Context, filter ChannelMoni
 		}
 	}
 	s.attachProbeBuckets(ctx, matrix, filter)
+	if err := s.attachQualityResults(ctx, matrix); err != nil {
+		return nil, err
+	}
 	return matrix, nil
 }
 

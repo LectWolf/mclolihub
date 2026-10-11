@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -28,9 +29,7 @@ func (h *GroupHealthHandler) SetQuality(c *gin.Context) {
 		response.BadRequest(c, "invalid group id")
 		return
 	}
-	var body struct {
-		Enabled bool `json:"enabled"`
-	}
+	var body service.GroupQualityConfig
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.BadRequest(c, "invalid request")
 		return
@@ -44,8 +43,12 @@ func (h *GroupHealthHandler) SetQuality(c *gin.Context) {
 		response.InternalError(c, "quality check unavailable")
 		return
 	}
-	status, err := checker.SetEnabled(c.Request.Context(), id, body.Enabled)
+	status, err := checker.SetConfig(c.Request.Context(), id, body)
 	if err != nil {
+		if errors.Is(err, service.ErrQualityInvalidConfig) {
+			response.BadRequest(c, err.Error())
+			return
+		}
 		response.ErrorFrom(c, err)
 		return
 	}

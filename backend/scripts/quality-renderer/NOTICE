@@ -1,0 +1,22 @@
+Quality renderer source attribution
+
+render.mjs, worker.mjs, browser-host.mjs, policy.mjs, process-tree.mjs and
+renderer.test.mjs are adapted from kiss-sub2api at commit f743ca8e23ff.
+Original repository: https://github.com/kiss-kedaya/sub2api
+Original project attribution: Wei-Shaw / Sub2API and kiss-sub2api contributors.
+Licensed under GNU LGPL version 3; the original LICENSE is included here.
+Modifications: 2 MiB per-PNG limit, 12 MiB aggregate bound, explicit container
+Chromium sandbox option, scratch-only test artifacts, reference regression test.
+
+The Go strict verdict decoder is adapted from the same repository's
+backend/internal/service/scheduled_test_visual_quality.go under LGPL-3.0.
+The reference HTML in this repository is a new implementation, not a copy of
+that repository's reference.
+
+Runtime isolation uses canonical HTML allowlisting, disabled page JavaScript,
+CSP sandbox/script-src none, offline browser context, blocked network routes,
+no external images/fonts, and a supervised 30-second process deadline.
+Native Chromium sandbox is enabled by default. Docker explicitly disables it
+because ordinary container seccomp/user-namespace settings cannot launch a
+sandboxed browser; containers still run rendering as a non-root user with all
+of the content restrictions above. This is not an OS-level network namespace.

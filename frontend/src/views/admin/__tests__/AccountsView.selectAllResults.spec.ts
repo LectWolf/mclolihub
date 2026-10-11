@@ -231,9 +231,11 @@ describe('admin AccountsView select all filtered results', () => {
     }))
 
     await wrapper.get('[data-test="change-filter"]').trigger('click')
+    await flushPromises()
 
     expect(wrapper.get('[data-test="selected-count"]').text()).toBe('0')
     expect(wrapper.get('[data-test="all-results-selected"]').text()).toBe('false')
+    wrapper.unmount()
   })
 
   it('keeps the original page selection when loading all results fails', async () => {
@@ -263,5 +265,6 @@ describe('admin AccountsView select all filtered results', () => {
     expect(wrapper.get('[data-test="selected-count"]').text()).toBe('20')
     expect(wrapper.get('[data-test="all-results-selected"]').text()).toBe('false')
     expect(showError).toHaveBeenCalledWith('admin.accounts.bulkActions.selectAllFailed')
+    wrapper.unmount()
   })
 })

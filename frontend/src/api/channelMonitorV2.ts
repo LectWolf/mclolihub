@@ -165,6 +165,15 @@ export interface MonitorProbeBucket {
   ttft_ms: number
 }
 
+export interface MonitorLatestQuality {
+  result_id: string
+  status: 'success' | 'degraded' | 'unknown' | 'failed' | 'skipped'
+  reason: string
+  model_id: string
+  checked_at: string
+  has_preview: boolean
+}
+
 export interface MonitorMatrixRow {
   platform: string
   group_id?: number
@@ -174,6 +183,8 @@ export interface MonitorMatrixRow {
   health: MonitorHealth
   buckets: MonitorMatrixBucket[]
   probe_buckets?: MonitorProbeBucket[]
+  quality_enabled?: boolean
+  latest_quality?: MonitorLatestQuality | null
 }
 
 export interface MonitorMatrixResponse {
@@ -275,5 +286,21 @@ export async function getConfig() {
 }
 export async function updateConfig(config: MonitorConfig) {
   const { data } = await apiClient.put<MonitorConfig>('/admin/channel-monitor-v2/config', config)
+  return data
+}
+
+export async function getQualityPreview(resultId: string, groupId: number, signal?: AbortSignal): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(`/channel-monitor-v2/quality-preview/${encodeURIComponent(resultId)}`, {
+    params: { group_id: groupId },
+    responseType: 'blob',
+    signal,
+  })
+  if (!(data instanceof Blob) || data.type.toLowerCase() !== 'image/png' || data.size < 8) {
+    throw new Error('Invalid quality preview')
+  }
+  const signature = new Uint8Array(await data.slice(0, 8).arrayBuffer())
+  if (![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte)) {
+    throw new Error('Invalid quality preview')
+  }
   return data
 }

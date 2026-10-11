@@ -1,39 +1,78 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
+	"image/png"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
+	"math"
+	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 const (
-	qualityCheckMinAge       = 30 * time.Minute
-	qualityCheckMinSpend     = 5.0
-	qualitySuspectRatio      = 0.5
-	qualityProbesPerTick     = 3
-	qualityCandidatesPerTick = 20
-	qualityProbeTimeout      = 90 * time.Second
-	qualityLockTTL           = 10 * time.Minute
-	qualityLockKey           = "group-quality:scan"
+	qualityCheckMinAge      = 30 * time.Minute
+	qualityCheckMinSpend    = 5.0
+	qualityRecoveryInterval = 30 * time.Minute
+	qualitySuspectRatio     = 0.5
+	qualityProbesPerTick    = 3
+	qualityProbeTimeout     = 12 * time.Minute
+	qualityLockTTL          = 40 * time.Minute
+	qualityLockKey          = "group-quality:scan"
+	qualityPreviewMaxBytes  = 2 << 20
 )
 
-// GroupQualityStatus is one group's aggregated degradation state.
-type GroupQualityStatus struct {
-	GroupID          int64      `json:"group_id"`
-	Enabled          bool       `json:"enabled"`
-	Status           string     `json:"status"`
-	CheckedAccounts  int        `json:"checked_accounts"`
-	DegradedAccounts int        `json:"degraded_accounts"`
-	LastRunAt        *time.Time `json:"last_run_at"`
+var ErrQualityInvalidConfig = errors.New("invalid quality check configuration")
+var ErrQualityConfigChanged = errors.New("quality check configuration changed during probe")
+
+// GroupQualityConfig supports partial updates without resetting saved thresholds.
+type GroupQualityConfig struct {
+	Enabled            bool     `json:"enabled"`
+	MinSpendUSD        *float64 `json:"min_spend_usd"`
+	MinIntervalMinutes *int     `json:"min_interval_minutes"`
+	ModelID            *string  `json:"model_id"`
 }
 
-// GroupQualityChecker runs degradation probes and stores the per-group toggle.
-// A probe is sent only when both the time and spend gates are open.
+type GroupQualityStatus struct {
+	GroupID            int64      `json:"group_id"`
+	Enabled            bool       `json:"enabled"`
+	MinSpendUSD        float64    `json:"min_spend_usd"`
+	MinIntervalMinutes int        `json:"min_interval_minutes"`
+	ModelID            string     `json:"model_id"`
+	DefaultPrompt      string     `json:"default_prompt"`
+	Status             string     `json:"status"`
+	CheckedAccounts    int        `json:"checked_accounts"`
+	DegradedAccounts   int        `json:"degraded_accounts"`
+	LastRunAt          *time.Time `json:"last_run_at"`
+}
+
+type GroupQualityResult struct {
+	ResultID   string    `json:"result_id"`
+	Status     string    `json:"status"`
+	Reason     string    `json:"reason"`
+	ModelID    string    `json:"model_id"`
+	CheckedAt  time.Time `json:"checked_at"`
+	HasPreview bool      `json:"has_preview"`
+}
+
+type qualityProbeResult struct {
+	Status     string
+	Reason     string
+	ModelID    string
+	Artwork    string
+	PreviewPNG []byte
+}
+
+type qualitySchedulingRepository interface {
+	ReconcileGroupQualityScheduling(context.Context, int64) error
+}
+
 type GroupQualityChecker struct {
 	db        *sql.DB
 	accounts  AccountRepository
@@ -41,6 +80,7 @@ type GroupQualityChecker struct {
 	lockCache LeaderLockCache
 	owner     string
 	now       func() time.Time
+	probeFunc func(context.Context, int64, string) qualityProbeResult
 }
 
 func newGroupQualityChecker(db *sql.DB, accounts AccountRepository, tests *AccountTestService, lockCache LeaderLockCache, owner string) *GroupQualityChecker {
@@ -48,23 +88,18 @@ func newGroupQualityChecker(db *sql.DB, accounts AccountRepository, tests *Accou
 }
 
 func qualityWindowDue(now, anchor time.Time, spend float64) bool {
-	if anchor.IsZero() || now.Sub(anchor) < qualityCheckMinAge {
-		return false
-	}
-	return spend >= qualityCheckMinSpend
+	return qualityConfiguredWindowDue(now, anchor, spend, qualityCheckMinSpend, qualityCheckMinAge)
+}
+
+func qualityConfiguredWindowDue(now, anchor time.Time, spend, minimum float64, interval time.Duration) bool {
+	return !anchor.IsZero() && now.Sub(anchor) >= interval && spend >= minimum
 }
 
 func qualityShouldPause(previous, current string) bool {
 	return previous == "degraded" && current == "degraded"
 }
+func qualityShouldResume(paused bool, current string) bool { return paused && current == "success" }
 
-func qualityShouldResume(paused bool, current string) bool {
-	return paused && current == "success"
-}
-
-// accountAcceptsQualityPrompt reports whether the account connection test will
-// actually send the pelican prompt. Claude's built-in test ignores it, and
-// scoring that short reply would pause healthy accounts.
 func accountAcceptsQualityPrompt(account *Account) bool {
 	if account == nil {
 		return false
@@ -75,22 +110,73 @@ func accountAcceptsQualityPrompt(account *Account) bool {
 	return account.IsQoder() || account.IsOpenAI() || account.IsGemini() || account.IsGrok() || account.IsCodeBuddy() || account.Platform == PlatformAntigravity || account.IsOpenCodeGo()
 }
 
+func validateQualityConfig(cfg GroupQualityConfig) error {
+	if cfg.MinSpendUSD != nil && (math.IsNaN(*cfg.MinSpendUSD) || math.IsInf(*cfg.MinSpendUSD, 0) || *cfg.MinSpendUSD < 0.01 || *cfg.MinSpendUSD > 1000000) {
+		return fmt.Errorf("%w: min_spend_usd must be between 0.01 and 1000000", ErrQualityInvalidConfig)
+	}
+	if cfg.MinIntervalMinutes != nil && (*cfg.MinIntervalMinutes < 1 || *cfg.MinIntervalMinutes > 10080) {
+		return fmt.Errorf("%w: min_interval_minutes must be between 1 and 10080", ErrQualityInvalidConfig)
+	}
+	if cfg.ModelID != nil && (len(*cfg.ModelID) > 200 || strings.ContainsAny(*cfg.ModelID, "\r\n\x00")) {
+		return fmt.Errorf("%w: invalid model_id", ErrQualityInvalidConfig)
+	}
+	return nil
+}
+
 func (c *GroupQualityChecker) SetEnabled(ctx context.Context, groupID int64, enabled bool) (*GroupQualityStatus, error) {
+	return c.SetConfig(ctx, groupID, GroupQualityConfig{Enabled: enabled})
+}
+
+func (c *GroupQualityChecker) SetConfig(ctx context.Context, groupID int64, cfg GroupQualityConfig) (*GroupQualityStatus, error) {
 	if c == nil || c.db == nil || groupID <= 0 {
 		return nil, ErrGroupNotFound
 	}
-	_, err := c.db.ExecContext(ctx, `
-		INSERT INTO group_quality_check_settings (group_id, enabled)
-		VALUES ($1, $2)
-		ON CONFLICT (group_id) DO UPDATE
-		SET enabled = EXCLUDED.enabled, updated_at = NOW()`, groupID, enabled)
+	if err := validateQualityConfig(cfg); err != nil {
+		return nil, err
+	}
+	if cfg.ModelID != nil {
+		model := strings.TrimSpace(*cfg.ModelID)
+		cfg.ModelID = &model
+	}
+	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	if !enabled {
-		c.clearPauses(ctx, groupID)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO group_quality_check_settings (group_id, enabled, min_spend_usd, min_interval_minutes, model_id)
+        VALUES ($1, $2, COALESCE($3::numeric, 5), COALESCE($4, 30), COALESCE($5, ''))
+        ON CONFLICT (group_id) DO UPDATE SET
+            enabled = EXCLUDED.enabled,
+            min_spend_usd = COALESCE($3::numeric, group_quality_check_settings.min_spend_usd),
+            min_interval_minutes = COALESCE($4, group_quality_check_settings.min_interval_minutes),
+            model_id = COALESCE($5, group_quality_check_settings.model_id),
+            version = group_quality_check_settings.version + 1, updated_at = NOW()`,
+		groupID, cfg.Enabled, cfg.MinSpendUSD, cfg.MinIntervalMinutes, cfg.ModelID)
+	if err != nil {
+		return nil, err
 	}
-	return c.statusFor(ctx, groupID)
+	if !cfg.Enabled {
+		if _, err := tx.ExecContext(ctx, `UPDATE group_account_quality_checks SET paused = FALSE, degraded_streak = 0 WHERE group_id = $1`, groupID); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	if !cfg.Enabled {
+		c.reconcileScheduling(ctx)
+	}
+	items, err := c.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		if items[i].GroupID == groupID {
+			return &items[i], nil
+		}
+	}
+	return nil, ErrGroupNotFound
 }
 
 func (c *GroupQualityChecker) List(ctx context.Context) ([]GroupQualityStatus, error) {
@@ -98,21 +184,15 @@ func (c *GroupQualityChecker) List(ctx context.Context) ([]GroupQualityStatus, e
 		return []GroupQualityStatus{}, nil
 	}
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT s.group_id, s.enabled,
-			COUNT(q.account_id) FILTER (
-				WHERE q.last_checked_at >= NOW() - INTERVAL '1 hour'
-				  AND q.last_status IN ('success', 'degraded')
-			),
-			COUNT(q.account_id) FILTER (
-				WHERE q.last_checked_at >= NOW() - INTERVAL '1 hour'
-				  AND q.last_status = 'degraded'
-			),
-			MAX(q.last_checked_at)
-		FROM group_quality_check_settings s
-		LEFT JOIN account_groups ag ON ag.group_id = s.group_id
-		LEFT JOIN account_quality_checks q ON q.account_id = ag.account_id
-		GROUP BY s.group_id, s.enabled
-		ORDER BY s.group_id`)
+        SELECT s.group_id, s.enabled, s.min_spend_usd::float8, s.min_interval_minutes, s.model_id,
+            COUNT(q.account_id) FILTER (WHERE q.last_checked_at >= NOW() - INTERVAL '1 hour' AND q.last_status IN ('success', 'degraded')),
+            COUNT(q.account_id) FILTER (WHERE q.last_checked_at >= NOW() - INTERVAL '1 hour' AND q.last_status = 'degraded'),
+            MAX(q.last_checked_at)
+        FROM group_quality_check_settings s
+        LEFT JOIN account_groups ag ON ag.group_id = s.group_id
+        LEFT JOIN accounts a ON a.id = ag.account_id AND a.deleted_at IS NULL
+        LEFT JOIN group_account_quality_checks q ON q.group_id = s.group_id AND q.account_id = a.id
+        GROUP BY s.group_id, s.enabled, s.min_spend_usd, s.min_interval_minutes, s.model_id ORDER BY s.group_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +201,13 @@ func (c *GroupQualityChecker) List(ctx context.Context) ([]GroupQualityStatus, e
 	for rows.Next() {
 		var item GroupQualityStatus
 		var last sql.NullTime
-		if err := rows.Scan(&item.GroupID, &item.Enabled, &item.CheckedAccounts, &item.DegradedAccounts, &last); err != nil {
+		if err := rows.Scan(&item.GroupID, &item.Enabled, &item.MinSpendUSD, &item.MinIntervalMinutes, &item.ModelID, &item.CheckedAccounts, &item.DegradedAccounts, &last); err != nil {
 			return nil, err
 		}
+		item.DefaultPrompt = DefaultScheduledTestPrompt
 		item.Status = qualityAggregateStatus(item.Enabled, item.CheckedAccounts, item.DegradedAccounts)
 		if last.Valid {
-			t := last.Time
-			item.LastRunAt = &t
+			item.LastRunAt = &last.Time
 		}
 		out = append(out, item)
 	}
@@ -144,75 +224,67 @@ func qualityAggregateStatus(enabled bool, checked, degraded int) string {
 	return "suspect"
 }
 
-func (c *GroupQualityChecker) statusFor(ctx context.Context, groupID int64) (*GroupQualityStatus, error) {
-	items, err := c.List(ctx)
+type qualityCandidate struct {
+	groupID    int64
+	id         int64
+	version    int64
+	modelID    string
+	lastStatus string
+	streak     int
+	paused     bool
+}
+
+// Spend eligibility is evaluated before LIMIT so idle accounts cannot starve busy accounts.
+const qualityCandidatesSQL = `
+    SELECT q.group_id, q.account_id, s.version, s.model_id, q.last_status, q.degraded_streak, q.paused
+    FROM group_account_quality_checks q
+    JOIN account_groups ag ON ag.group_id = q.group_id AND ag.account_id = q.account_id
+    JOIN group_quality_check_settings s ON s.group_id = q.group_id AND s.enabled
+    JOIN accounts a ON a.id = q.account_id AND a.deleted_at IS NULL AND a.status = 'active'
+    LEFT JOIN account_quality_checks ownership ON ownership.account_id = a.id
+    WHERE (a.schedulable OR COALESCE(ownership.paused, FALSE))
+      AND (a.expires_at IS NULL OR a.expires_at > $1 OR NOT a.auto_pause_on_expired)
+      AND (q.retry_after IS NULL OR q.retry_after <= $1)
+      AND (
+        (COALESCE(ownership.paused, FALSE) AND (q.last_attempt_at IS NULL OR q.last_attempt_at <= $1 - INTERVAL '30 minutes'))
+        OR (a.schedulable
+            AND q.window_started_at <= $1 - make_interval(mins => s.min_interval_minutes)
+            AND COALESCE((SELECT SUM(u.actual_cost) FROM usage_logs u
+                WHERE u.group_id = q.group_id AND u.account_id = q.account_id AND u.created_at >= q.window_started_at), 0) >= s.min_spend_usd)
+      )
+    ORDER BY q.last_attempt_at NULLS FIRST, q.group_id, q.account_id LIMIT $2`
+
+func (c *GroupQualityChecker) initializeWindows(ctx context.Context, now time.Time) error {
+	_, err := c.db.ExecContext(ctx, `
+        INSERT INTO group_account_quality_checks (group_id, account_id, window_started_at)
+        SELECT s.group_id, a.id, $1
+        FROM group_quality_check_settings s
+        JOIN account_groups ag ON ag.group_id = s.group_id
+        JOIN accounts a ON a.id = ag.account_id AND a.deleted_at IS NULL AND a.status = 'active'
+        WHERE s.enabled AND (a.schedulable OR EXISTS (SELECT 1 FROM account_quality_checks p WHERE p.account_id = a.id AND p.paused))
+        ON CONFLICT (group_id, account_id) DO NOTHING`, now)
+	return err
+}
+
+func (c *GroupQualityChecker) listCandidates(ctx context.Context, now time.Time) ([]qualityCandidate, error) {
+	rows, err := c.db.QueryContext(ctx, qualityCandidatesSQL, now, qualityProbesPerTick)
 	if err != nil {
 		return nil, err
 	}
-	for i := range items {
-		if items[i].GroupID == groupID {
-			return &items[i], nil
-		}
-	}
-	return &GroupQualityStatus{GroupID: groupID, Status: "unknown"}, nil
-}
-
-func (c *GroupQualityChecker) clearPauses(ctx context.Context, groupID int64) {
-	if c.accounts == nil {
-		return
-	}
-	rows, err := c.db.QueryContext(ctx, `
-		SELECT q.account_id
-		FROM account_quality_checks q
-		JOIN account_groups ag ON ag.account_id = q.account_id AND ag.group_id = $1
-		WHERE q.paused
-		  AND NOT EXISTS (
-			SELECT 1
-			FROM account_groups other
-			JOIN group_quality_check_settings s ON s.group_id = other.group_id AND s.enabled
-			WHERE other.account_id = q.account_id AND other.group_id <> $1
-		  )`, groupID)
-	if err != nil {
-		slog.Warn("group_quality: list pauses failed", "group_id", groupID, "error", err)
-		return
-	}
 	defer func() { _ = rows.Close() }()
-	var ids []int64
+	var items []qualityCandidate
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			slog.Warn("group_quality: scan pause failed", "group_id", groupID, "error", err)
-			return
+		var item qualityCandidate
+		if err := rows.Scan(&item.groupID, &item.id, &item.version, &item.modelID, &item.lastStatus, &item.streak, &item.paused); err != nil {
+			return nil, err
 		}
-		ids = append(ids, id)
+		items = append(items, item)
 	}
-	if err := rows.Err(); err != nil {
-		slog.Warn("group_quality: list pauses failed", "group_id", groupID, "error", err)
-		return
-	}
-	for _, id := range ids {
-		if err := c.accounts.SetSchedulable(ctx, id, true); err != nil {
-			slog.Warn("group_quality: re-enable failed", "group_id", groupID, "account_id", id, "error", err)
-			continue
-		}
-		if _, err := c.db.ExecContext(ctx, `UPDATE account_quality_checks SET paused = FALSE, updated_at = NOW() WHERE account_id = $1`, id); err != nil {
-			slog.Warn("group_quality: clear pause flag failed", "account_id", id, "error", err)
-		}
-	}
-}
-
-type qualityCandidate struct {
-	id          int64
-	hasRow      bool
-	windowStart sql.NullTime
-	lastChecked sql.NullTime
-	lastStatus  string
-	paused      bool
-	schedulable bool
+	return items, rows.Err()
 }
 
 func (c *GroupQualityChecker) Run(ctx context.Context) {
-	if c == nil || c.db == nil || c.accounts == nil || c.tests == nil || ctx.Err() != nil {
+	if c == nil || c.db == nil || c.accounts == nil || (c.tests == nil && c.probeFunc == nil) || ctx.Err() != nil {
 		return
 	}
 	release, acquired := tryAcquireSingletonLeaderLock(ctx, c.lockCache, c.db, qualityLockKey, c.owner, qualityLockTTL)
@@ -220,166 +292,234 @@ func (c *GroupQualityChecker) Run(ctx context.Context) {
 		return
 	}
 	defer release()
+	// The bound is shorter than the lease, including all generation and review requests.
+	ctx, cancel := context.WithTimeout(ctx, 38*time.Minute)
+	defer cancel()
+	c.reconcileScheduling(ctx)
 	now := c.now()
-	candidates, err := c.listCandidates(ctx, now.Add(-qualityCheckMinAge))
-	if err != nil {
-		slog.Warn("group_quality: list candidates failed", "error", err)
+	if err := c.initializeWindows(ctx, now); err != nil {
+		slog.Warn("group_quality: initialize windows failed", "error", err)
 		return
 	}
-	probes := 0
+	candidates, err := c.listCandidates(ctx, now)
+	if err != nil {
+		slog.Warn("group_quality: candidates failed", "error", err)
+		return
+	}
 	for _, candidate := range candidates {
 		if ctx.Err() != nil {
 			return
 		}
-		if !candidate.hasRow {
-			c.openWindow(ctx, candidate.id, now)
-			continue
-		}
-		anchor := candidate.windowStart.Time
-		if candidate.lastChecked.Valid {
-			anchor = candidate.lastChecked.Time
-		}
-		spend, err := c.spendSince(ctx, candidate.id, anchor)
-		if err != nil {
-			slog.Warn("group_quality: spend lookup failed", "account_id", candidate.id, "error", err)
-			continue
-		}
-		if !qualityWindowDue(now, anchor, spend) {
-			continue
-		}
 		account, err := c.accounts.GetByID(ctx, candidate.id)
 		if err != nil || account == nil {
-			slog.Warn("group_quality: account lookup failed", "account_id", candidate.id, "error", err)
 			continue
 		}
 		if !accountAcceptsQualityPrompt(account) {
-			c.finishCheck(ctx, candidate, now, candidate.lastStatus, candidate.paused)
+			// A skip is not a completed check and does not move the spend window.
+			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
+				slog.Warn("group_quality: save skip failed", "error", err)
+			}
 			continue
 		}
-		if probes >= qualityProbesPerTick {
-			return
+		probeCtx, stop := context.WithTimeout(ctx, qualityProbeTimeout)
+		var result qualityProbeResult
+		if c.probeFunc != nil {
+			result = c.probeFunc(probeCtx, candidate.id, candidate.modelID)
+		} else {
+			result = c.tests.runPelicanQualityCheck(probeCtx, candidate.id, candidate.modelID)
 		}
-		probes++
-		verdict := c.probe(ctx, candidate.id)
-		nextStatus := candidate.lastStatus
-		if verdict == "success" || verdict == "degraded" {
-			nextStatus = verdict
-		}
-		paused := candidate.paused
-		if qualityShouldPause(candidate.lastStatus, nextStatus) && candidate.schedulable {
-			if err := c.accounts.SetSchedulable(ctx, candidate.id, false); err != nil {
-				slog.Warn("group_quality: pause failed", "account_id", candidate.id, "error", err)
-				continue
+		stop()
+		if err := c.finishCheck(ctx, candidate, c.now(), result); err != nil {
+			if !errors.Is(err, ErrQualityConfigChanged) {
+				slog.Warn("group_quality: save check failed", "group_id", candidate.groupID, "account_id", candidate.id, "error", err)
 			}
-			paused = true
-			slog.Info("group_quality: paused after consecutive degraded checks", "account_id", candidate.id)
+			continue
 		}
-		if qualityShouldResume(candidate.paused, nextStatus) {
-			if err := c.accounts.SetSchedulable(ctx, candidate.id, true); err != nil {
-				slog.Warn("group_quality: resume failed", "account_id", candidate.id, "error", err)
-				continue
-			}
-			paused = false
-		}
-		c.finishCheck(ctx, candidate, now, nextStatus, paused)
+		c.reconcileAccount(ctx, candidate.id)
 	}
 }
 
-func (c *GroupQualityChecker) listCandidates(ctx context.Context, dueBefore time.Time) ([]qualityCandidate, error) {
+func qualityNextState(streak int, paused bool, status string) (int, bool) {
+	switch status {
+	case "success":
+		return 0, false
+	case "degraded":
+		streak++
+		if streak > 2 {
+			streak = 2
+		}
+		return streak, paused || streak >= 2
+	default:
+		return 0, paused
+	}
+}
+
+func validQualityPreview(data []byte) bool {
+	if len(data) == 0 || len(data) > qualityPreviewMaxBytes {
+		return false
+	}
+	cfg, err := png.DecodeConfig(bytes.NewReader(data))
+	return err == nil && cfg.Width > 0 && cfg.Height > 0 && cfg.Width <= 1920 && cfg.Height <= 1280
+}
+
+func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate qualityCandidate, now time.Time, result qualityProbeResult) error {
+	switch result.Status {
+	case "success", "degraded", "unknown", "failed":
+	default:
+		result.Status = "unknown"
+		result.Reason = "Quality evaluation unavailable"
+	}
+	if len(result.Reason) > 2000 {
+		result.Reason = "Quality evaluation unavailable"
+	}
+	if len(result.ModelID) > 200 {
+		result.ModelID = candidate.modelID
+	}
+	var preview any
+	if result.Status != "failed" && validQualityPreview(result.PreviewPNG) {
+		preview = result.PreviewPNG
+	}
+	retry := now
+	if result.Status == "failed" {
+		retry = now.Add(5 * time.Minute)
+	}
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var version int64
+	var enabled bool
+	if err := tx.QueryRowContext(ctx, `SELECT version, enabled FROM group_quality_check_settings WHERE group_id = $1 FOR UPDATE`, candidate.groupID).Scan(&version, &enabled); err != nil {
+		return err
+	}
+	if !enabled || version != candidate.version {
+		return ErrQualityConfigChanged
+	}
+	var currentStreak int
+	var currentPaused bool
+	var lastModel string
+	if err := tx.QueryRowContext(ctx, `SELECT degraded_streak, paused, last_model_id FROM group_account_quality_checks WHERE group_id = $1 AND account_id = $2 FOR UPDATE`, candidate.groupID, candidate.id).Scan(&currentStreak, &currentPaused, &lastModel); err != nil {
+		return err
+	}
+	if lastModel != result.ModelID {
+		currentStreak = 0
+	}
+	streak, paused := qualityNextState(currentStreak, currentPaused, result.Status)
+	// Keep the old consumption anchor for a failed request: it produced no usable test.
+	_, err = tx.ExecContext(ctx, `
+        UPDATE group_account_quality_checks SET
+            window_started_at = CASE WHEN $4 = 'failed' THEN window_started_at ELSE $3 END,
+            last_checked_at = $3, last_attempt_at = $3, last_status = $4, degraded_streak = $5, paused = $6, retry_after = $7, last_model_id = $8
+        WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, now, result.Status, streak, paused, retry, result.ModelID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (group_id) DO UPDATE SET account_id = EXCLUDED.account_id, result_id = EXCLUDED.result_id,
+            status = EXCLUDED.status, reason = EXCLUDED.reason, model_id = EXCLUDED.model_id,
+            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png`,
+		candidate.groupID, candidate.id, uuid.NewString(), result.Status, result.Reason, result.ModelID, now, preview)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (c *GroupQualityChecker) reconcileAccount(ctx context.Context, accountID int64) {
+	repo, ok := c.accounts.(qualitySchedulingRepository)
+	if !ok {
+		return
+	}
+	if err := repo.ReconcileGroupQualityScheduling(ctx, accountID); err != nil {
+		slog.Warn("group_quality: reconcile scheduling failed", "account_id", accountID, "error", err)
+	}
+}
+
+func (c *GroupQualityChecker) reconcileScheduling(ctx context.Context) {
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT a.id,
-			q.account_id IS NOT NULL,
-			q.window_started_at,
-			q.last_checked_at,
-			COALESCE(q.last_status, ''),
-			COALESCE(q.paused, FALSE),
-			a.schedulable
-		FROM accounts a
-		JOIN account_groups ag ON ag.account_id = a.id
-		JOIN group_quality_check_settings s ON s.group_id = ag.group_id AND s.enabled
-		LEFT JOIN account_quality_checks q ON q.account_id = a.id
-		WHERE a.deleted_at IS NULL
-		  AND a.status = 'active'
-		  AND (a.schedulable OR COALESCE(q.paused, FALSE))
-		  AND (
-			q.account_id IS NULL
-			OR COALESCE(q.last_checked_at, q.window_started_at) <= $1
-		  )
-		GROUP BY a.id, q.account_id, q.window_started_at, q.last_checked_at, q.last_status, q.paused, a.schedulable
-		ORDER BY COALESCE(q.last_checked_at, q.window_started_at) NULLS FIRST, a.id
-		LIMIT $2`, dueBefore, qualityCandidatesPerTick)
+        SELECT account_id FROM account_quality_checks WHERE paused
+        UNION SELECT q.account_id FROM group_account_quality_checks q
+        JOIN group_quality_check_settings s ON s.group_id = q.group_id AND s.enabled WHERE q.paused`)
+	if err != nil {
+		slog.Warn("group_quality: list scheduling failed", "error", err)
+		return
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	_ = rows.Close()
+	if err != nil {
+		return
+	}
+	for _, id := range ids {
+		c.reconcileAccount(ctx, id)
+	}
+}
+
+// Only metadata is returned in matrix responses; PNG bytes are loaded on demand.
+func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map[int64]bool, map[int64]*GroupQualityResult, error) {
+	enabled := make(map[int64]bool)
+	results := make(map[int64]*GroupQualityResult)
+	if c == nil || c.db == nil || len(groupIDs) == 0 {
+		return enabled, results, nil
+	}
+	rows, err := c.db.QueryContext(ctx, `
+        SELECT s.group_id, s.enabled, l.result_id::text, l.status, l.reason, l.model_id, l.checked_at,
+            COALESCE(octet_length(l.preview_png) > 0, FALSE)
+        FROM group_quality_check_settings s
+        LEFT JOIN group_quality_check_latest l ON l.group_id = s.group_id
+          AND EXISTS (SELECT 1 FROM accounts a JOIN account_groups ag ON ag.account_id = a.id
+              WHERE a.id = l.account_id AND a.deleted_at IS NULL AND ag.group_id = s.group_id)
+        WHERE s.group_id = ANY($1)`, pq.Array(groupIDs))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		var on, preview bool
+		var rid, status, reason, model sql.NullString
+		var checked sql.NullTime
+		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview); err != nil {
+			return nil, nil, err
+		}
+		enabled[id] = on
+		if on && rid.Valid && checked.Valid {
+			results[id] = &GroupQualityResult{rid.String, status.String, reason.String, model.String, checked.Time, preview}
+		}
+	}
+	return enabled, results, rows.Err()
+}
+
+func (c *GroupQualityChecker) Preview(ctx context.Context, groupID int64, resultID string) ([]byte, error) {
+	if c == nil || c.db == nil {
+		return nil, sql.ErrNoRows
+	}
+	if _, err := uuid.Parse(resultID); err != nil {
+		return nil, sql.ErrNoRows
+	}
+	var data []byte
+	err := c.db.QueryRowContext(ctx, `
+        SELECT l.preview_png FROM group_quality_check_latest l
+        JOIN group_quality_check_settings s ON s.group_id = l.group_id AND s.enabled
+        JOIN accounts a ON a.id = l.account_id AND a.deleted_at IS NULL
+        JOIN account_groups ag ON ag.account_id = a.id AND ag.group_id = l.group_id
+        WHERE l.group_id = $1 AND l.result_id = $2 AND l.preview_png IS NOT NULL`, groupID, resultID).Scan(&data)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	var out []qualityCandidate
-	for rows.Next() {
-		var item qualityCandidate
-		if err := rows.Scan(&item.id, &item.hasRow, &item.windowStart, &item.lastChecked, &item.lastStatus, &item.paused, &item.schedulable); err != nil {
-			return nil, err
-		}
-		out = append(out, item)
+	if !validQualityPreview(data) {
+		return nil, sql.ErrNoRows
 	}
-	return out, rows.Err()
+	return data, nil
 }
-
-func (c *GroupQualityChecker) openWindow(ctx context.Context, accountID int64, now time.Time) {
-	if _, err := c.db.ExecContext(ctx, `
-		INSERT INTO account_quality_checks (account_id, window_started_at, last_status, paused, updated_at)
-		VALUES ($1, $2, '', FALSE, $2)
-		ON CONFLICT (account_id) DO NOTHING`, accountID, now); err != nil {
-		slog.Warn("group_quality: open window failed", "account_id", accountID, "error", err)
-	}
-}
-
-func (c *GroupQualityChecker) spendSince(ctx context.Context, accountID int64, since time.Time) (float64, error) {
-	var spend float64
-	err := c.db.QueryRowContext(ctx, `
-		SELECT COALESCE(SUM(actual_cost), 0)::float8
-		FROM usage_logs
-		WHERE account_id = $1 AND created_at >= $2`, accountID, since).Scan(&spend)
-	return spend, err
-}
-
-func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate qualityCandidate, now time.Time, status string, paused bool) {
-	if _, err := c.db.ExecContext(ctx, `
-		UPDATE account_quality_checks
-		SET window_started_at = $2, last_checked_at = $2, last_status = $3, paused = $4, updated_at = $2
-		WHERE account_id = $1`, candidate.id, now, status, paused); err != nil {
-		slog.Warn("group_quality: save check failed", "account_id", candidate.id, "error", err)
-	}
-}
-
-func (c *GroupQualityChecker) probe(ctx context.Context, accountID int64) string {
-	probeCtx, cancel := context.WithTimeout(ctx, qualityProbeTimeout)
-	defer cancel()
-	text, err := runQualityProbe(probeCtx, c.tests, accountID)
-	if err != nil {
-		slog.Warn("group_quality: probe failed", "account_id", accountID, "error", err)
-		return "failed"
-	}
-	status, reason := assessScheduledTestQuality(text, DefaultScheduledTestPrompt)
-	if status != "success" {
-		slog.Info("group_quality: probe verdict", "account_id", accountID, "status", status, "reason", reason)
-	}
-	return status
-}
-
-func runQualityProbe(ctx context.Context, tests *AccountTestService, accountID int64) (string, error) {
-	recorder := httptest.NewRecorder()
-	ginCtx, _ := gin.CreateTestContext(recorder)
-	ginCtx.Request = (&http.Request{}).WithContext(ctx)
-	err := tests.TestAccountConnection(ginCtx, accountID, "", DefaultScheduledTestPrompt, AccountTestModeDefault)
-	text, errMsg := parseTestSSEOutput(recorder.Body.String())
-	if err != nil || errMsg != "" {
-		if errMsg != "" {
-			return "", qualityProbeError(errMsg)
-		}
-		return "", err
-	}
-	return text, nil
-}
-
-type qualityProbeError string
-
-func (e qualityProbeError) Error() string { return string(e) }

@@ -114,6 +114,7 @@ LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
 
 # Install runtime dependencies
 RUN apk add --no-cache \
+    nodejs npm chromium font-noto ttf-dejavu \
     ca-certificates \
     tzdata \
     su-exec \
@@ -137,6 +138,14 @@ RUN addgroup -g 1000 sub2api && \
 
 # Set working directory
 WORKDIR /app
+
+# Chromium is distro-provided; no runtime browser download is required.
+ENV QUALITY_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    QUALITY_CHROMIUM_SANDBOX=false
+COPY backend/scripts/quality-renderer /app/scripts/quality-renderer
+RUN npm ci --prefix /app/scripts/quality-renderer --omit=dev --ignore-scripts && \
+    npm cache clean --force
+RUN su-exec sub2api node /app/scripts/quality-renderer/smoke.mjs
 
 # Copy binary/resources with ownership to avoid extra full-layer chown copy
 COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api

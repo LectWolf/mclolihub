@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pelican Cycling Reference</title>
+<style>
+html,body{margin:0;background:#dcefeb}svg{width:100%;height:100vh;display:block}.ink{stroke:#29474b;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}.leg{fill:none;stroke:#e2a548;stroke-width:12;stroke-linecap:round}
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" role="img" aria-label="A pelican riding a bicycle">
+<rect width="960" height="640" fill="#dcefeb"/>
+<circle cx="778" cy="105" r="43" fill="#efc35d"/>
+<path d="M0 295Q150 180 320 285T650 275T960 280V480H0Z" fill="#a1c9bd"/>
+<path d="M0 355Q210 320 470 350T960 336V480H0Z" fill="#75b3ae"/>
+<rect y="480" width="960" height="160" fill="#6b8580"/>
+<g stroke="#edf0d6" stroke-width="5">
+<path d="M-160 545H-50M90 545H200M340 545H450M590 545H700M840 545H950M1090 545H1200"/>
+<animateTransform attributeName="transform" type="translate" from="0 0" to="-250 0" dur="2.6s" repeatCount="indefinite"/>
+</g>
+<!-- Wheel geometry rotates in local coordinates inside fixed hub groups. -->
+<g transform="translate(318 446)">
+<circle r="82" fill="#d5e7dc" class="ink" stroke-width="12"/>
+<g stroke="#6b8e90" stroke-width="3"><path d="M-76 0H76M0-76V76M-54-54L54 54M-54 54L54-54M-70-29L70 29M-29-70L29 70"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2.6s" repeatCount="indefinite"/></g>
+<circle r="9" fill="#29474b"/>
+</g>
+<g transform="translate(661 446)">
+<circle r="82" fill="#d5e7dc" class="ink" stroke-width="12"/>
+<g stroke="#6b8e90" stroke-width="3"><path d="M-76 0H76M0-76V76M-54-54L54 54M-54 54L54-54M-70-29L70 29M-29-70L29 70"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2.6s" repeatCount="indefinite"/></g>
+<circle r="9" fill="#29474b"/>
+</g>
+<path d="M318 446L412 332L485 446H318L595 332L661 446M412 332H595M412 332L485 446M595 332L606 295L637 286" fill="none" stroke="#da625c" stroke-width="10" stroke-linejoin="round"/>
+<path d="M386 326H438M631 286L650 304" class="ink" fill="none"/>
+<circle cx="318" cy="446" r="9" fill="#29474b"/>
+<circle cx="661" cy="446" r="9" fill="#29474b"/>
+<!-- The rider's feet follow the opposing ends of the crank. -->
+<path class="leg" d="M426 312L450 367L515 446"><animate attributeName="d" values="M426 312L450 367L515 446;M426 312L477 358L485 476;M426 312L449 370L455 446;M426 312L420 370L485 416;M426 312L450 367L515 446" dur="2.6s" repeatCount="indefinite"/></path>
+<path class="leg" stroke="#ca8c38" d="M447 312L440 385L455 446"><animate attributeName="d" values="M447 312L440 385L455 446;M447 312L446 361L485 416;M447 312L483 389L515 446;M447 312L474 391L485 476;M447 312L440 385L455 446" dur="2.6s" repeatCount="indefinite"/></path>
+<g transform="translate(485 446)"><circle r="11" fill="#29474b"/><g><path d="M-30 0H30" class="ink"/><path d="M-38 0H-22M22 0H38" stroke="#263d42" stroke-width="8"/><animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="2.6s" repeatCount="indefinite"/></g></g>
+<!-- Pelican silhouette: tail, wing, long neck, long bill and throat pouch. -->
+<path d="M372 260L334 285L388 297" fill="#e7efeb" class="ink"/>
+<path d="M389 248Q363 275 387 308Q412 337 462 319Q501 301 496 272L474 236Q500 190 529 170Q542 142 529 122Q508 110 491 134Q482 152 485 175L464 219Q420 223 389 248Z" fill="#fffdf1" class="ink"/>
+<path d="M388 265Q422 238 469 258Q459 291 410 303Q389 294 388 265Z" fill="#cadbd5" stroke="#65877f" stroke-width="4"/>
+<path d="M525 153L699 166Q675 198 561 190L526 175Z" fill="#efb650" class="ink"/>
+<path d="M527 151L704 164L699 172L526 162Z" fill="#ef8f48" class="ink"/>
+<circle cx="515" cy="142" r="5" fill="#29474b"/>
+<path d="M490 223L529 281L603 290" fill="none" stroke="#65877f" stroke-width="7" stroke-linecap="round"/>
+</svg>
+</body>
+</html>

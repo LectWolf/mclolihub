@@ -394,6 +394,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	if account.IsCNProvider() {
 		switch account.GetAPIProtocol() {
 		case APIProtocolAdaptive:
+			if isPelicanQualityRequest(ctx) {
+				return s.testCNProviderChatCompletionsConnection(c, account, modelID, prompt)
+			}
 			return s.testCNProviderAdaptiveConnection(c, account, modelID, prompt)
 		case APIProtocolResponses:
 			return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
@@ -902,9 +905,16 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	// account model mapping. Native remote compaction v2 rides the ordinary
 	// /responses wire and does NOT apply the legacy compact-only mapping
 	// (post-#5641 semantics: compact_model_mapping is /responses/compact-only).
-	testModelID = account.GetMappedModel(testModelID)
+	if visual, ok := ctx.Value(pelicanQualityContextKey{}).(*pelicanVisualContext); ok && visual != nil && visual.ModelID != "" {
+		testModelID = visual.ModelID
+	} else {
+		testModelID = account.GetMappedModel(testModelID)
+	}
 	if mode == AccountTestModeCompact {
 		return s.testOpenAICompactConnection(c, account, testModelID)
+	}
+	if isPelicanQualityRequest(ctx) && !pelicanTextModel(testModelID) {
+		return s.sendErrorAndEnd(c, "Quality evaluation requires a text model")
 	}
 
 	// Route to image generation test if an image model is selected
@@ -965,7 +975,8 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		// back to Chat Completions when an account capability flag is stale or
 		// marked unsupported. A failed /responses probe is more actionable than
 		// reporting healthy based on a different protocol.
-		if mode != AccountTestModeProbe && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+		forceCNResponses := isPelicanQualityRequest(ctx) && account.IsCNProvider() && account.GetAPIProtocol() == APIProtocolResponses
+		if mode != AccountTestModeProbe && !forceCNResponses && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 			return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 		}
 		apiURL = buildOpenAIResponsesURLForPlatform(credentialAccount.Platform, normalizedBaseURL)
@@ -986,16 +997,21 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if isOAuth {
 		upstreamTestModelID = normalizeOpenAIModelForUpstream(credentialAccount, testModelID)
 	}
-	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
+	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth, prompt)
 	if mode == AccountTestModeProbe {
 		payload = createOpenAIProbePayload(upstreamTestModelID, isOAuth)
 	}
+	applyPelicanVisualPayload(ctx, payload, true)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
 	// restart this probe after registering a replacement task.
 	if !agentIdentityTaskRecoveryWasTried(ctx) {
-		s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+		reportedModelID := testModelID
+		if isPelicanQualityRequest(ctx) {
+			reportedModelID, _ = payload["model"].(string)
+		}
+		s.sendEvent(c, TestEvent{Type: "test_start", Model: reportedModelID})
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(payloadBytes))
@@ -1064,7 +1080,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		body = redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, credentialAccount, body)
 		if !agentIdentityTaskRecoveryWasTried(ctx) && credentialAccount.IsOpenAIAgentIdentity() && isAgentIdentityTaskInvalidHTTPResponse(resp.StatusCode, body) {
 			expectedTaskID := credentialAccount.GetCredential("task_id")
@@ -2232,6 +2248,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	c.Writer.Flush()
 
 	payload := createOpenAIChatCompletionsTestPayload(testModelID, prompt)
+	applyPelicanVisualPayload(ctx, payload, false)
 	payloadBytes, _ := json.Marshal(payload)
 
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
@@ -2265,7 +2282,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		if resp.StatusCode == http.StatusTooManyRequests {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
@@ -2871,7 +2888,11 @@ func (s *AccountTestService) processGeminiStream(c *gin.Context, body io.Reader)
 }
 
 // createOpenAITestPayload creates a test payload for OpenAI Responses API
-func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
+func createOpenAITestPayload(modelID string, isOAuth bool, prompts ...string) map[string]any {
+	testPrompt := "hi"
+	if len(prompts) > 0 && strings.TrimSpace(prompts[0]) != "" {
+		testPrompt = strings.TrimSpace(prompts[0])
+	}
 	payload := map[string]any{
 		"model": modelID,
 		"input": []map[string]any{
@@ -2880,7 +2901,7 @@ func createOpenAITestPayload(modelID string, isOAuth bool) map[string]any {
 				"content": []map[string]any{
 					{
 						"type": "input_text",
-						"text": "hi",
+						"text": testPrompt,
 					},
 				},
 			},
@@ -2995,7 +3016,7 @@ func (s *AccountTestService) processClaudeStream(c *gin.Context, body io.Reader)
 // processOpenAIChatCompletionsStream processes SSE chunks from the
 // OpenAI-compatible Chat Completions API.
 func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, body io.Reader) error {
-	reader := bufio.NewReader(body)
+	reader := bufio.NewReader(pelicanQualityStreamReader(c.Request.Context(), body))
 	seenJSON := false
 	seenFinish := false
 
@@ -3033,6 +3054,7 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 			return s.sendErrorAndEnd(c, "Invalid Chat Completions response from /v1/chat/completions: expected JSON data")
 		}
 		seenJSON = true
+		s.emitPelicanResolvedModel(c, data)
 
 		if errData, ok := data["error"].(map[string]any); ok {
 			errorMsg := "Chat Completions API (/v1/chat/completions) returned an error"
@@ -3062,6 +3084,9 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 				}
 			}
 			if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" {
+				if isPelicanQualityRequest(c.Request.Context()) && finishReason != "stop" {
+					return s.sendErrorAndEnd(c, "Quality response did not complete normally")
+				}
 				seenFinish = true
 			}
 		}
@@ -3070,7 +3095,7 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 
 // processOpenAIStream processes the SSE stream from OpenAI Responses API
 func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader) error {
-	reader := bufio.NewReader(body)
+	reader := bufio.NewReader(pelicanQualityStreamReader(c.Request.Context(), body))
 	seenCompleted := false
 
 	for {
@@ -3102,10 +3127,14 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 
 		var data map[string]any
 		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+			if isPelicanQualityRequest(c.Request.Context()) {
+				return s.sendErrorAndEnd(c, "Invalid quality response stream")
+			}
 			continue
 		}
 
 		eventType, _ := data["type"].(string)
+		s.emitPelicanResolvedModel(c, data)
 
 		switch eventType {
 		case "response.output_text.delta":
@@ -3114,6 +3143,13 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 				s.sendEvent(c, TestEvent{Type: "content", Text: delta})
 			}
 		case "response.completed", "response.done":
+			if isPelicanQualityRequest(c.Request.Context()) {
+				if response, ok := data["response"].(map[string]any); ok {
+					if status, _ := response["status"].(string); status != "" && status != "completed" {
+						return s.sendErrorAndEnd(c, "Quality response did not complete")
+					}
+				}
+			}
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 			return nil
 		case "response.failed":

@@ -18,6 +18,7 @@ LABEL org.opencontainers.image.source="https://github.com/LectWolf/mclolihub"
 
 # Install runtime dependencies
 RUN apk add --no-cache \
+    nodejs npm chromium font-noto ttf-dejavu \
     ca-certificates \
     tzdata \
     curl \
@@ -41,6 +42,13 @@ RUN addgroup -g 1000 sub2api && \
     adduser -u 1000 -G sub2api -s /bin/sh -D sub2api
 
 WORKDIR /app
+
+ENV QUALITY_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    QUALITY_CHROMIUM_SANDBOX=false
+COPY backend/scripts/quality-renderer /app/scripts/quality-renderer
+RUN npm ci --prefix /app/scripts/quality-renderer --omit=dev --ignore-scripts && \
+    npm cache clean --force
+RUN su-exec sub2api node /app/scripts/quality-renderer/smoke.mjs
 
 # Copy the pre-built binary and runtime fallback resources from GoReleaser
 COPY sub2api /app/sub2api

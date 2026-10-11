@@ -8,7 +8,7 @@
 
 ARG NODE_IMAGE=node:24-alpine
 ARG GOLANG_IMAGE=golang:1.27.0-alpine
-ARG ALPINE_IMAGE=alpine:3.20
+ARG ALPINE_IMAGE=alpine:3.21
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 
@@ -90,6 +90,7 @@ LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
 
 # Install runtime dependencies
 RUN apk add --no-cache \
+    nodejs npm chromium font-noto ttf-dejavu \
     ca-certificates \
     tzdata \
     curl \
@@ -102,6 +103,13 @@ RUN addgroup -g 1000 sub2api && \
 
 # Set working directory
 WORKDIR /app
+
+ENV QUALITY_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    QUALITY_CHROMIUM_SANDBOX=false
+COPY backend/scripts/quality-renderer /app/scripts/quality-renderer
+RUN npm ci --prefix /app/scripts/quality-renderer --omit=dev --ignore-scripts && \
+    npm cache clean --force
+RUN su-exec sub2api node /app/scripts/quality-renderer/smoke.mjs
 
 # Copy binary and runtime fallback resources from builder
 COPY --from=backend-builder /app/sub2api /app/sub2api
