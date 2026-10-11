@@ -173,7 +173,7 @@ func parsePelicanTestEvents(raw []byte, limit int) (pelicanTestOutput, error) {
 			if len(event.Text) > limit-text.Len() {
 				return out, errors.New("test output limit")
 			}
-			text.WriteString(event.Text)
+			_, _ = text.WriteString(event.Text)
 		case "error", "image", "video", "audio":
 			out.Failed = true
 		case "test_complete":
@@ -450,8 +450,8 @@ func renderPelicanVisualFrames(ctx context.Context, document string) ([]pelicanV
 	if runner == "" {
 		runner = "node"
 	}
-	// Operator-controlled executable and resource path, never upstream content.
-	cmd := exec.CommandContext(ctx, runner, script)
+	// Operator-controlled executable/resource only; model content enters stdin, with no shell.
+	cmd := exec.CommandContext(ctx, runner, script) // #nosec G702 -- trusted deployment paths, never request or model input
 	cmd.Stdin = strings.NewReader(document)
 	output := &pelicanCapture{limit: pelicanRenderOutputLimit}
 	cmd.Stdout = output
