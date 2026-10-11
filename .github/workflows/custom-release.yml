@@ -29,6 +29,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       upstream_version: ${{ steps.version.outputs.upstream_version }}
+      source_commit: ${{ steps.version.outputs.source_commit }}
     steps:
       - name: Checkout release source
         uses: actions/checkout@v6
@@ -60,6 +61,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "upstream_version=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build-frontend:
     needs: validate
@@ -144,6 +146,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ needs.validate.outputs.version }}
           UPSTREAM_VERSION: ${{ needs.validate.outputs.upstream_version }}
+          SOURCE_COMMIT: ${{ needs.validate.outputs.source_commit }}
         run: |
           mkdir -p package dist
           mkdir -p package/scripts
@@ -155,7 +158,7 @@ jobs:
           fi
           BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           CGO_ENABLED=0 go build -C backend -tags embed \
-            -ldflags "-s -w -X main.Version=$VERSION -X main.UpstreamVersion=$UPSTREAM_VERSION -X main.Commit=$GITHUB_SHA -X main.Date=$BUILD_DATE -X main.BuildType=release" \
+            -ldflags "-s -w -X main.Version=$VERSION -X main.UpstreamVersion=$UPSTREAM_VERSION -X main.Commit=$SOURCE_COMMIT -X main.Date=$BUILD_DATE -X main.BuildType=release" \
             -o "../package/$BINARY" ./cmd/server
 
           ARCHIVE="sub2api_${VERSION}_${GOOS}_${GOARCH}.${{ matrix.extension }}"
@@ -174,11 +177,15 @@ jobs:
 
   build-images:
     needs: [validate, build-frontend, build-binaries]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout release source
         uses: actions/checkout@v6
@@ -196,9 +203,6 @@ jobs:
         run: |
           tar -xzf dist/*.tar.gz
           chmod 0755 sub2api
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -221,7 +225,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.validate.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.validate.outputs.source_commit }}
           cache-from: type=gha,scope=custom-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=custom-${{ matrix.arch }}
 
