@@ -217,8 +217,9 @@ type UsageLog struct {
 	Subscription *UserSubscription
 }
 
+// TotalTokens returns the request token total. InputTokens is stored as the upstream total input, so cache buckets are detail fields and must not be added again.
 func (u *UsageLog) TotalTokens() int {
-	return u.InputTokens + u.OutputTokens + u.CacheCreationTokens + u.CacheReadTokens
+	return u.InputTokens + u.OutputTokens
 }
 
 func (u *UsageLog) EffectiveRequestType() RequestType {

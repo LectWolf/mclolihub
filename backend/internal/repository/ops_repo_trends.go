@@ -42,7 +42,7 @@ func (r *opsRepository) GetThroughputTrend(ctx context.Context, filter *service.
 WITH usage_buckets AS (
   SELECT ` + usageBucketExpr + ` AS bucket,
          COUNT(*) AS success_count,
-         COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS token_consumed
+         COALESCE(SUM(input_tokens + output_tokens), 0) AS token_consumed
   FROM usage_logs ul
   ` + usageJoin + `
   ` + usageWhere + `
@@ -189,7 +189,7 @@ func (r *opsRepository) getThroughputBreakdownByPlatform(ctx context.Context, st
 WITH usage_totals AS (
   SELECT COALESCE(NULLIF(g.platform,''), a.platform) AS platform,
          COUNT(*) AS success_count,
-         COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS token_consumed
+         COALESCE(SUM(input_tokens + output_tokens), 0) AS token_consumed
   FROM usage_logs ul
   LEFT JOIN groups g ON g.id = ul.group_id
   LEFT JOIN accounts a ON a.id = ul.account_id
@@ -261,7 +261,7 @@ WITH usage_totals AS (
   SELECT ul.group_id AS group_id,
          g.name AS group_name,
          COUNT(*) AS success_count,
-         COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS token_consumed
+         COALESCE(SUM(input_tokens + output_tokens), 0) AS token_consumed
   FROM usage_logs ul
   JOIN groups g ON g.id = ul.group_id
   WHERE ul.created_at >= $1 AND ul.created_at < $2

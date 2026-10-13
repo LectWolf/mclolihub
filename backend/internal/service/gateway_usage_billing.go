@@ -1209,7 +1209,8 @@ func (s *GatewayService) buildRecordUsageLog(
 		RequestedReasoningEffort: coalesceRequestedReasoningEffort(result.RequestedReasoningEffort, result.ReasoningEffort),
 		InboundEndpoint:          optionalTrimmedStringPtr(input.InboundEndpoint),
 		UpstreamEndpoint:         optionalTrimmedStringPtr(input.UpstreamEndpoint),
-		InputTokens:              result.Usage.InputTokens,
+		// Store total input for display; the separate cache buckets remain billing details.
+		InputTokens:              result.Usage.InputTokens + result.Usage.CacheCreationInputTokens + result.Usage.CacheReadInputTokens,
 		OutputTokens:             result.Usage.OutputTokens,
 		CacheCreationTokens:      result.Usage.CacheCreationInputTokens,
 		CacheReadTokens:          result.Usage.CacheReadInputTokens,

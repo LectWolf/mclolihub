@@ -51,7 +51,7 @@ func (r *usageLogRepository) GetUserStatsAggregated(ctx context.Context, userID 
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	return &stats, nil
 }
 
@@ -90,7 +90,7 @@ func (r *usageLogRepository) GetAPIKeyStatsAggregated(ctx context.Context, apiKe
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	return &stats, nil
 }
 
@@ -139,7 +139,7 @@ func (r *usageLogRepository) GetAccountStatsAggregated(ctx context.Context, acco
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	return &stats, nil
 }
 
@@ -179,7 +179,7 @@ func (r *usageLogRepository) GetModelStatsAggregated(ctx context.Context, modelN
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	return &stats, nil
 }
 
@@ -245,7 +245,7 @@ func (r *usageLogRepository) GetDailyStatsAggregated(ctx context.Context, userID
 			"total_input_tokens":  totalInputTokens,
 			"total_output_tokens": totalOutputTokens,
 			"total_cache_tokens":  totalCacheTokens,
-			"total_tokens":        totalInputTokens + totalOutputTokens + totalCacheTokens,
+			"total_tokens":        totalInputTokens + totalOutputTokens,
 			"total_cost":          totalCost,
 			"total_actual_cost":   totalActualCost,
 			"average_duration_ms": avgDurationMs,
@@ -279,7 +279,7 @@ func (r *usageLogRepository) GetAccountTodayStats(ctx context.Context, accountID
 	query := `
 		SELECT
 			COUNT(*) as requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as tokens,
+			COALESCE(SUM(input_tokens + output_tokens), 0) as tokens,
 			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as cost,
 			COALESCE(SUM(total_cost), 0) as standard_cost,
 			COALESCE(SUM(actual_cost), 0) as user_cost
@@ -309,7 +309,7 @@ func (r *usageLogRepository) GetAccountWindowStats(ctx context.Context, accountI
 	query := `
 		SELECT
 			COUNT(*) as requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as tokens,
+			COALESCE(SUM(input_tokens + output_tokens), 0) as tokens,
 			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as cost,
 			COALESCE(SUM(total_cost), 0) as standard_cost,
 			COALESCE(SUM(actual_cost), 0) as user_cost
@@ -346,7 +346,7 @@ func (r *usageLogRepository) GetAccountWindowStatsBatch(ctx context.Context, acc
 		SELECT
 			account_id,
 			COUNT(*) as requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as tokens,
+			COALESCE(SUM(input_tokens + output_tokens), 0) as tokens,
 			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as cost,
 			COALESCE(SUM(total_cost), 0) as standard_cost,
 			COALESCE(SUM(actual_cost), 0) as user_cost
@@ -400,8 +400,8 @@ func (r *usageLogRepository) GetGeminiUsageTotalsBatch(ctx context.Context, acco
 			account_id,
 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 1 ELSE 0 END), 0) AS flash_requests,
 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE 1 END), 0) AS pro_requests,
-			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN (input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) ELSE 0 END), 0) AS flash_tokens,
-			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE (input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) END), 0) AS pro_tokens,
+			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN (input_tokens + output_tokens) ELSE 0 END), 0) AS flash_tokens,
+			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE (input_tokens + output_tokens) END), 0) AS pro_tokens,
 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN actual_cost ELSE 0 END), 0) AS flash_cost,
 			COALESCE(SUM(CASE WHEN LOWER(COALESCE(model, '')) LIKE '%flash%' OR LOWER(COALESCE(model, '')) LIKE '%lite%' THEN 0 ELSE actual_cost END), 0) AS pro_cost
 		FROM usage_logs
@@ -650,7 +650,7 @@ func (r *usageLogRepository) GetGlobalStats(ctx context.Context, startTime, endT
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	return stats, nil
 }
 
@@ -820,7 +820,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 	sortEndpointStats(stats.EndpointPaths)
 
 	stats.TotalAccountCost = &totalAccountCost
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 
 	return stats, nil
 }
@@ -847,7 +847,7 @@ func (r *usageLogRepository) getEndpointStatsByColumnWithFilters(ctx context.Con
 		SELECT
 			COALESCE(NULLIF(TRIM(%s), ''), 'unknown') AS endpoint,
 			COUNT(*) AS requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS total_tokens,
+			COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
 			COALESCE(SUM(total_cost), 0) as cost,
 			%s
 		FROM usage_logs
@@ -926,7 +926,7 @@ func (r *usageLogRepository) GetAccountUsageStats(ctx context.Context, accountID
 		SELECT
 			TO_CHAR(created_at, 'YYYY-MM-DD') as date,
 			COUNT(*) as requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as tokens,
+			COALESCE(SUM(input_tokens + output_tokens), 0) as tokens,
 			COALESCE(SUM(total_cost), 0) as cost,
 			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as actual_cost,
 			COALESCE(SUM(actual_cost), 0) as user_cost

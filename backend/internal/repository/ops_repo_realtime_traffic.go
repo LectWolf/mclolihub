@@ -42,7 +42,7 @@ WITH usage_buckets AS (
   SELECT
     date_trunc('minute', ul.created_at) AS bucket,
     COALESCE(COUNT(*), 0) AS success_count,
-    COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS token_sum
+    COALESCE(SUM(input_tokens + output_tokens), 0) AS token_sum
   FROM usage_logs ul
   ` + usageJoin + `
   ` + usageWhere + `

@@ -51,7 +51,7 @@ func (r *usageLogRepository) GetUserStats(ctx context.Context, userID int64, sta
 	query := `
 		SELECT
 			COUNT(*) as total_requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as total_tokens,
+			COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
 			COALESCE(SUM(actual_cost), 0) as total_cost,
 			COALESCE(SUM(input_tokens), 0) as input_tokens,
 			COALESCE(SUM(output_tokens), 0) as output_tokens,
@@ -248,7 +248,7 @@ func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Conte
 	); err != nil {
 		return err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheCreationTokens + stats.TotalCacheReadTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	if stats.TotalRequests > 0 {
 		stats.AverageDurationMs = float64(totalDurationMs) / float64(stats.TotalRequests)
 	}
@@ -289,7 +289,7 @@ func (r *usageLogRepository) fillDashboardUsageStatsAggregated(ctx context.Conte
 			return err
 		}
 	}
-	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
+	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens
 	if stats.TodayRequests > 0 {
 		stats.TodayAverageDurationMs = float64(todayDurationMs) / float64(stats.TodayRequests)
 	}
@@ -349,7 +349,7 @@ func (r *usageLogRepository) fillYesterdaySamePeriodAggregated(ctx context.Conte
 		FROM (
 			SELECT
 				COALESCE(SUM(total_requests), 0) AS requests,
-				COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS tokens,
+				COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
 				COALESCE(SUM(total_cost), 0) AS cost,
 				COALESCE(SUM(actual_cost), 0) AS actual_cost,
 				COALESCE(SUM(account_cost), 0) AS account_cost
@@ -359,7 +359,7 @@ func (r *usageLogRepository) fillYesterdaySamePeriodAggregated(ctx context.Conte
 		CROSS JOIN (
 			SELECT
 				COUNT(*) AS requests,
-				COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) AS tokens,
+				COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
 				COALESCE(SUM(total_cost), 0) AS cost,
 				COALESCE(SUM(actual_cost), 0) AS actual_cost,
 				COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) AS account_cost
@@ -424,7 +424,7 @@ func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Co
 			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_account_cost,
 			COALESCE(SUM(duration_ms) FILTER (WHERE created_at >= $3::timestamptz AND created_at < $4::timestamptz), 0) AS today_duration_ms,
 			COUNT(*) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz) AS yesterday_requests,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_tokens,
+			COALESCE(SUM(input_tokens + output_tokens) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_tokens,
 			COALESCE(SUM(total_cost) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_cost,
 			COALESCE(SUM(actual_cost) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_actual_cost,
 			COALESCE(SUM(account_cost) FILTER (WHERE created_at >= $5::timestamptz AND created_at < $6::timestamptz), 0) AS yesterday_account_cost
@@ -462,12 +462,12 @@ func (r *usageLogRepository) fillDashboardUsageStatsFromUsageLogs(ctx context.Co
 	); err != nil {
 		return err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheCreationTokens + stats.TotalCacheReadTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 	if stats.TotalRequests > 0 {
 		stats.AverageDurationMs = float64(totalDurationMs) / float64(stats.TotalRequests)
 	}
 
-	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
+	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens
 	if stats.TodayRequests > 0 {
 		stats.TodayAverageDurationMs = float64(todayDurationMs) / float64(stats.TodayRequests)
 	}
@@ -554,7 +554,7 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheCreationTokens + stats.TotalCacheReadTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 
 	// 今日 Token 统计
 	todayStatsQuery := `
@@ -584,7 +584,7 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 	); err != nil {
 		return nil, err
 	}
-	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
+	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens
 
 	// 性能指标：RPM 和 TPM（最近1分钟，仅统计该用户的请求）
 	rpm, tpm, err := r.getPerformanceStats(ctx, userID)
@@ -654,7 +654,7 @@ func (r *usageLogRepository) getPerformanceStatsByAPIKey(ctx context.Context, ap
 	query := `
 		SELECT
 			COUNT(*) as request_count,
-			COALESCE(SUM(input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens), 0) as token_count
+			COALESCE(SUM(input_tokens + output_tokens), 0) as token_count
 		FROM usage_logs
 		WHERE created_at >= $1 AND api_key_id = $2`
 	args := []any{fiveMinutesAgo, apiKeyID}
@@ -706,7 +706,7 @@ func (r *usageLogRepository) GetAPIKeyDashboardStats(ctx context.Context, apiKey
 	); err != nil {
 		return nil, err
 	}
-	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens + stats.TotalCacheCreationTokens + stats.TotalCacheReadTokens
+	stats.TotalTokens = stats.TotalInputTokens + stats.TotalOutputTokens
 
 	// 今日 Token 统计
 	todayStatsQuery := `
@@ -736,7 +736,7 @@ func (r *usageLogRepository) GetAPIKeyDashboardStats(ctx context.Context, apiKey
 	); err != nil {
 		return nil, err
 	}
-	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens + stats.TodayCacheCreationTokens + stats.TodayCacheReadTokens
+	stats.TodayTokens = stats.TodayInputTokens + stats.TodayOutputTokens
 
 	// 性能指标：RPM 和 TPM（最近5分钟，按 API Key 过滤）
 	rpm, tpm, err := r.getPerformanceStatsByAPIKey(ctx, apiKeyID)
