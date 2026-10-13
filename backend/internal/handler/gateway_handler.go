@@ -53,6 +53,7 @@ type GatewayHandler struct {
 	errorPassthroughService   *service.ErrorPassthroughService
 	contentModerationService  *service.ContentModerationService
 	securityAuditCoordinator  *securityaudit.Coordinator
+	geminiCachedContentService *service.GeminiCachedContentService
 	concurrencyHelper         *ConcurrencyHelper
 	userMsgQueueHelper        *UserMsgQueueHelper
 	maxAccountSwitches        int
@@ -118,6 +119,7 @@ func applyDynamicGroupRequestContext(c *gin.Context, apiKey *service.APIKey, mod
 	// group. Keep the Gin value in sync so Ops/SLA attribution observes the
 	// group that handled the request rather than the key's original group.
 	c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+}
 }
 
 // NewGatewayHandler creates a new GatewayHandler

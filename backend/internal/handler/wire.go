@@ -120,6 +120,7 @@ func ProvideGatewayHandler(
 	groupHealthService *service.GroupHealthService,
 	subscriptionService *service.SubscriptionService,
 	coordinator *securityaudit.Coordinator,
+	geminiCachedContentService *service.GeminiCachedContentService,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService, qoderGatewayService,
 		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
@@ -127,6 +128,7 @@ func ProvideGatewayHandler(
 	h.securityAuditCoordinator = coordinator
 	h.SetGroupHealthService(groupHealthService)
 	h.SetSubscriptionService(subscriptionService)
+	h.geminiCachedContentService = geminiCachedContentService
 	return h
 }
 

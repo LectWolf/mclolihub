@@ -184,7 +184,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			logger.LegacyPrintf("service.gateway", "[Anthropic Passthrough] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
 				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
-			s.handleRetryExhaustedSideEffects(ctx, resp, account)
+			s.handleRetryExhaustedSideEffects(ctx, resp, account, input.RequestModel)
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				ProxyID:            opsUpstreamProxyID(account),
 				ProxyName:          opsUpstreamProxyName(account),
@@ -209,7 +209,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
-		return s.handleRetryExhaustedError(ctx, resp, c, account)
+		return s.handleRetryExhaustedError(ctx, resp, c, account, input.RequestModel)
 	}
 
 	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(resp.StatusCode) {
@@ -675,11 +675,11 @@ func parseSSEUsagePassthrough(data string, usage *ClaudeUsage) {
 
 	if usage.CacheReadInputTokens == 0 {
 		if cached := parsed.Get("message.usage.cached_tokens").Int(); cached > 0 {
-			usage.InputTokens = max(usage.InputTokens-int(cached), 0)
+			// cached_tokens is a cache detail only; without an authoritative prompt total,
+			// input_tokens may already be the uncached bucket. Do not guess a subtraction.
 			usage.CacheReadInputTokens = int(cached)
 		}
 		if cached := parsed.Get("usage.cached_tokens").Int(); usage.CacheReadInputTokens == 0 && cached > 0 {
-			usage.InputTokens = max(usage.InputTokens-int(cached), 0)
 			usage.CacheReadInputTokens = int(cached)
 		}
 	}
@@ -791,7 +791,7 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 	}
 	if usage.CacheReadInputTokens == 0 {
 		if cached := usageNode.Get("cached_tokens").Int(); cached > 0 {
-			usage.InputTokens = max(usage.InputTokens-int(cached), 0)
+			// Without prompt_tokens or an explicit miss bucket, retain input_tokens as reported.
 			usage.CacheReadInputTokens = int(cached)
 		}
 	}
