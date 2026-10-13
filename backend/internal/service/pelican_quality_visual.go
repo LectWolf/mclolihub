@@ -193,6 +193,31 @@ func parsePelicanTestEvents(raw []byte, limit int) (pelicanTestOutput, error) {
 	return out, nil
 }
 
+// Only fixed local classifications may leave the quality request boundary.
+func pelicanRequestFailureReason(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "Artwork generation timed out before completion"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "Artwork generation was canceled before completion"
+	}
+	if err != nil {
+		switch err.Error() {
+		case "Stream ended before response.completed":
+			return "Artwork generation stream ended without a completion event"
+		case "Quality response did not complete", "Quality response did not complete normally":
+			return "Artwork generation response was incomplete or truncated"
+		case "Invalid quality response stream", "invalid test event", "invalid test stream":
+			return "Artwork generation returned an invalid response stream"
+		case "test output limit":
+			return "Artwork generation output exceeded the size limit"
+		case "OpenAI response failed":
+			return "Artwork generation was rejected or failed upstream"
+		}
+	}
+	return "Artwork generation failed or did not complete"
+}
+
 func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID int64, modelID, prompt string, limit int) (pelicanTestOutput, error) {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
@@ -201,8 +226,17 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 	c.Request, _ = http.NewRequestWithContext(ctx, http.MethodPost, "/internal/pelican-quality", nil)
 	err := s.TestAccountConnection(c, accountID, modelID, prompt, "")
 	out, parseErr := parsePelicanTestEvents(w.Bytes(), limit)
-	if err != nil || parseErr != nil || w.overflow || ctx.Err() != nil {
-		return out, errors.New("account quality request failed")
+	if w.overflow {
+		return out, errors.New(pelicanRequestFailureReason(errors.New("test output limit")))
+	}
+	if ctx.Err() != nil {
+		return out, errors.New(pelicanRequestFailureReason(ctx.Err()))
+	}
+	if err != nil {
+		return out, errors.New(pelicanRequestFailureReason(err))
+	}
+	if parseErr != nil {
+		return out, errors.New(pelicanRequestFailureReason(parseErr))
 	}
 	return out, nil
 }
@@ -264,7 +298,7 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 	}
 	if err != nil {
 		result.Status = "failed"
-		result.Reason = "Artwork generation failed or did not complete"
+		result.Reason = err.Error()
 		return result
 	}
 	document := pelicanHTML(generated.Text)

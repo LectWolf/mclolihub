@@ -1280,21 +1280,21 @@ func init() {
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
 	// groupDescProbeEnabled is the schema descriptor for probe_enabled field.
-	groupDescProbeEnabled := groupFields[63].Descriptor()
+	groupDescProbeEnabled := groupFields[64].Descriptor()
 	// group.DefaultProbeEnabled holds the default value on creation for the probe_enabled field.
 	group.DefaultProbeEnabled = groupDescProbeEnabled.Default.(bool)
 	// groupDescProbeModel is the schema descriptor for probe_model field.
-	groupDescProbeModel := groupFields[64].Descriptor()
+	groupDescProbeModel := groupFields[65].Descriptor()
 	// group.DefaultProbeModel holds the default value on creation for the probe_model field.
 	group.DefaultProbeModel = groupDescProbeModel.Default.(string)
 	// group.ProbeModelValidator is a validator for the "probe_model" field. It is called by the builders before save.
 	group.ProbeModelValidator = groupDescProbeModel.Validators[0].(func(string) error)
 	// groupDescProbeIntervalSeconds is the schema descriptor for probe_interval_seconds field.
-	groupDescProbeIntervalSeconds := groupFields[65].Descriptor()
+	groupDescProbeIntervalSeconds := groupFields[66].Descriptor()
 	// group.DefaultProbeIntervalSeconds holds the default value on creation for the probe_interval_seconds field.
 	group.DefaultProbeIntervalSeconds = groupDescProbeIntervalSeconds.Default.(int)
 	// groupDescRetryWithinGroupOnFailover is the schema descriptor for retry_within_group_on_failover field.
-	groupDescRetryWithinGroupOnFailover := groupFields[66].Descriptor()
+	groupDescRetryWithinGroupOnFailover := groupFields[67].Descriptor()
 	// group.DefaultRetryWithinGroupOnFailover holds the default value on creation for the retry_within_group_on_failover field.
 	group.DefaultRetryWithinGroupOnFailover = groupDescRetryWithinGroupOnFailover.Default.(bool)
 	grouphealtheventMixin := schema.GroupHealthEvent{}.Mixin()

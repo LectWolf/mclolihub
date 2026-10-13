@@ -40,28 +40,28 @@ var gatewayCompatibilityMetricsLogCounter atomic.Uint64
 
 // GatewayHandler handles API gateway requests
 type GatewayHandler struct {
-	gatewayService            *service.GatewayService
-	openAIGatewayService      *service.OpenAIGatewayService
-	geminiCompatService       *service.GeminiMessagesCompatService
-	antigravityGatewayService *service.AntigravityGatewayService
-	qoderGatewayService       *service.QoderGatewayService
-	userService               *service.UserService
-	billingCacheService       *service.BillingCacheService
-	usageService              *service.UsageService
-	apiKeyService             *service.APIKeyService
-	usageRecordWorkerPool     *service.UsageRecordWorkerPool
-	errorPassthroughService   *service.ErrorPassthroughService
-	contentModerationService  *service.ContentModerationService
-	securityAuditCoordinator  *securityaudit.Coordinator
+	gatewayService             *service.GatewayService
+	openAIGatewayService       *service.OpenAIGatewayService
+	geminiCompatService        *service.GeminiMessagesCompatService
+	antigravityGatewayService  *service.AntigravityGatewayService
+	qoderGatewayService        *service.QoderGatewayService
+	userService                *service.UserService
+	billingCacheService        *service.BillingCacheService
+	usageService               *service.UsageService
+	apiKeyService              *service.APIKeyService
+	usageRecordWorkerPool      *service.UsageRecordWorkerPool
+	errorPassthroughService    *service.ErrorPassthroughService
+	contentModerationService   *service.ContentModerationService
+	securityAuditCoordinator   *securityaudit.Coordinator
 	geminiCachedContentService *service.GeminiCachedContentService
-	concurrencyHelper         *ConcurrencyHelper
-	userMsgQueueHelper        *UserMsgQueueHelper
-	maxAccountSwitches        int
-	maxAccountSwitchesGemini  int
-	cfg                       *config.Config
-	settingService            *service.SettingService
-	groupHealthService        *service.GroupHealthService
-	subscriptionService       *service.SubscriptionService
+	concurrencyHelper          *ConcurrencyHelper
+	userMsgQueueHelper         *UserMsgQueueHelper
+	maxAccountSwitches         int
+	maxAccountSwitchesGemini   int
+	cfg                        *config.Config
+	settingService             *service.SettingService
+	groupHealthService         *service.GroupHealthService
+	subscriptionService        *service.SubscriptionService
 }
 
 func (h *GatewayHandler) SetGroupHealthService(groupHealthService *service.GroupHealthService) {
@@ -119,7 +119,6 @@ func applyDynamicGroupRequestContext(c *gin.Context, apiKey *service.APIKey, mod
 	// group. Keep the Gin value in sync so Ops/SLA attribution observes the
 	// group that handled the request rather than the key's original group.
 	c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
-}
 }
 
 // NewGatewayHandler creates a new GatewayHandler

@@ -3123,50 +3123,26 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 // processOpenAIStream processes the SSE stream from OpenAI Responses API
 func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader) error {
 	reader := bufio.NewReader(pelicanQualityStreamReader(c.Request.Context(), body))
-	seenCompleted := false
-
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				if seenCompleted {
-					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-					return nil
-				}
-				return s.sendErrorAndEnd(c, "Stream ended before response.completed")
-			}
-			return s.sendErrorAndEnd(c, fmt.Sprintf("Stream read error: %s", err.Error()))
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" || !sseDataPrefix.MatchString(line) {
-			continue
-		}
-
-		jsonStr := sseDataPrefix.ReplaceAllString(line, "")
-		if jsonStr == "[DONE]" {
-			if seenCompleted {
-				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-				return nil
-			}
+	var parser openAICompatSSEFrameParser
+	seenText := false
+	completed := false
+	processFrame := func(frame openAICompatSSEFrame) error {
+		if strings.TrimSpace(frame.Data) == "[DONE]" {
 			return s.sendErrorAndEnd(c, "Stream ended before response.completed")
 		}
-
 		var data map[string]any
-		if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		if err := json.Unmarshal([]byte(frame.Data), &data); err != nil || data == nil {
 			if isPelicanQualityRequest(c.Request.Context()) {
 				return s.sendErrorAndEnd(c, "Invalid quality response stream")
 			}
-			continue
+			return nil
 		}
-
-		eventType, _ := data["type"].(string)
+		eventType := effectiveOpenAISSEEventType([]byte(frame.Data), frame.EventType)
 		s.emitPelicanResolvedModel(c, data)
-
 		switch eventType {
 		case "response.output_text.delta":
-			// OpenAI Responses API uses "delta" field for text content
 			if delta, ok := data["delta"].(string); ok && delta != "" {
+				seenText = true
 				s.sendEvent(c, TestEvent{Type: "content", Text: delta})
 			}
 		case "response.completed", "response.done":
@@ -3177,26 +3153,65 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 					}
 				}
 			}
+			// Some relays return text only in the final response snapshot.
+			// Do not repeat the snapshot when deltas already emitted its text.
+			if !seenText {
+				if text := extractOpenAIResponsesCompletedText(data["response"]); text != "" {
+					s.sendEvent(c, TestEvent{Type: "content", Text: text})
+				}
+			}
+			completed = true
 			s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-			return nil
+		case "response.incomplete":
+			return s.sendErrorAndEnd(c, "Quality response did not complete")
 		case "response.failed":
 			errorMsg := "OpenAI response failed"
-			if responseData, ok := data["response"].(map[string]any); ok {
-				if errData, ok := responseData["error"].(map[string]any); ok {
-					if msg, ok := errData["message"].(string); ok && msg != "" {
-						errorMsg = msg
+			if !isPelicanQualityRequest(c.Request.Context()) {
+				if responseData, ok := data["response"].(map[string]any); ok {
+					if errData, ok := responseData["error"].(map[string]any); ok {
+						if msg, ok := errData["message"].(string); ok && msg != "" {
+							errorMsg = msg
+						}
 					}
 				}
 			}
 			return s.sendErrorAndEnd(c, errorMsg)
 		case "error":
-			errorMsg := "Unknown error"
-			if errData, ok := data["error"].(map[string]any); ok {
-				if msg, ok := errData["message"].(string); ok {
-					errorMsg = msg
+			errorMsg := "OpenAI response failed"
+			if !isPelicanQualityRequest(c.Request.Context()) {
+				if errData, ok := data["error"].(map[string]any); ok {
+					if msg, ok := errData["message"].(string); ok {
+						errorMsg = msg
+					}
 				}
 			}
 			return s.sendErrorAndEnd(c, errorMsg)
+		}
+		return nil
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Stream read error: %s", err.Error()))
+		}
+		if frame, ok := parser.AddLine(strings.TrimRight(line, "\r\n")); ok {
+			if frameErr := processFrame(frame); frameErr != nil {
+				return frameErr
+			}
+			if completed {
+				return nil
+			}
+		}
+		if err == io.EOF {
+			if frame, ok := parser.Finish(); ok {
+				if frameErr := processFrame(frame); frameErr != nil {
+					return frameErr
+				}
+				if completed {
+					return nil
+				}
+			}
+			return s.sendErrorAndEnd(c, "Stream ended before response.completed")
 		}
 	}
 }
