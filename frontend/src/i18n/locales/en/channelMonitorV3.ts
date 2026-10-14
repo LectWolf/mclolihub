@@ -8,7 +8,7 @@ export default {
     loadFailed: 'Failed to load channel status',
     cacheRate: 'Cache rate',
     cacheRatePeriod: '{range} average cache',
-    cacheRateHint: 'Cache-read tokens divided by total input tokens over the selected range, weighted by traffic',
+    cacheRateHint: 'Cache-read tokens divided by total prompt tokens (input + cache creation + cache read) over the selected range, weighted by traffic',
     all: 'All',
     filterPlatform: 'Filter by platform',
     successRate: 'Availability',

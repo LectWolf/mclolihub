@@ -8,7 +8,7 @@ export default {
     loadFailed: '渠道状态加载失败',
     cacheRate: '缓存率',
     cacheRatePeriod: '{range} 平均缓存率',
-    cacheRateHint: '所选时段内缓存读取 Token 占总输入 Token 的比例，按流量加权计算',
+    cacheRateHint: '所选时段内缓存读取 Token 占总提示词 Token（普通输入 + 缓存创建 + 缓存读取）的比例，按流量加权计算',
     all: '全部',
     filterPlatform: '按平台筛选',
     successRate: '可用率',
