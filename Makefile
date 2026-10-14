@@ -6,6 +6,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/tokenRefresh.spec.ts \
 	src/constants/__tests__/platforms.spec.ts \
 	src/api/__tests__/admin.qualityCheck.spec.ts \
+	src/components/admin/usage/__tests__/UsageTable.spec.ts \
 	src/features/channel-monitor-v2/__tests__/MonitorSettingsPanel.quality.spec.ts \
 	src/components/user/monitor/__tests__/ChannelMonitorV3QualityPreview.spec.ts
 

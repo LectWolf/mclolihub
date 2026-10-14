@@ -175,6 +175,61 @@ describe('admin UsageTable tooltip', () => {
   })
 
   it.each([
+    { input: 183870, read: 12300, write: 0, regular: 171570, image: 0, imageRead: 0, text: 171570 },
+    { input: 183870, read: 12300, write: 5000, regular: 166570, image: 0, imageRead: 0, text: 166570 },
+    { input: 183870, read: 0, write: 0, regular: 183870, image: 0, imageRead: 0, text: 183870 },
+    { input: 2, read: 5, write: 0, regular: 0, image: 0, imageRead: 0, text: 0 },
+    { input: 183870, read: 12300, write: 0, regular: 171570, image: 30000, imageRead: 0, text: 141570 },
+    { input: 183870, read: 12300, write: 0, regular: 171570, image: 30000, imageRead: 2300, text: 143870 },
+  ])('shows ordinary input separately from cache for $input/$read/$write/$image/$imageRead', async ({ input, read, write, regular, image, imageRead, text }) => {
+    const row = {
+      ...baseImageRow,
+      image_count: 0,
+      billing_mode: 'token',
+      input_tokens: input,
+      output_tokens: 427,
+      cache_read_tokens: read,
+      cache_creation_tokens: write,
+      image_input_tokens: image,
+      image_size_breakdown: { image_cache_read_tokens: imageRead },
+      input_cost: text * 5 / 1_000_000,
+    }
+    const wrapper = mount(UsageTable, {
+      props: { data: [row], columns: [] },
+      global: { stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true } },
+    })
+
+    const tokenCell = wrapper.get('.space-y-1.text-sm')
+    expect(tokenCell.findAll('.font-medium')[0].text()).toBe(regular.toLocaleString())
+    expect(tokenCell.findAll('.font-medium')[1].text()).toBe('427')
+
+    const triggers = wrapper.findAll('.group.relative')
+    await triggers[0].trigger('mouseenter')
+    const detail = wrapper.get('.fixed')
+    const inputLabel = detail.findAll('span').find(span => span.text() === 'admin.usage.inputTokens')!
+    expect(inputLabel.element.parentElement?.textContent).toContain(text.toLocaleString())
+    const totalLabel = detail.findAll('span').find(span => span.text() === 'usage.totalTokens')!
+    expect(totalLabel.element.parentElement?.textContent).toContain((input + 427).toLocaleString())
+    if (read > 0) {
+      const cacheLabel = detail.findAll('span').find(span => span.text() === 'admin.usage.cacheReadTokens')!
+      expect(cacheLabel.element.parentElement?.textContent).toContain(read.toLocaleString())
+    }
+    if (write > 0) {
+      const cacheLabel = detail.findAll('span').find(span => span.text() === 'admin.usage.cacheCreationTokens')!
+      expect(cacheLabel.element.parentElement?.textContent).toContain(write.toLocaleString())
+    }
+    await triggers[0].trigger('mouseleave')
+    await triggers[triggers.length - 1].trigger('mouseenter')
+    const costDetail = wrapper.get('.fixed')
+    if (text > 0) {
+      expect(costDetail.text()).toContain('$5.0000 / 1M tokens')
+    } else {
+      expect(costDetail.text()).not.toContain('Input price')
+    }
+    wrapper.unmount()
+  })
+
+  it.each([
     ['en', 'Long context', 'Long-context pricing was applied. Input and output rates depend on the pricing tier, not a uniform multiplier.'],
     ['zh', '长上下文', '已应用长上下文计费。输入和输出费率取决于定价档位，并非统一倍率。'],
   ] as const)('marks only applied long-context billing with localized text in %s', (language, label, tooltip) => {

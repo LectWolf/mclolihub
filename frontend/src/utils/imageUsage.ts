@@ -24,19 +24,29 @@ export const hasImageOutputCost = (row: ImageOutputCostRow | null | undefined): 
 
 // --- Image input token / cost helpers ---
 
-type ImageInputTokenRow = Pick<UsageLog, 'input_tokens' | 'image_input_tokens'>
+type InputTokenRow = Pick<UsageLog, 'input_tokens'> &
+  Partial<Pick<UsageLog, 'cache_read_tokens' | 'cache_creation_tokens'>>
+type ImageInputTokenRow = InputTokenRow & Pick<UsageLog, 'image_input_tokens'> &
+  Partial<Pick<UsageLog, 'image_size_breakdown'>>
 type ImageInputCostRow = Pick<UsageLog, 'image_input_cost'>
+
+/** Ordinary input excludes the separately displayed cache read and write buckets. */
+export const ordinaryInputTokens = (row: InputTokenRow | null | undefined): number =>
+  Math.max(0, (row?.input_tokens ?? 0) - (row?.cache_read_tokens ?? 0) - (row?.cache_creation_tokens ?? 0))
 
 /** Whether the row contains any image-input tokens (e.g. gpt-image-2 image edits). */
 export const hasImageInputTokens = (row: ImageInputTokenRow | null | undefined): boolean =>
   (row?.image_input_tokens ?? 0) > 0
 
 /**
- * Text-only input tokens (total input minus image-input).
- * Returns 0 when no text tokens exist.
+ * Ordinary text input excludes cache and the uncached image-input bucket.
+ * Image cache reads are already included in cache_read_tokens.
  */
-export const textInputTokens = (row: ImageInputTokenRow | null | undefined): number =>
-  Math.max(0, (row?.input_tokens ?? 0) - (row?.image_input_tokens ?? 0))
+export const textInputTokens = (row: ImageInputTokenRow | null | undefined): number => {
+  const uncachedImageInput = Math.max(0,
+    (row?.image_input_tokens ?? 0) - (row?.image_size_breakdown?.image_cache_read_tokens ?? 0))
+  return Math.max(0, ordinaryInputTokens(row) - uncachedImageInput)
+}
 
 /** Whether the row has a non-zero image-input cost. */
 export const hasImageInputCost = (row: ImageInputCostRow | null | undefined): boolean =>
