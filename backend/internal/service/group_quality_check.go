@@ -59,6 +59,7 @@ type GroupQualityResult struct {
 	ModelID     string                   `json:"model_id"`
 	CheckedAt   time.Time                `json:"checked_at"`
 	HasPreview  bool                     `json:"has_preview"`
+	HasArtwork  bool                     `json:"has_artwork"`
 	Diagnostics *GroupQualityDiagnostics `json:"diagnostics,omitempty"`
 }
 
@@ -385,6 +386,13 @@ func validQualityPreview(data []byte) bool {
 	return err == nil && cfg.Width > 0 && cfg.Height > 0 && cfg.Width <= 1920 && cfg.Height <= 1280
 }
 
+func qualityArtworkValue(document string) any {
+	if len(document) == 0 || len(document) > pelicanDocumentLimit || strings.TrimSpace(document) == "" {
+		return nil
+	}
+	return document
+}
+
 func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate qualityCandidate, now time.Time, result qualityProbeResult) error {
 	switch result.Status {
 	case "success", "degraded", "unknown", "failed":
@@ -439,12 +447,12 @@ func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate quality
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
-        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png, artwork_html)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (group_id) DO UPDATE SET account_id = EXCLUDED.account_id, result_id = EXCLUDED.result_id,
             status = EXCLUDED.status, reason = EXCLUDED.reason, model_id = EXCLUDED.model_id,
-            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png`,
-		candidate.groupID, candidate.id, uuid.NewString(), result.Status, encodeQualityReason(result), result.ModelID, now, preview)
+            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png, artwork_html = EXCLUDED.artwork_html`,
+		candidate.groupID, candidate.id, uuid.NewString(), result.Status, encodeQualityReason(result), result.ModelID, now, preview, qualityArtworkValue(result.Artwork))
 	if err != nil {
 		return err
 	}
@@ -489,7 +497,7 @@ func (c *GroupQualityChecker) reconcileScheduling(ctx context.Context) {
 	}
 }
 
-// Only metadata is returned in matrix responses; PNG bytes are loaded on demand.
+// Matrix responses contain metadata only; PNG and HTML are loaded on demand.
 func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map[int64]bool, map[int64]*GroupQualityResult, error) {
 	enabled := make(map[int64]bool)
 	results := make(map[int64]*GroupQualityResult)
@@ -498,7 +506,7 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 	}
 	rows, err := c.db.QueryContext(ctx, `
         SELECT s.group_id, s.enabled, l.result_id::text, l.status, l.reason, l.model_id, l.checked_at,
-            COALESCE(octet_length(l.preview_png) > 0, FALSE)
+            COALESCE(octet_length(l.preview_png) > 0, FALSE), COALESCE(octet_length(l.artwork_html) > 0, FALSE)
         FROM group_quality_check_settings s
         LEFT JOIN group_quality_check_latest l ON l.group_id = s.group_id
           AND EXISTS (SELECT 1 FROM accounts a JOIN account_groups ag ON ag.account_id = a.id
@@ -510,16 +518,16 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
-		var on, preview bool
+		var on, preview, artwork bool
 		var rid, status, reason, model sql.NullString
 		var checked sql.NullTime
-		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview); err != nil {
+		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview, &artwork); err != nil {
 			return nil, nil, err
 		}
 		enabled[id] = on
 		if on && rid.Valid && checked.Valid {
 			displayReason, diagnostics := decodeQualityReason(reason.String)
-			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, Diagnostics: diagnostics}
+			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, HasArtwork: artwork, Diagnostics: diagnostics}
 		}
 	}
 	return enabled, results, rows.Err()
@@ -546,4 +554,27 @@ func (c *GroupQualityChecker) Preview(ctx context.Context, groupID int64, result
 		return nil, sql.ErrNoRows
 	}
 	return data, nil
+}
+
+func (c *GroupQualityChecker) Artwork(ctx context.Context, groupID int64, resultID string) (string, error) {
+	if c == nil || c.db == nil {
+		return "", sql.ErrNoRows
+	}
+	if _, err := uuid.Parse(resultID); err != nil {
+		return "", sql.ErrNoRows
+	}
+	var document string
+	err := c.db.QueryRowContext(ctx, `
+        SELECT l.artwork_html FROM group_quality_check_latest l
+        JOIN group_quality_check_settings s ON s.group_id = l.group_id AND s.enabled
+        JOIN accounts a ON a.id = l.account_id AND a.deleted_at IS NULL
+        JOIN account_groups ag ON ag.account_id = a.id AND ag.group_id = l.group_id
+        WHERE l.group_id = $1 AND l.result_id = $2 AND l.artwork_html IS NOT NULL`, groupID, resultID).Scan(&document)
+	if err != nil {
+		return "", err
+	}
+	if qualityArtworkValue(document) == nil {
+		return "", sql.ErrNoRows
+	}
+	return document, nil
 }

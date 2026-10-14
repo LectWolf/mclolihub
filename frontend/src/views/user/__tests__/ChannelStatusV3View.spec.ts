@@ -74,7 +74,7 @@ describe('channel status V3 filters and range cache rate', () => {
     expect(wrapper.get('[data-testid="monitor-summary"]').text()).toContain('90m cache 80.0%')
   })
 
-  it('filters platforms and groups locally, keeps all options, and requests only weighted summaries', async () => {
+  it('filters platforms locally, removes group filters, and requests only weighted summaries', async () => {
     await render()
     expect(wrapper.get('[data-platform-filter="all"]').text()).toContain('3')
     expect(wrapper.get('[data-platform-filter="openai"]').text()).toContain('2')
@@ -84,37 +84,31 @@ describe('channel status V3 filters and range cache rate', () => {
     expect(wrapper.findAll('article')).toHaveLength(2)
     expect(wrapper.get('[data-platform-filter="openai"]').attributes('aria-pressed')).toBe('true')
     expect(wrapper.find('[data-platform-filter="anthropic"]').exists()).toBe(true)
-    expect(wrapper.find('[data-group-filter="9"]').exists()).toBe(false)
+    expect(wrapper.find('[data-group-filter]').exists()).toBe(false)
     expect(api.getSnapshot).toHaveBeenLastCalledWith({ range: '90m', platforms: ['openai'], groupIds: [], models: [] }, false, expect.any(AbortSignal))
     expect(api.getMatrix).toHaveBeenCalledOnce()
     expect(wrapper.get('[data-testid="monitor-summary"]').text()).toContain('cache 85.0%')
 
-    vi.mocked(api.getSnapshot).mockResolvedValueOnce(snapshot(0.9))
-    await wrapper.get('[data-group-filter="7"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.findAll('article')).toHaveLength(1)
-    expect(wrapper.get('[data-group-filter="8"]').text()).toContain('Group 8')
-    expect(api.getSnapshot).toHaveBeenLastCalledWith({ range: '90m', platforms: ['openai'], groupIds: [7], models: [] }, false, expect.any(AbortSignal))
     await wrapper.get('[data-platform-filter="anthropic"]').trigger('click')
     await flushPromises()
     expect(wrapper.findAll('article')).toHaveLength(1)
-    expect(wrapper.get('[data-group-filter="all"]').attributes('aria-pressed')).toBe('true')
-    expect(wrapper.get('[data-group-filter="9"]').text()).toContain('Group 9')
+    expect(wrapper.find('[data-group-filter]').exists()).toBe(false)
+    expect(api.getSnapshot).toHaveBeenLastCalledWith({ range: '90m', platforms: ['anthropic'], groupIds: [], models: [] }, false, expect.any(AbortSignal))
   })
 
   it('loads the new range while keeping filters and fetches the full card matrix', async () => {
     await render()
-    await wrapper.get('[data-group-filter="7"]').trigger('click')
+    await wrapper.get('[data-platform-filter="openai"]').trigger('click')
     await flushPromises()
     vi.mocked(api.getMatrix).mockResolvedValueOnce({ ...matrix(), items: [row(7, 'openai', 0.95), row(8, 'openai', 0.2), row(9, 'anthropic', 0.3)] })
     vi.mocked(api.getSnapshot).mockResolvedValueOnce(snapshot(0.95))
     await wrapper.get('[data-range="24h"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="cache-rate"]').text()).toBe('95.0%')
+    expect(wrapper.findAll('article').map(card => card.get('.mt-5.grid .font-mono').text())).toEqual(['95.0%', '20.0%'])
     expect(wrapper.text()).toContain('24h average cache')
-    expect(api.getSnapshot).toHaveBeenLastCalledWith({ range: '24h', platforms: [], groupIds: [7], models: [] }, false, expect.any(AbortSignal))
+    expect(api.getSnapshot).toHaveBeenLastCalledWith({ range: '24h', platforms: ['openai'], groupIds: [], models: [] }, false, expect.any(AbortSignal))
     expect(api.getMatrix).toHaveBeenLastCalledWith({ range: '24h', platforms: [], groupIds: [], models: [] }, 'platform_group', false, expect.any(AbortSignal))
-    expect(wrapper.find('[data-group-filter="8"]').exists()).toBe(true)
+    expect(wrapper.find('[data-platform-filter="anthropic"]').exists()).toBe(true)
   })
 
   it('aborts obsolete summary requests and ignores a late result after filter changes', async () => {
@@ -136,7 +130,7 @@ describe('channel status V3 filters and range cache rate', () => {
   it('aborts pending summary work on unmount', async () => {
     await render()
     vi.mocked(api.getSnapshot).mockReturnValueOnce(new Promise(() => {}))
-    await wrapper.get('[data-group-filter="7"]').trigger('click')
+    await wrapper.get('[data-platform-filter="openai"]').trigger('click')
     const signal = vi.mocked(api.getSnapshot).mock.calls.at(-1)![2]!
     wrapper.unmount()
     expect(signal.aborted).toBe(true)

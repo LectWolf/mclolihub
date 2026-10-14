@@ -72,3 +72,31 @@ func (s *ChannelMonitorV2Service) QualityPreview(ctx context.Context, groupID in
 	}
 	return loader.LoadGroupQualityPreview(ctx, groupID, resultID)
 }
+
+type channelMonitorQualityArtworkReader interface {
+	LoadGroupQualityArtwork(context.Context, int64, string) (string, error)
+}
+
+func (s *ChannelMonitorV2Service) QualityArtwork(ctx context.Context, groupID int64, resultID string) (string, error) {
+	cfg, err := s.getEnabledConfig(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(cfg.GroupIDs) > 0 {
+		allowed := false
+		for _, id := range cfg.GroupIDs {
+			if id == groupID {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return "", sql.ErrNoRows
+		}
+	}
+	loader, ok := s.repo.(channelMonitorQualityArtworkReader)
+	if !ok {
+		return "", sql.ErrNoRows
+	}
+	return loader.LoadGroupQualityArtwork(ctx, groupID, resultID)
+}

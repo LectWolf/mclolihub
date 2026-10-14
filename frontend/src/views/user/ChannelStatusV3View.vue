@@ -24,7 +24,6 @@
         </div>
         <div v-if="availableRows.length" class="space-y-2.5 border-t border-gray-100 px-4 py-3 dark:border-dark-700 sm:px-5">
           <MonitorFilterChips kind="platform" :label="t('channelMonitorV3.filterPlatform')" :options="platformChoices" :model-value="filter.platforms[0] ?? 'all'" @update:model-value="setPlatform" />
-          <MonitorFilterChips kind="group" :label="t('channelMonitorV3.filterGroup')" :options="groupChoices" :model-value="String(filter.groupIds[0] ?? 'all')" @update:model-value="setGroup" />
         </div>
       </section>
 
@@ -140,17 +139,13 @@ const availableRows = computed(() => [...(matrix.value?.items ?? [])]
     return ao - bo || (a.group_id ?? 0) - (b.group_id ?? 0)
   }))
 const platformRows = computed(() => availableRows.value.filter(row => !filter.value.platforms.length || filter.value.platforms.includes(row.platform)))
-const rows = computed(() => platformRows.value.filter(row => !filter.value.groupIds.length || filter.value.groupIds.includes(row.group_id!)))
+const rows = computed(() => platformRows.value)
 const platformChoices = computed<MonitorFilterChip[]>(() => {
   const counts = new Map<string, number>()
   for (const row of availableRows.value) counts.set(row.platform, (counts.get(row.platform) ?? 0) + 1)
   return [{ value: 'all', label: t('channelMonitorV3.all'), count: availableRows.value.length },
     ...[...counts].map(([platform, count]) => ({ value: platform, label: providerLabel(platform), platform, count }))]
 })
-const groupChoices = computed<MonitorFilterChip[]>(() => [
-  { value: 'all', label: t('channelMonitorV3.all'), count: platformRows.value.length },
-  ...platformRows.value.map(row => ({ value: String(row.group_id), label: row.group_name || t('channelMonitorV3.unknownGroup'), platform: row.platform, count: 1 })),
-])
 const platformSections = computed(() => {
   const grouped = new Map<string, typeof rows.value>()
   for (const row of rows.value) {
@@ -188,7 +183,6 @@ function formatPercent(value: number) { return formatMonitorPercent(value, local
 function formatTime(value?: string) { if (!value) return '-'; return new Intl.DateTimeFormat(locale.value || undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) }
 function setRange(value: MonitorRange) { filter.value = { ...filter.value, range: value } }
 function setPlatform(value: string) { filter.value = { ...filter.value, platforms: value === 'all' ? [] : [value], groupIds: [] } }
-function setGroup(value: string) { filter.value = { ...filter.value, groupIds: value === 'all' ? [] : [Number(value)] } }
 function filterKey(value: MonitorFilter) { return JSON.stringify(value) }
 
 function getUserRateMultiplier(groupId?: number) {

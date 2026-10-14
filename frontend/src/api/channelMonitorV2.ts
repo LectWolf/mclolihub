@@ -178,6 +178,9 @@ export interface MonitorQualityDiagnostics {
   capture_overflow: boolean
   failure_code?: string
   deadline_source?: string
+  artwork_available?: boolean
+  render_duration_ms?: number
+  render_failure_code?: string
 }
 
 export interface MonitorLatestQuality {
@@ -187,6 +190,7 @@ export interface MonitorLatestQuality {
   model_id: string
   checked_at: string
   has_preview: boolean
+  has_artwork?: boolean
   diagnostics?: MonitorQualityDiagnostics | null
 }
 
@@ -319,4 +323,15 @@ export async function getQualityPreview(resultId: string, groupId: number, signa
     throw new Error('Invalid quality preview')
   }
   return data
+}
+
+export async function getQualityArtwork(resultId: string, groupId: number, signal?: AbortSignal): Promise<string> {
+  const { data } = await apiClient.get<{ html: string }>(`/channel-monitor-v2/quality-artwork/${encodeURIComponent(resultId)}`, {
+    params: { group_id: groupId },
+    signal,
+  })
+  if (typeof data?.html !== 'string' || !data.html.trim() || new TextEncoder().encode(data.html).length > 1048576) {
+    throw new Error('Invalid quality artwork')
+  }
+  return data.html
 }

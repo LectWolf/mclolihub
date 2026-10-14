@@ -1,9 +1,11 @@
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { rendererFailureCode } from './error-codes.mjs';
 import { CSP, FRACTIONS, MAX_OUTPUT, MAX_PNG, encodeFrames, readHTML } from './policy.mjs';
 import { killTree } from './process-tree.mjs';
+
+let chromium;
 
 let host;
 let browser;
@@ -107,6 +109,7 @@ async function capture(html) {
 
 try {
   if (process.getuid?.() === 0) throw new Error('Root rendering is forbidden');
+  ({ chromium } = await import('playwright'));
   const html = await readHTML(process.stdin);
   const json = await capture(html);
   await close();
@@ -114,7 +117,6 @@ try {
   else process.exit(1);
 } catch (error) {
   await close();
-  const known = /^(?:Unsafe HTML|HTML |Rendered output|Root rendering)/.test(error.message);
-  if (process.connected) process.send({ error: known ? error.message : 'Chromium rendering failed (sandbox required)' }, () => process.exit(1));
+  if (process.connected) process.send({ error: rendererFailureCode(error) }, () => process.exit(1));
   else process.exit(1);
 }

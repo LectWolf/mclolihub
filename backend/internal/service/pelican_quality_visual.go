@@ -357,17 +357,24 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 		return result
 	}
 	result.Artwork = document
+	result.Diagnostics.ArtworkAvailable = true
+	renderStarted := time.Now()
 	result.Diagnostics.Stage = "rendering"
 	frames, err := renderPelicanVisualFrames(ctx, document)
+	result.Diagnostics.RenderDurationMs = time.Since(renderStarted).Milliseconds()
 	if err != nil {
 		result.Reason = "Quality evaluation inconclusive: isolated rendering unavailable"
+		result.Diagnostics.RenderFailureCode = pelicanRenderFailureCode(err)
 		return result
 	}
 	result.PreviewPNG, _ = base64.StdEncoding.DecodeString(frames[0].PNG)
 	result.Diagnostics.Stage = "reference_rendering"
+	referenceStarted := time.Now()
 	reference, err := pelicanReferenceFrame(ctx)
+	result.Diagnostics.RenderDurationMs += time.Since(referenceStarted).Milliseconds()
 	if err != nil {
 		result.Reason = "Quality evaluation inconclusive: reference rendering unavailable"
+		result.Diagnostics.RenderFailureCode = pelicanRenderFailureCode(err)
 		return result
 	}
 	result.Diagnostics.Stage = "visual_review"
@@ -544,10 +551,21 @@ func renderPelicanVisualFrames(ctx context.Context, document string) ([]pelicanV
 	cmd.Stdin = strings.NewReader(document)
 	output := &pelicanCapture{limit: pelicanRenderOutputLimit}
 	cmd.Stdout = output
-	cmd.Stderr = io.Discard
+	stderr := &pelicanCapture{limit: 16 << 10}
+	cmd.Stderr = stderr
 	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Run(); err != nil || output.overflow {
-		return nil, errors.New("isolated renderer failed")
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		var execErr *exec.Error
+		if errors.As(err, &execErr) || errors.Is(err, os.ErrNotExist) {
+			return nil, errors.New("renderer executable unavailable")
+		}
+		if output.overflow {
+			return nil, errors.New("renderer output too large")
+		}
+		return nil, errors.New(classifyPelicanRendererStderr(stderr.String()))
 	}
 	return parsePelicanVisualFrames(output.Bytes())
 }

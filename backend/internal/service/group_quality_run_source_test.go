@@ -105,7 +105,7 @@ func TestQualityAutomaticTaskReportsSourceAndBatchProgress(t *testing.T) {
 	for i, candidate := range candidates {
 		mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished", "source"}).AddRow("automatic-id", 7, "running", "", i, 2, now, nil, "automatic"))
 		if i > 0 {
-			mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest`).WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview"}).AddRow(7, true, "result", "success", "safe reason", "text-model", now, false))
+			mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest`).WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork"}).AddRow(7, true, "result", "success", "safe reason", "text-model", now, false, false))
 		}
 		expectQualitySave(mock, now, candidate, "success", 0, false, nil)
 		expectAutomaticProgress(mock, now, 7, "running", i+1)

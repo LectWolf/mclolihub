@@ -12,6 +12,7 @@ export function formatQualityDiagnostics(latest: MonitorLatestQuality, groupId?:
     checked_at: latest.checked_at,
     reason: latest.reason,
     has_preview: latest.has_preview,
+    has_artwork: latest.has_artwork ?? false,
     run: run ? {
       run_id: run.run_id, source: run.source ?? 'manual', status: run.status,
       checked_accounts: run.checked_accounts, total_accounts: run.total_accounts,
@@ -31,6 +32,11 @@ export function formatQualityDiagnostics(latest: MonitorLatestQuality, groupId?:
         capture_overflow: details.capture_overflow,
         failure_code: details.failure_code ?? null,
         deadline_source: details.deadline_source ?? null,
+      },
+      rendering: {
+        artwork_available: latest.has_artwork ?? false,
+        duration_ms: details.render_duration_ms ?? null,
+        failure_code: details.render_failure_code ?? null,
       },
     } : null,
     diagnostic_note: details

@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { killTree } from './process-tree.mjs';
+import { rendererFailureCode } from './error-codes.mjs';
 
 let server;
 let stopping = false;
@@ -37,9 +38,9 @@ try {
   process.emit('browser-ready');
   if (!process.connected || stopping) await stop();
   else process.send({ endpoint: server.wsEndpoint(), browserPid: server.process().pid });
-} catch {
+} catch (error) {
   launching = false;
   process.emit('browser-ready');
-  if (process.connected) process.send({ error: 'Chromium launch failed (sandbox required)' });
+  if (process.connected) await new Promise(resolve => process.send({ error: rendererFailureCode(error) }, resolve));
   await stop();
 }
