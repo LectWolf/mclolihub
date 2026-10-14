@@ -232,9 +232,18 @@ func pelicanRequestFailureReason(err error) string {
 	return "Artwork generation failed or did not complete"
 }
 
+const (
+	pelicanGenerationTimeout = 15 * time.Minute
+	pelicanReviewTimeout     = 90 * time.Second
+)
+
 func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID int64, modelID, prompt string, limit int) (pelicanTestOutput, error) {
 	parentCtx := ctx
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	timeout := pelicanGenerationTimeout
+	if _, reviewing := ctx.Value(pelicanQualityContextKey{}).(*pelicanVisualContext); reviewing {
+		timeout = pelicanReviewTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	w := &pelicanCapture{header: make(http.Header), limit: 4*limit + (64 << 10)}
 	c, _ := gin.CreateTestContext(w)
@@ -299,7 +308,7 @@ func pelicanHTML(text string) string {
 
 func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, accountID int64, modelID string) (result qualityProbeResult) {
 	started := time.Now()
-	result = qualityProbeResult{Status: "unknown", ModelID: modelID, Diagnostics: &GroupQualityDiagnostics{Stage: "account_validation", GenerationTimeoutSeconds: 90}}
+	result = qualityProbeResult{Status: "unknown", ModelID: modelID, Diagnostics: &GroupQualityDiagnostics{Stage: "account_validation", GenerationTimeoutSeconds: int(pelicanGenerationTimeout / time.Second)}}
 	defer func() { result.Diagnostics.TotalDurationMs = time.Since(started).Milliseconds() }()
 	if s == nil || s.accountRepo == nil {
 		result.Reason = "Quality evaluator unavailable"

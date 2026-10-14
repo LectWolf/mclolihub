@@ -22,8 +22,8 @@ const (
 	qualityRecoveryInterval = 30 * time.Minute
 	qualitySuspectRatio     = 0.5
 	qualityProbesPerTick    = 3
-	qualityProbeTimeout     = 12 * time.Minute
-	qualityLockTTL          = 40 * time.Minute
+	qualityProbeTimeout     = 20 * time.Minute
+	qualityLockTTL          = 65 * time.Minute
 	qualityLockKey          = "group-quality:scan"
 	qualityPreviewMaxBytes  = 2 << 20
 )

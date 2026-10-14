@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const qualityManualRunTimeout = 38 * time.Minute
+const qualityManualRunTimeout = qualityProbesPerTick*qualityProbeTimeout + 2*time.Minute
 
 var (
 	ErrQualityRunBusy        = errors.New("another quality check is running; try again after it finishes")
