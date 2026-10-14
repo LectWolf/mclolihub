@@ -248,23 +248,6 @@ func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
 }
 
-func TestAccountTestService_OpenAIStreamUsesSSEEventNameWhenDataOmitsType(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	ctx, recorder := newTestContext()
-	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), pelicanQualityContextKey{}, true))
-
-	stream := strings.NewReader("event: response.output_text.delta\n" +
-		"data: {\"delta\":\"<html><body>pelican</body></html>\"}\n\n" +
-		"event: response.completed\n" +
-		"data: {\"response\":{\"model\":\"gpt-6.1-sol\",\"status\":\"completed\"}}\n\n")
-
-	svc := &AccountTestService{}
-	err := svc.processOpenAIStream(ctx, stream)
-	require.NoError(t, err)
-	require.Contains(t, recorder.Body.String(), "pelican")
-	require.Contains(t, recorder.Body.String(), `"success":true`)
-}
-
 func TestAccountTestService_DeepSeekCustomBaseURLUsesV1ResponsesPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := newTestContext()

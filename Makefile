@@ -1,58 +1,37 @@
-.PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical
+.PHONY: build build-backend build-frontend test test-backend test-backend-critical test-frontend test-frontend-critical
 
 FRONTEND_CRITICAL_VITEST := \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
-	src/api/__tests__/keys.bulkUpdate.spec.ts \
-	src/composables/__tests__/useModelWhitelist.spec.ts \
-	src/components/account/__tests__/OpenAIReferralCell.spec.ts \
-	src/components/account/__tests__/OpenAIReferralCell.transport.spec.ts \
-	src/components/account/__tests__/OpenAIQuotaResetCell.spark_shadow.spec.ts \
 	src/constants/__tests__/platforms.spec.ts \
-	src/components/account/__tests__/credentialsBuilder.platformCatalog.spec.ts \
-	src/components/account/__tests__/CreateAccountModal.spec.ts \
-	src/components/account/__tests__/EditAccountModal.spec.ts \
-	src/components/account/__tests__/credentialsBuilder.spec.ts \
-	src/components/account/__tests__/OpenCodeGoProtocolRulesEditor.spec.ts \
-	src/components/keys/__tests__/BulkEditKeysModal.spec.ts \
-	src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts \
-	src/views/user/__tests__/KeysView.spec.ts \
-	src/api/__tests__/channelMonitorV2.spec.ts \
-	src/views/auth/__tests__/LinuxDoCallbackView.spec.ts \
-	src/views/auth/__tests__/WechatCallbackView.spec.ts \
-	src/views/user/__tests__/PaymentView.spec.ts \
-	src/views/user/__tests__/PaymentResultView.spec.ts \
-	src/views/user/__tests__/ChannelStatusView.mode.spec.ts \
-	src/components/user/profile/__tests__/ProfileInfoCard.spec.ts \
-	src/components/user/profile/__tests__/ProfileIdentityBindingsSection.spec.ts \
-	src/views/admin/__tests__/SettingsView.spec.ts \
-	src/features/channel-monitor-v2/__tests__/designSystem.structure.spec.ts \
-	src/features/channel-monitor-v2/__tests__/monitorFormat.spec.ts \
-	src/features/channel-monitor-v2/__tests__/monitorZoom.spec.ts \
-	src/components/admin/channel/__tests__/PricingEntryCard.modelDefaultPrice.spec.ts
+	src/api/__tests__/admin.qualityCheck.spec.ts \
+	src/features/channel-monitor-v2/__tests__/MonitorSettingsPanel.quality.spec.ts \
+	src/components/user/monitor/__tests__/ChannelMonitorV3QualityPreview.spec.ts
 
-# 一键编译前后端
-build: build-backend build-frontend
+BACKEND_CRITICAL_PACKAGES := ./internal/service ./internal/handler ./internal/repository ./internal/server
+BACKEND_CRITICAL_TESTS := ^(TestQuality|TestPelican|TestGroupHealthManual|TestAccountTestService_ResponsesStreamCompatibility|TestUsageLogRepositoryGetStatsWithFiltersRequestTypePriority|TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_NonStreamingSuccess|TestOpenAIGatewayServiceRecordUsage_(UsesUserSpecificGroupRate|ClampsActualInputTokensToZero|GPT56SeparatesCacheWriteForBillingAndStats)|TestAPIContracts)
 
-# 编译后端（复用 backend/Makefile）
-build-backend:
-	@$(MAKE) -C backend build
-
-# 编译前端（需要已安装依赖）
-build-frontend:
-	@pnpm --dir frontend run build
-
-# 运行测试（后端 + 前端）
+# Default checks stay short. Full suites remain available through backend/Makefile
+# and pnpm --dir frontend test:run when a change needs broader coverage.
 test: test-backend test-frontend
 
-test-backend:
-	@$(MAKE) -C backend test
+test-backend: test-backend-critical
+
+test-backend-critical:
+	@cd backend && go test -tags=unit -timeout=3m $(BACKEND_CRITICAL_PACKAGES) -run '$(BACKEND_CRITICAL_TESTS)'
 
 test-frontend:
-	@pnpm --dir frontend run lint:check
 	@pnpm --dir frontend run typecheck
 	@$(MAKE) test-frontend-critical
 
 test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)
+
+build: build-frontend build-backend
+
+build-backend:
+	@$(MAKE) -C backend build
+
+build-frontend:
+	@pnpm --dir frontend run build

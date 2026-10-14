@@ -429,10 +429,13 @@ func TestOpenAIGatewayServiceRecordUsage_UsesUserSpecificGroupRate(t *testing.T)
 	require.Equal(t, 1, rateRepo.calls)
 	require.NotNil(t, usageRepo.lastLog)
 	require.Equal(t, userRate, usageRepo.lastLog.RateMultiplier)
-	require.Equal(t, 12, usageRepo.lastLog.InputTokens)
+	require.Equal(t, 15, usageRepo.lastLog.InputTokens, "展示输入保留上游总量，计费输入单独扣除缓存")
+	require.Equal(t, 19, usageRepo.lastLog.TotalTokens())
 	require.Equal(t, 3, usageRepo.lastLog.CacheReadTokens)
 
 	expected := expectedOpenAICost(t, svc, "gpt-5.1", usage, userRate)
+	require.InDelta(t, expected.InputCost, usageRepo.lastLog.InputCost, 1e-12)
+	require.InDelta(t, expected.CacheReadCost, usageRepo.lastLog.CacheReadCost, 1e-12)
 	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
 	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
 	require.Equal(t, 1, userRepo.deductCalls)
@@ -1171,7 +1174,18 @@ func TestOpenAIGatewayServiceRecordUsage_ClampsActualInputTokensToZero(t *testin
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, 0, usageRepo.lastLog.InputTokens)
+	require.Equal(t, 2, usageRepo.lastLog.InputTokens, "计费普通输入夹零不改变展示输入")
+	require.Equal(t, 5, usageRepo.lastLog.CacheReadTokens)
+	require.Equal(t, 3, usageRepo.lastLog.TotalTokens())
+	require.Zero(t, usageRepo.lastLog.InputCost, "缓存超过总输入时，普通输入计费桶应夹零")
+	expected := expectedOpenAICost(t, svc, "gpt-5.1", OpenAIUsage{
+		InputTokens:          2,
+		OutputTokens:         1,
+		CacheReadInputTokens: 5,
+	}, svc.cfg.Default.RateMultiplier)
+	require.InDelta(t, expected.CacheReadCost, usageRepo.lastLog.CacheReadCost, 1e-12)
+	require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
 }
 
 func TestOpenAIGatewayServiceRecordUsage_GPT56SeparatesCacheWriteForBillingAndStats(t *testing.T) {
@@ -1206,7 +1220,7 @@ func TestOpenAIGatewayServiceRecordUsage_GPT56SeparatesCacheWriteForBillingAndSt
 
 	require.NoError(t, err)
 	require.NotNil(t, usageRepo.lastLog)
-	require.Equal(t, 700, usageRepo.lastLog.InputTokens)
+	require.Equal(t, 1000, usageRepo.lastLog.InputTokens, "展示总输入包含缓存明细；普通输入计费桶为 700")
 	require.Equal(t, 200, usageRepo.lastLog.CacheCreationTokens)
 	require.Equal(t, 100, usageRepo.lastLog.CacheReadTokens)
 	require.Equal(t, 1050, usageRepo.lastLog.TotalTokens())

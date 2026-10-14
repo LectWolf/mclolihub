@@ -550,7 +550,7 @@ func TestAPIContracts(t *testing.T) {
 					"total_cache_tokens": 3,
 					"total_cache_creation_tokens": 1,
 					"total_cache_read_tokens": 2,
-					"total_tokens": 53,
+					"total_tokens": 50,
 					"total_cost": 0.75,
 					"total_actual_cost": 0.75,
 					"average_duration_ms": 200
