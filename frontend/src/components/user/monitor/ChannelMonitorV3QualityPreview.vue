@@ -22,16 +22,19 @@
         </button>
       </li>
     </ul>
-    <p v-else-if="historyLoading" class="mt-2 text-xs text-gray-500 dark:text-gray-400" role="status">{{ t('channelMonitorV3.quality.loading') }}</p>
+    <div v-else-if="historyLoading" class="mt-2 flex gap-1.5" role="status" :aria-label="t('channelMonitorV3.quality.loading')">
+      <span v-for="index in 3" :key="index" class="quality-chip-skeleton" />
+    </div>
     <p v-else class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.status.pending') }}</p>
+
     <Teleport to="body">
       <div
         v-if="open && activeItem"
         :id="panelId"
         ref="panel"
         role="dialog"
-        :aria-label="`${verdictLabel(activeItem)} ${scoreText(activeItem)}`"
-        class="quality-preview-panel fixed z-[60] overflow-auto overscroll-contain rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-800 shadow-lg dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100"
+        :aria-label="t('channelMonitorV3.quality.htmlOutput')"
+        class="quality-preview-panel fixed z-[60] overflow-hidden overscroll-contain rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-800 shadow-lg dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100"
         :style="panelStyle"
         @mouseenter="cancelClose"
         @mouseleave="leave"
@@ -40,25 +43,32 @@
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="text-sm font-semibold" :class="verdictClass(activeItem)">{{ verdictLabel(activeItem) }}</p>
+            <p class="text-sm font-semibold text-blue-700 dark:text-blue-300">{{ t('channelMonitorV3.quality.htmlOutput') }}</p>
             <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-              <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.score') }}</dt>
-              <dd class="font-mono tabular-nums">{{ scoreText(activeItem) }}</dd>
               <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.model') }}</dt>
               <dd class="break-words">{{ modelLabel(activeItem) }}</dd>
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.checkedAt') }}</dt>
+              <dd class="font-mono tabular-nums">{{ formatHm(activeItem.checked_at) }}</dd>
             </dl>
           </div>
           <button type="button" class="shrink-0 rounded p-1 text-gray-500 hover:text-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 dark:text-gray-400 dark:hover:text-gray-100" :aria-label="t('channelMonitorV3.quality.close')" @click="close">
             <Icon name="x" size="sm" />
           </button>
         </div>
-        <p v-if="artworkLoading" class="mt-3" role="status">{{ t('channelMonitorV3.quality.loading') }}</p>
-        <div v-else-if="artworkError" class="mt-3" role="alert">
+
+        <div v-if="artworkLoading" class="quality-stage mt-3 rounded border border-gray-200 bg-white dark:border-dark-600" role="status" :aria-label="t('channelMonitorV3.quality.loading')">
+          <div class="quality-preview-skeleton" aria-hidden="true">
+            <span class="quality-preview-skeleton-line quality-preview-skeleton-line-wide" />
+            <span class="quality-preview-skeleton-line" />
+            <span class="quality-preview-skeleton-line quality-preview-skeleton-line-short" />
+          </div>
+        </div>
+        <div v-else-if="artworkError" class="quality-stage mt-3 rounded border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-900" role="alert">
           <p>{{ t('channelMonitorV3.quality.previewFailed') }}</p>
           <button type="button" class="btn btn-ghost btn-sm mt-2" @click="retryArtwork">{{ t('channelMonitorV3.quality.retry') }}</button>
         </div>
         <div v-else-if="artworkDocument" class="quality-stage mt-3 rounded border border-gray-200 bg-white dark:border-dark-600">
-          <iframe :srcdoc="artworkDocument" sandbox="" referrerpolicy="no-referrer" :title="t('channelMonitorV3.quality.htmlPreview')" class="quality-frame" />
+          <iframe :srcdoc="artworkDocument" sandbox="" scrolling="no" referrerpolicy="no-referrer" :title="t('channelMonitorV3.quality.htmlPreview')" class="quality-frame" />
         </div>
         <p v-else class="mt-3 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.noPreview') }}</p>
       </div>
@@ -72,17 +82,13 @@ import { useI18n } from 'vue-i18n'
 import { getQualityArtwork, getQualityHistory, type MonitorLatestQuality } from '@/api/channelMonitorV2'
 import Icon from '@/components/icons/Icon.vue'
 import { qualityArtworkDocument } from '@/features/channel-monitor-v2/qualityArtwork'
-import type { GroupQualityRun } from '@/api/admin/qualityCheck'
 
 const props = defineProps<{
   groupId?: number
   enabled?: boolean
   latest?: MonitorLatestQuality | null
-  qualityRun?: GroupQualityRun
   history?: MonitorLatestQuality[] | null
 }>()
-// Kept so MonitorSettingsPanel can pass qualityRun without a fallthrough attribute.
-void props.qualityRun
 
 const { t } = useI18n()
 const panelId = `quality-preview-${useId()}`
@@ -102,24 +108,18 @@ const artworkOwner = ref('')
 let alive = true
 let historyRequest: AbortController | undefined
 let historyVersion = 0
-let artworkRequest: AbortController | undefined
 let artworkVersion = 0
 let closeTimer: ReturnType<typeof setTimeout> | undefined
-const PASS_SCORE = 80
+
+const historyCache = new Map<number, MonitorLatestQuality[]>()
+const artworkCache = new Map<string, string>()
+const artworkPending = new Map<string, Promise<string>>()
 const PANEL_GUTTER = 16
-const PANEL_MAX_WIDTH = 640
+const PANEL_MAX_WIDTH = 520
+const PREVIEW_HEIGHT = 320
 
 function historyIsProvided() {
   return Array.isArray(props.history)
-}
-function isValidScore(score: unknown): score is number {
-  return typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100
-}
-function verdictOf(item?: MonitorLatestQuality | null) {
-  const score = item?.score
-  if (!isValidScore(score)) return 'unscored'
-  if (typeof item?.passed === 'boolean') return item.passed ? 'pass' : 'fail'
-  return score >= PASS_SCORE ? 'pass' : 'fail'
 }
 function normalize(items: readonly MonitorLatestQuality[] | null | undefined) {
   if (!items?.length) return []
@@ -152,30 +152,15 @@ const visible = computed(() => props.enabled !== false && Boolean(props.enabled 
 const activeItem = computed(() => displayItems.value.find(item => item.result_id === activeId.value) ?? null)
 const heading = computed(() => t('channelMonitorV3.quality.historyHeading', { count: displayItems.value.length }))
 
-function verdictLabel(item: MonitorLatestQuality) {
-  return t(`channelMonitorV3.quality.verdict.${verdictOf(item)}`)
-}
-function scoreText(item: MonitorLatestQuality) {
-  return isValidScore(item.score) ? String(item.score) : '—'
-}
 function modelLabel(item: MonitorLatestQuality) {
   const model = item.model_id?.trim()
   return model || t('channelMonitorV3.quality.defaultModel')
 }
 function chipLabel(item: MonitorLatestQuality) {
-  return `${formatHm(item.checked_at)} ${verdictLabel(item)}`
+  return `${formatHm(item.checked_at)} · ${item.has_artwork ? t('channelMonitorV3.quality.htmlOutput') : t('channelMonitorV3.quality.noPreview')}`
 }
 function dotClass(item: MonitorLatestQuality) {
-  const verdict = verdictOf(item)
-  if (verdict === 'pass') return 'bg-emerald-500'
-  if (verdict === 'fail') return 'bg-red-500'
-  return 'bg-gray-400'
-}
-function verdictClass(item: MonitorLatestQuality) {
-  const verdict = verdictOf(item)
-  if (verdict === 'pass') return 'text-emerald-700 dark:text-emerald-400'
-  if (verdict === 'fail') return 'text-red-600 dark:text-red-400'
-  return 'text-gray-500 dark:text-gray-400'
+  return item.has_artwork ? 'bg-blue-500' : 'bg-gray-400'
 }
 function formatHm(value: string) {
   const time = Date.parse(value)
@@ -187,8 +172,6 @@ function cancelClose() {
   clearTimeout(closeTimer)
 }
 function clearArtwork() {
-  artworkRequest?.abort()
-  artworkRequest = undefined
   artworkVersion += 1
   artworkLoading.value = false
   artworkError.value = false
@@ -202,16 +185,20 @@ function close() {
   activeId.value = ''
   clearArtwork()
 }
-function place(trigger: HTMLElement) {
+function place(trigger: HTMLElement, event?: Event) {
   const rect = trigger.getBoundingClientRect()
   const width = Math.min(PANEL_MAX_WIDTH, Math.max(0, window.innerWidth - PANEL_GUTTER * 2))
-  const above = Math.max(0, rect.top - 24)
-  const below = Math.max(0, window.innerHeight - rect.bottom - 24)
-  const placeBelow = below >= above
-  const height = Math.min(720, placeBelow ? below : above)
-  const top = placeBelow ? rect.bottom + 8 : Math.max(PANEL_GUTTER, rect.top - height - 8)
-  const left = Math.max(PANEL_GUTTER, Math.min(rect.left, window.innerWidth - width - PANEL_GUTTER))
-  panelStyle.value = { width: `${width}px`, maxHeight: `${height}px`, left: `${left}px`, top: `${top}px` }
+  const maxHeight = Math.max(220, Math.min(window.innerHeight - PANEL_GUTTER * 2, PREVIEW_HEIGHT + 112))
+  const pointer = event instanceof MouseEvent && event.clientX > 0 && event.clientY > 0
+    ? { x: event.clientX, y: event.clientY }
+    : { x: rect.left + rect.width / 2, y: rect.bottom }
+  let left = pointer.x + 12
+  if (left + width > window.innerWidth - PANEL_GUTTER) left = pointer.x - width - 12
+  left = Math.max(PANEL_GUTTER, Math.min(left, window.innerWidth - width - PANEL_GUTTER))
+  let top = pointer.y + 12
+  if (top + maxHeight > window.innerHeight - PANEL_GUTTER) top = pointer.y - maxHeight - 12
+  if (top < PANEL_GUTTER) top = Math.max(PANEL_GUTTER, Math.min(rect.top, window.innerHeight - maxHeight - PANEL_GUTTER))
+  panelStyle.value = { width: `${width}px`, maxHeight: `${maxHeight}px`, left: `${left}px`, top: `${top}px` }
 }
 async function loadArtwork(item: MonitorLatestQuality) {
   const resultId = item.result_id
@@ -222,41 +209,54 @@ async function loadArtwork(item: MonitorLatestQuality) {
     return
   }
   const owner = `${groupId}:${resultId}`
-  if (artworkOwner.value === owner && (artworkDocument.value || artworkLoading.value || artworkError.value)) return
-  artworkRequest?.abort()
-  const current = new AbortController()
-  artworkRequest = current
+  const cached = artworkCache.get(owner)
+  if (cached) {
+    artworkOwner.value = owner
+    artworkDocument.value = cached
+    artworkLoading.value = false
+    artworkError.value = false
+    return
+  }
   const version = ++artworkVersion
   artworkOwner.value = owner
   artworkLoading.value = true
   artworkError.value = false
   artworkDocument.value = ''
+  let pending = artworkPending.get(owner)
+  if (!pending) {
+    pending = getQualityArtwork(resultId, groupId).then(html => {
+      const document = qualityArtworkDocument(html)
+      artworkCache.set(owner, document)
+      return document
+    })
+    artworkPending.set(owner, pending)
+  }
   try {
-    const html = await getQualityArtwork(resultId, groupId, current.signal)
-    if (!alive || current.signal.aborted || artworkRequest !== current || version !== artworkVersion) return
-    if (props.groupId !== groupId || activeId.value !== resultId || !open.value) return
-    const document = qualityArtworkDocument(html)
-    if (!alive || props.groupId !== groupId || activeId.value !== resultId || !open.value || version !== artworkVersion) return
-    artworkDocument.value = document
+    const document = await pending
+    if (!alive || version !== artworkVersion) return
+    if (props.groupId === groupId && activeId.value === resultId && open.value) artworkDocument.value = document
   } catch {
-    if (!alive || current.signal.aborted || artworkRequest !== current || version !== artworkVersion) return
+    if (!alive || version !== artworkVersion) return
     if (props.groupId === groupId && activeId.value === resultId) artworkError.value = true
   } finally {
-    if (artworkRequest === current) {
-      artworkRequest = undefined
-      artworkLoading.value = false
-    }
+    if (artworkPending.get(owner) === pending) artworkPending.delete(owner)
+    if (version === artworkVersion) artworkLoading.value = false
   }
 }
 function show(item: MonitorLatestQuality, event: Event) {
   cancelClose()
   const trigger = event.currentTarget
   if (!(trigger instanceof HTMLElement)) return
-  const switched = activeId.value !== item.result_id || props.groupId + ':' + item.result_id !== artworkOwner.value
+  const owner = typeof props.groupId === 'number' ? `${props.groupId}:${item.result_id}` : ''
+  if (artworkOwner.value !== owner) {
+    artworkDocument.value = owner ? artworkCache.get(owner) ?? '' : ''
+    artworkError.value = false
+    artworkLoading.value = false
+  }
   activeId.value = item.result_id
-  place(trigger)
+  place(trigger, event)
   open.value = true
-  if (switched || (!artworkDocument.value && !artworkLoading.value && !artworkError.value)) void loadArtwork(item)
+  if (!artworkDocument.value && !artworkLoading.value && !artworkError.value) void loadArtwork(item)
 }
 function togglePinned(item: MonitorLatestQuality, event: Event) {
   if (pinned.value && open.value && activeId.value === item.result_id) {
@@ -315,6 +315,13 @@ async function syncHistory() {
     return
   }
   const groupId = props.groupId as number
+  const cached = historyCache.get(groupId)
+  if (cached) {
+    fetchedItems.value = cached
+    historyLoading.value = false
+    historySettled.value = true
+    return
+  }
   const current = new AbortController()
   historyRequest = current
   historySettled.value = false
@@ -324,7 +331,9 @@ async function syncHistory() {
     const items = await getQualityHistory(groupId, current.signal)
     if (!alive || current.signal.aborted || historyRequest !== current || version !== historyVersion) return
     if (props.groupId !== groupId || historyIsProvided() || props.enabled === false) return
-    fetchedItems.value = items
+    const normalized = normalize(items)
+    historyCache.set(groupId, normalized)
+    fetchedItems.value = normalized
   } catch {
     if (!alive || current.signal.aborted || historyRequest !== current || version !== historyVersion) return
     fetchedItems.value = []
@@ -368,24 +377,40 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .quality-preview-panel { overflow-wrap: anywhere; }
-/* 960x640 layout viewport scaled to 600x400. Do not refit the HTML to the popup width. */
 .quality-stage {
   position: relative;
-  width: 600px;
-  height: 400px;
+  width: min(480px, calc(100vw - 64px));
+  height: min(320px, calc(100vh - 180px));
+  min-height: 180px;
   flex: none;
   overflow: hidden;
   background: #fff;
 }
 .quality-frame {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 960px;
   height: 640px;
   border: 0;
   background: #fff;
-  transform: scale(0.625);
+  transform: scale(0.5);
   transform-origin: top left;
+}
+.quality-chip-skeleton,
+.quality-preview-skeleton-line {
+  display: block;
+  background: linear-gradient(90deg, rgba(148, 163, 184, .16), rgba(148, 163, 184, .32), rgba(148, 163, 184, .16));
+  background-size: 200% 100%;
+  animation: quality-skeleton 1.2s ease-in-out infinite;
+}
+.quality-chip-skeleton { width: 52px; height: 22px; border-radius: 999px; }
+.quality-preview-skeleton { display: grid; gap: 12px; padding: 56px 48px; }
+.quality-preview-skeleton-line { width: 72%; height: 12px; border-radius: 999px; }
+.quality-preview-skeleton-line-wide { width: 92%; height: 18px; }
+.quality-preview-skeleton-line-short { width: 48%; }
+@keyframes quality-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .quality-chip-skeleton,
+  .quality-preview-skeleton-line { animation: none; }
 }
 </style>

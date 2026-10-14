@@ -27,6 +27,9 @@ export function qualityArtworkDocument(html: string): string {
   }
   const head = root.querySelector('head')
   if (!head) throw new Error('Invalid quality artwork document')
+  const layout = document.createElement('style')
+  layout.textContent = 'html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important}body{overscroll-behavior:none!important}svg{display:block;max-width:100%;max-height:100%}'
+  head.prepend(layout)
   const policy = document.createElement('meta')
   policy.setAttribute('http-equiv', 'Content-Security-Policy')
   policy.setAttribute('content', "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'none'; font-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'")

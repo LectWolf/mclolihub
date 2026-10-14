@@ -165,23 +165,6 @@ export interface MonitorProbeBucket {
   ttft_ms: number
 }
 
-export interface MonitorQualityDiagnostics {
-  stage: string
-  configured_protocol: string
-  total_duration_ms: number
-  generation_duration_ms: number
-  generation_timeout_seconds: number
-  received_text_bytes: number
-  received_events: number
-  last_event_type?: string
-  completion_received: boolean
-  capture_overflow: boolean
-  failure_code?: string
-  deadline_source?: string
-  artwork_available?: boolean
-  render_duration_ms?: number
-  render_failure_code?: string
-}
 
 export interface MonitorLatestQuality {
   result_id: string
@@ -189,12 +172,8 @@ export interface MonitorLatestQuality {
   reason: string
   model_id: string
   checked_at: string
-  has_preview: boolean
+  has_preview?: boolean
   has_artwork?: boolean
-  score?: number | null
-  passed?: boolean | null
-  is_degraded?: boolean | null
-  diagnostics?: MonitorQualityDiagnostics | null
 }
 
 export interface MonitorMatrixRow {
@@ -313,21 +292,6 @@ export async function updateConfig(config: MonitorConfig) {
   return data
 }
 
-export async function getQualityPreview(resultId: string, groupId: number, signal?: AbortSignal): Promise<Blob> {
-  const { data } = await apiClient.get<Blob>(`/channel-monitor-v2/quality-preview/${encodeURIComponent(resultId)}`, {
-    params: { group_id: groupId },
-    responseType: 'blob',
-    signal,
-  })
-  if (!(data instanceof Blob) || data.type.toLowerCase() !== 'image/png' || data.size < 8) {
-    throw new Error('Invalid quality preview')
-  }
-  const signature = new Uint8Array(await data.slice(0, 8).arrayBuffer())
-  if (![137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => signature[index] === byte)) {
-    throw new Error('Invalid quality preview')
-  }
-  return data
-}
 
 export async function getQualityArtwork(resultId: string, groupId: number, signal?: AbortSignal): Promise<string> {
   const { data } = await apiClient.get<{ html: string }>(`/channel-monitor-v2/quality-artwork/${encodeURIComponent(resultId)}`, {
