@@ -10,6 +10,7 @@ export function qualityArtworkDocument(html: string): string {
     FORBID_TAGS: ['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'link', 'meta', 'base', 'a', 'form', 'foreignObject'],
     FORBID_ATTR: ['srcdoc', 'action', 'formaction', 'target', 'ping'],
   })
+  if (!(root instanceof HTMLElement)) throw new Error('Invalid quality artwork document')
   for (const element of root.querySelectorAll('*')) {
     for (const name of ['href', 'xlink:href', 'src', 'poster', 'background']) {
       const value = element.getAttribute(name)
