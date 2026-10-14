@@ -23,7 +23,22 @@
             <dt>{{ t('channelMonitorV3.quality.model') }}</dt><dd class="break-words">{{ latest.model_id || t('channelMonitorV3.quality.defaultModel') }}</dd>
             <dt>{{ t('channelMonitorV3.quality.checkedAt') }}</dt><dd><time :datetime="latest.checked_at">{{ checkedAt }}</time></dd>
           </dl>
+          <dl v-if="latest.diagnostics" class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+            <dt>{{ t('channelMonitorV3.quality.stage') }}</dt><dd>{{ t(`channelMonitorV3.quality.stages.${latest.diagnostics.stage}`) }}</dd>
+            <dt>{{ t('channelMonitorV3.quality.generationDuration') }}</dt><dd>{{ (latest.diagnostics.generation_duration_ms / 1000).toFixed(1) }}s / {{ latest.diagnostics.generation_timeout_seconds }}s</dd>
+            <dt>{{ t('channelMonitorV3.quality.receivedText') }}</dt><dd>{{ latest.diagnostics.received_text_bytes.toLocaleString() }} B</dd>
+            <dt>{{ t('channelMonitorV3.quality.completionReceived') }}</dt><dd>{{ t(latest.diagnostics.completion_received ? 'channelMonitorV3.quality.yes' : 'channelMonitorV3.quality.no') }}</dd>
+          </dl>
           <p v-if="latest.reason" class="mt-2 whitespace-pre-wrap break-words">{{ latest.reason }}</p>
+          <button type="button" class="btn btn-secondary btn-sm mt-3" data-quality-copy-diagnostics :disabled="copying" @click="copyDiagnostics">
+            <Icon name="copy" size="xs" />
+            {{ t(copied ? 'channelMonitorV3.quality.diagnosticsCopied' : 'channelMonitorV3.quality.copyDiagnostics') }}
+          </button>
+          <p v-if="!latest.diagnostics" class="mt-2 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.legacyDiagnostics') }}</p>
+          <div v-if="copyError" class="mt-2" role="alert">
+            <p>{{ t('channelMonitorV3.quality.copyFailed') }}</p>
+            <textarea :value="diagnosticText" readonly rows="10" :aria-label="t('channelMonitorV3.quality.copyDiagnostics')" class="mt-2 w-full rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] dark:border-dark-600 dark:bg-dark-900" @focus="selectDiagnostic" />
+          </div>
           <p v-if="loading" class="mt-3" role="status">{{ t('channelMonitorV3.quality.loading') }}</p>
           <div v-else-if="error" class="mt-3" role="alert">
             <p>{{ t('channelMonitorV3.quality.previewFailed') }}</p>
@@ -42,8 +57,11 @@ import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getQualityPreview, type MonitorLatestQuality } from '@/api/channelMonitorV2'
 import Icon from '@/components/icons/Icon.vue'
+import { useClipboard } from '@/composables/useClipboard'
+import { formatQualityDiagnostics } from '@/features/channel-monitor-v2/qualityDiagnostics'
+import type { GroupQualityRun } from '@/api/admin/qualityCheck'
 
-const props = defineProps<{ groupId?: number; enabled?: boolean; latest?: MonitorLatestQuality | null }>()
+const props = defineProps<{ groupId?: number; enabled?: boolean; latest?: MonitorLatestQuality | null; qualityRun?: GroupQualityRun }>()
 const { t, locale } = useI18n()
 const panelId = `quality-preview-${useId()}`
 const anchor = ref<HTMLElement>()
@@ -55,6 +73,10 @@ const loading = ref(false)
 const error = ref(false)
 const imageUrl = ref('')
 const panelStyle = ref<Record<string, string>>({})
+const copying = ref(false)
+const copied = ref(false)
+const copyError = ref(false)
+const diagnosticText = computed(() => props.latest ? formatQualityDiagnostics(props.latest, props.groupId, props.qualityRun) : '')
 let request: AbortController | undefined
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 const visible = computed(() => props.enabled !== false && Boolean(props.enabled || props.latest))
@@ -73,6 +95,25 @@ const checkedAt = computed(() => {
   return Number.isFinite(value) ? new Date(value).toLocaleString(locale.value) : '-'
 })
 
+async function copyDiagnostics() {
+  if (!props.latest || copying.value) return
+  const resultId = props.latest.result_id
+  const text = diagnosticText.value
+  pinned.value = true
+  copying.value = true
+  copyError.value = false
+  try {
+    const { copyToClipboard } = useClipboard()
+    const success = await copyToClipboard(text, t('channelMonitorV3.quality.diagnosticsCopied'))
+    if (props.latest?.result_id === resultId && open.value) { copied.value = success; copyError.value = !success }
+  } catch {
+    if (props.latest?.result_id === resultId && open.value) copyError.value = true
+  } finally { copying.value = false }
+}
+function selectDiagnostic(event: FocusEvent) {
+  if (event.target instanceof HTMLTextAreaElement) event.target.select()
+}
+
 function cancelClose() { clearTimeout(closeTimer) }
 function releaseImage() {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
@@ -83,6 +124,8 @@ function reset() {
   request = undefined
   loading.value = false
   error.value = false
+  copied.value = false
+  copyError.value = false
   releaseImage()
 }
 async function loadPreview() {

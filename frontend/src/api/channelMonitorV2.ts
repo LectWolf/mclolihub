@@ -165,6 +165,21 @@ export interface MonitorProbeBucket {
   ttft_ms: number
 }
 
+export interface MonitorQualityDiagnostics {
+  stage: string
+  configured_protocol: string
+  total_duration_ms: number
+  generation_duration_ms: number
+  generation_timeout_seconds: number
+  received_text_bytes: number
+  received_events: number
+  last_event_type?: string
+  completion_received: boolean
+  capture_overflow: boolean
+  failure_code?: string
+  deadline_source?: string
+}
+
 export interface MonitorLatestQuality {
   result_id: string
   status: 'success' | 'degraded' | 'unknown' | 'failed' | 'skipped'
@@ -172,6 +187,7 @@ export interface MonitorLatestQuality {
   model_id: string
   checked_at: string
   has_preview: boolean
+  diagnostics?: MonitorQualityDiagnostics | null
 }
 
 export interface MonitorMatrixRow {

@@ -49,7 +49,14 @@ describe('admin manual quality run API', () => {
     expect(get).toHaveBeenCalledWith('/admin/groups/7/quality-check/run', { signal })
   })
 
-  it('preserves a null response when no manual run exists', async () => {
+  it.each(['manual', 'automatic'] as const)('reads %s task source and progress without changing the group endpoint', async source => {
+    const result = { ...run, source, checked_accounts: 2 }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: result })
+    expect(await getQualityRun(7)).toEqual(result)
+    expect(get).toHaveBeenCalledWith('/admin/groups/7/quality-check/run', { signal: undefined })
+  })
+
+  it('preserves a null response when no group run exists', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue({ data: null })
     expect(await getQualityRun(7)).toBeNull()
   })

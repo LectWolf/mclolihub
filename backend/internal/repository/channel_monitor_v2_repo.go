@@ -1390,8 +1390,9 @@ func (a *metricAccumulator) addHistogram(h channelMonitorV2Histogram) {
 }
 func (a *metricAccumulator) metric(minutes float64, admin bool) service.ChannelMonitorV2Metric {
 	requests := a.success + a.errors
-	tokens := a.input + a.output + a.cacheCreation + a.cacheRead
-	denom := a.input + a.cacheCreation + a.cacheRead
+	// Usage logs and their rollups store total input; cache buckets are details.
+	tokens := a.input + a.output
+	denom := a.input
 	if minutes <= 0 {
 		minutes = 1
 	}

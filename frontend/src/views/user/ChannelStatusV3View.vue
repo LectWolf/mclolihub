@@ -17,10 +17,14 @@
           <button class="btn btn-secondary btn-icon h-8 w-8 rounded-lg" type="button" :disabled="loading || refreshing" :title="t('common.refresh')" @click="reload(false)"><Icon name="refresh" size="sm" :class="refreshing ? 'animate-spin' : ''" /></button>
         </header>
         <div class="flex flex-wrap items-center gap-2 px-4 py-3 sm:px-5">
-          <button v-for="option in ranges" :key="option.value" type="button" class="tab !px-2.5 !py-1 text-xs" :class="filter.range === option.value ? 'tab-active' : ''" @click="setRange(option.value)">{{ option.label }}</button>
+          <button v-for="option in ranges" :key="option.value" :data-range="option.value" type="button" class="tab !px-2.5 !py-1 text-xs" :class="filter.range === option.value ? 'tab-active' : ''" @click="setRange(option.value)">{{ option.label }}</button>
           <span class="mx-1 hidden h-5 w-px bg-gray-200 dark:bg-dark-700 sm:block" />
           <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.description') }}</span>
-          <span v-if="snapshot" class="ml-auto text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.summary', { success: formatPercent(1 - (latestSnapshotMetrics?.error_rate ?? 0)), cache: formatPercent(latestSnapshotMetrics?.cache_rate ?? 0) }) }}</span>
+          <span v-if="summarySnapshot && !summaryLoading && !loading" data-testid="monitor-summary" class="ml-auto text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.summary', { success: formatPercent(1 - (latestSnapshotMetrics?.error_rate ?? 0)), cache: formatPercent(summarySnapshot.metrics.cache_rate), range: filter.range }) }}</span>
+        </div>
+        <div v-if="availableRows.length" class="space-y-2.5 border-t border-gray-100 px-4 py-3 dark:border-dark-700 sm:px-5">
+          <MonitorFilterChips kind="platform" :label="t('channelMonitorV3.filterPlatform')" :options="platformChoices" :model-value="filter.platforms[0] ?? 'all'" @update:model-value="setPlatform" />
+          <MonitorFilterChips kind="group" :label="t('channelMonitorV3.filterGroup')" :options="groupChoices" :model-value="String(filter.groupIds[0] ?? 'all')" @update:model-value="setGroup" />
         </div>
       </section>
 
@@ -44,6 +48,7 @@
                 v-for="row in block.rows"
                 :key="row.group_id ?? `${row.platform}:${row.group_name ?? ''}`"
                 :row="row"
+                :range="loadedRange"
                 :user-rate-multiplier="getUserRateMultiplier(row.group_id)"
                 :group-meta="getGroupMeta(row.group_id)"
                 :countdown-seconds="countdownSeconds"
@@ -64,6 +69,7 @@
               <h2 class="mb-3 px-1 text-sm font-semibold text-gray-700 dark:text-gray-200">{{ providerLabel(item.platform) }}</h2>
               <ChannelMonitorV3Card
                 :row="item.row"
+                :range="loadedRange"
                 :user-rate-multiplier="getUserRateMultiplier(item.row.group_id)"
                 :group-meta="getGroupMeta(item.row.group_id)"
                 :countdown-seconds="countdownSeconds"
@@ -92,6 +98,7 @@ import userGroupsAPI from '@/api/groups'
 import type { MonitorFilter, MonitorMatrixResponse, MonitorRange, MonitorSnapshot } from '@/api/channelMonitorV2'
 import type { Group } from '@/types'
 import ChannelMonitorV3Card from '@/components/user/monitor/ChannelMonitorV3Card.vue'
+import MonitorFilterChips, { type MonitorFilterChip } from '@/features/channel-monitor-v2/MonitorFilterChips.vue'
 import { formatMonitorPercent } from '@/features/channel-monitor-v2/monitorFormat'
 import { buildChannelStatusLayout, channelStatusLayoutBlockKey } from '@/features/channel-monitor-v2/channelStatusLayout'
 import type { V3CardGroupMeta } from '@/features/channel-monitor-v2/v3CardPresentation'
@@ -109,24 +116,41 @@ const ranges = computed(() => [
 const filter = ref<MonitorFilter>({ range: '90m', platforms: [], groupIds: [], models: [] })
 const snapshot = ref<MonitorSnapshot | null>(null)
 const matrix = ref<MonitorMatrixResponse | null>(null)
+const loadedRange = ref<MonitorRange>('90m')
+const summarySnapshot = ref<MonitorSnapshot | null>(null)
+const summaryLoading = ref(false)
 const loading = ref(false)
 const refreshing = ref(false)
 const userGroupRates = ref<Record<number, number>>({})
 const groupMetaById = ref<Record<number, V3CardGroupMeta>>({})
 const countdownSeconds = ref(0)
 let controller: AbortController | null = null
+let summaryController: AbortController | null = null
+let summaryVersion = 0
 let refreshTimer: number | null = null
 let countdownTimer: number | null = null
 
 // platform_group is intentionally used here: the backend scopes it to the
 // monitor group_ids selected by the operator, so unrelated groups never appear.
-const rows = computed(() => [...(matrix.value?.items ?? [])]
+const availableRows = computed(() => [...(matrix.value?.items ?? [])]
   .filter(row => row.group_id != null && row.group_id > 0)
   .sort((a, b) => {
     const ao = groupMetaById.value[a.group_id ?? 0]?.sortOrder ?? Number.MAX_SAFE_INTEGER
     const bo = groupMetaById.value[b.group_id ?? 0]?.sortOrder ?? Number.MAX_SAFE_INTEGER
     return ao - bo || (a.group_id ?? 0) - (b.group_id ?? 0)
   }))
+const platformRows = computed(() => availableRows.value.filter(row => !filter.value.platforms.length || filter.value.platforms.includes(row.platform)))
+const rows = computed(() => platformRows.value.filter(row => !filter.value.groupIds.length || filter.value.groupIds.includes(row.group_id!)))
+const platformChoices = computed<MonitorFilterChip[]>(() => {
+  const counts = new Map<string, number>()
+  for (const row of availableRows.value) counts.set(row.platform, (counts.get(row.platform) ?? 0) + 1)
+  return [{ value: 'all', label: t('channelMonitorV3.all'), count: availableRows.value.length },
+    ...[...counts].map(([platform, count]) => ({ value: platform, label: providerLabel(platform), platform, count }))]
+})
+const groupChoices = computed<MonitorFilterChip[]>(() => [
+  { value: 'all', label: t('channelMonitorV3.all'), count: platformRows.value.length },
+  ...platformRows.value.map(row => ({ value: String(row.group_id), label: row.group_name || t('channelMonitorV3.unknownGroup'), platform: row.platform, count: 1 })),
+])
 const platformSections = computed(() => {
   const grouped = new Map<string, typeof rows.value>()
   for (const row of rows.value) {
@@ -141,11 +165,11 @@ const platformSections = computed(() => {
   }))
 })
 const layoutBlocks = computed(() => buildChannelStatusLayout(platformSections.value))
-const timelineLength = computed(() => ({ '90m': 18, '24h': 24, '7d': 14, '30d': 30 })[filter.value.range])
+const timelineLength = computed(() => ({ '90m': 18, '24h': 24, '7d': 14, '30d': 30 })[loadedRange.value])
 const timelineBucketMs = computed(() => {
   const seconds = snapshot.value?.coverage.bucket_seconds
   if (seconds && seconds > 0) return seconds * 1000
-  return ({ '90m': 5 * 60, '24h': 60 * 60, '7d': 12 * 60 * 60, '30d': 24 * 60 * 60 })[filter.value.range] * 1000
+  return ({ '90m': 5 * 60, '24h': 60 * 60, '7d': 12 * 60 * 60, '30d': 24 * 60 * 60 })[loadedRange.value] * 1000
 })
 const dataThroughMs = computed(() => {
   const value = snapshot.value?.coverage.data_through
@@ -154,15 +178,18 @@ const dataThroughMs = computed(() => {
   return Number.isFinite(parsed) ? parsed : undefined
 })
 const latestSnapshotMetrics = computed(() => {
-  const trend = [...(snapshot.value?.trend ?? [])]
+  const trend = [...(summarySnapshot.value?.trend ?? [])]
     .filter(point => point.bucket_start && point.metrics)
     .sort((a, b) => Date.parse(a.bucket_start) - Date.parse(b.bucket_start))
-  return trend.at(-1)?.metrics ?? snapshot.value?.metrics
+  return trend.at(-1)?.metrics ?? summarySnapshot.value?.metrics
 })
 
 function formatPercent(value: number) { return formatMonitorPercent(value, locale.value || 'zh-CN') }
 function formatTime(value?: string) { if (!value) return '-'; return new Intl.DateTimeFormat(locale.value || undefined, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) }
 function setRange(value: MonitorRange) { filter.value = { ...filter.value, range: value } }
+function setPlatform(value: string) { filter.value = { ...filter.value, platforms: value === 'all' ? [] : [value], groupIds: [] } }
+function setGroup(value: string) { filter.value = { ...filter.value, groupIds: value === 'all' ? [] : [Number(value)] } }
+function filterKey(value: MonitorFilter) { return JSON.stringify(value) }
 
 function getUserRateMultiplier(groupId?: number) {
   if (!groupId) return null
@@ -205,25 +232,51 @@ async function loadUserGroupRates() {
 
 async function reload(silent = true) {
   controller?.abort()
+  summaryController?.abort()
+  summaryController = null
+  summaryLoading.value = false
   const request = new AbortController()
   controller = request
   refreshing.value = true
   if (!silent) loading.value = true
+  if (!silent) summarySnapshot.value = null
+  const snapshotVersion = ++summaryVersion
+  const requestFilter = { ...filter.value, platforms: [...filter.value.platforms], groupIds: [...filter.value.groupIds] }
   try {
     const [nextSnapshot, nextMatrix] = await Promise.all([
-      api.getSnapshot(filter.value, false, request.signal),
-      api.getMatrix(filter.value, 'platform_group', false, request.signal),
+      api.getSnapshot(requestFilter, false, request.signal),
+      api.getMatrix({ ...requestFilter, platforms: [], groupIds: [] }, 'platform_group', false, request.signal),
       loadUserGroupRates(),
     ])
     if (request.signal.aborted || controller !== request) return
     snapshot.value = nextSnapshot
+    if (snapshotVersion === summaryVersion && filterKey(requestFilter) === filterKey(filter.value)) summarySnapshot.value = nextSnapshot
     matrix.value = nextMatrix
+    loadedRange.value = requestFilter.range
     scheduleRefresh(nextSnapshot.coverage.bootstrap?.active ? 10 : nextSnapshot.config.refresh_interval_seconds)
   } catch (error) {
     const e = error as { name?: string; code?: string }
     if (e.name !== 'AbortError' && e.code !== 'ERR_CANCELED') appStore.showError(extractApiErrorMessage(error, t('channelMonitorV3.loadFailed')))
   } finally {
     if (controller === request) { loading.value = false; refreshing.value = false }
+  }
+}
+
+async function reloadSummary() {
+  summaryController?.abort()
+  const snapshotVersion = ++summaryVersion
+  const request = new AbortController()
+  summaryController = request
+  summaryLoading.value = true
+  summarySnapshot.value = null
+  const requestFilter = { ...filter.value, platforms: [...filter.value.platforms], groupIds: [...filter.value.groupIds] }
+  try {
+    const next = await api.getSnapshot(requestFilter, false, request.signal)
+    if (!request.signal.aborted && summaryController === request && snapshotVersion === summaryVersion && filterKey(requestFilter) === filterKey(filter.value)) summarySnapshot.value = next
+  } catch (error) {
+    if (!request.signal.aborted && summaryController === request) appStore.showError(extractApiErrorMessage(error, t('channelMonitorV3.loadFailed')))
+  } finally {
+    if (summaryController === request) summaryLoading.value = false
   }
 }
 
@@ -241,9 +294,11 @@ function scheduleRefresh(seconds: number) {
 }
 
 watch(() => filter.value.range, () => void reload(false))
+watch(() => JSON.stringify([filter.value.platforms, filter.value.groupIds]), () => void reloadSummary())
 onMounted(() => { void reload(false) })
 onBeforeUnmount(() => {
   controller?.abort()
+  summaryController?.abort()
   if (refreshTimer) window.clearInterval(refreshTimer)
   if (countdownTimer) window.clearInterval(countdownTimer)
 })

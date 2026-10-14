@@ -8,10 +8,11 @@ FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/admin.qualityCheck.spec.ts \
 	src/components/admin/usage/__tests__/UsageTable.spec.ts \
 	src/features/channel-monitor-v2/__tests__/MonitorSettingsPanel.quality.spec.ts \
+	src/views/user/__tests__/ChannelStatusV3View.spec.ts \
 	src/components/user/monitor/__tests__/ChannelMonitorV3QualityPreview.spec.ts
 
 BACKEND_CRITICAL_PACKAGES := ./internal/service ./internal/handler ./internal/repository ./internal/server
-BACKEND_CRITICAL_TESTS := ^(TestQuality|TestPelican|TestGroupHealthManual|TestAccountTestService_ResponsesStreamCompatibility|TestUsageLogRepositoryGetStatsWithFiltersRequestTypePriority|TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_NonStreamingSuccess|TestOpenAIGatewayServiceRecordUsage_(UsesUserSpecificGroupRate|ClampsActualInputTokensToZero|GPT56SeparatesCacheWriteForBillingAndStats)|TestAPIContracts)
+BACKEND_CRITICAL_TESTS := ^(TestQuality|TestPelican|TestGroupHealthManual|TestChannelMonitorV2CacheRate|TestAccountTestService_ResponsesStreamCompatibility|TestUsageLogRepositoryGetStatsWithFiltersRequestTypePriority|TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_NonStreamingSuccess|TestOpenAIGatewayServiceRecordUsage_(UsesUserSpecificGroupRate|ClampsActualInputTokensToZero|GPT56SeparatesCacheWriteForBillingAndStats)|TestAPIContracts)
 
 # Default checks stay short. Full suites remain available through backend/Makefile
 # and pnpm --dir frontend test:run when a change needs broader coverage.

@@ -39,6 +39,7 @@ export async function saveQualitySettings(groupId: number, settings: GroupQualit
 export interface GroupQualityRun {
   run_id: string
   group_id: number
+  source?: 'manual' | 'automatic'
   status: 'running' | 'completed' | 'failed'
   reason: string
   checked_accounts: number

@@ -16,22 +16,28 @@ type qualityManualLock struct {
 	sync.Mutex
 	held       bool
 	key, owner string
+	owners     map[string]string
 }
 
 func (l *qualityManualLock) TryAcquireLeaderLock(_ context.Context, key, owner string, _ time.Duration) (bool, error) {
 	l.Lock()
 	defer l.Unlock()
-	if l.held {
+	if l.owners == nil {
+		l.owners = make(map[string]string)
+	}
+	if _, exists := l.owners[key]; exists {
 		return false, nil
 	}
+	l.owners[key] = owner
 	l.held, l.key, l.owner = true, key, owner
 	return true, nil
 }
 func (l *qualityManualLock) ReleaseLeaderLock(_ context.Context, key, owner string) error {
 	l.Lock()
 	defer l.Unlock()
-	if l.key == key && l.owner == owner {
-		l.held = false
+	if l.owners[key] == owner {
+		delete(l.owners, key)
+		l.held = len(l.owners) > 0
 	}
 	return nil
 }
@@ -45,7 +51,7 @@ func expectManualStart(mock sqlmock.Sqlmock, now time.Time, candidate qualityCan
 		WillReturnRows(sqlmock.NewRows([]string{"enabled"}).AddRow(true))
 	mock.ExpectQuery(regexp.QuoteMeta(qualityManualCandidatesSQL)).WithArgs(candidate.groupID, now).WillReturnRows(manualCandidateRows(candidate))
 	mock.ExpectBegin()
-	mock.ExpectQuery(`INSERT INTO group_quality_check_runs`).WithArgs(candidate.groupID, sqlmock.AnyArg(), 1, now, now.Add(-qualityManualRunTimeout)).
+	mock.ExpectQuery(`INSERT INTO group_quality_check_runs`).WithArgs(candidate.groupID, sqlmock.AnyArg(), 1, now, now.Add(-qualityManualRunTimeout), "manual").
 		WillReturnRows(sqlmock.NewRows([]string{"run_id"}).AddRow("saved"))
 	mock.ExpectExec(`INSERT INTO group_account_quality_checks`).WithArgs(candidate.groupID, candidate.id, now).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -77,8 +83,9 @@ func TestQualityManualRunBypassesGatesAndSurvivesRequestCancellation(t *testing.
 	run, err := checker.StartManualRun(requestCtx, 7)
 	require.NoError(t, err)
 	require.Equal(t, "running", run.Status)
+	require.Equal(t, "manual", run.Source)
 	require.Equal(t, 1, run.TotalAccounts)
-	require.Equal(t, qualityLockKey, lock.key)
+	require.Equal(t, qualityGroupLockKey(7), lock.key)
 	cancel()
 	// No DB expectation and no second launch: the shared lock refuses repeats.
 	_, err = checker.StartManualRun(context.Background(), 7)
@@ -140,7 +147,7 @@ func TestQualityManualRunConfigChangeStopsWithoutReplacingPreview(t *testing.T) 
 	mock.ExpectQuery(`SELECT version, enabled`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"version", "enabled"}).AddRow(3, true))
 	mock.ExpectRollback()
 	expectManualProgress(mock, now, run, "failed", "Quality check settings changed during execution", 0)
-	checker.executeManualRun(context.Background(), run, []qualityCandidate{candidate})
+	checker.executeQualityRun(context.Background(), run, []qualityCandidate{candidate})
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -150,7 +157,7 @@ func TestQualityManualRunStatusRestoresProgressAndLatestResult(t *testing.T) {
 	defer db.Close()
 	now := time.Now().UTC()
 	started := now.Add(-time.Minute)
-	mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished"}).AddRow("run", 7, "completed", "", 1, 1, started, now))
+	mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished", "source"}).AddRow("run", 7, "completed", "", 1, 1, started, now, "manual"))
 	mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest`).WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview"}).AddRow(7, true, "result", "failed", "Artwork generation timed out before completion", "saved-model", now, false))
 	checker := NewGroupQualityReader(db)
 	checker.now = func() time.Time { return now }
@@ -172,15 +179,16 @@ func TestQualityManualRunExpiredStateAndWorkerShutdown(t *testing.T) {
 	checker := NewGroupQualityReader(db)
 	checker.now = func() time.Time { return now }
 	run := &GroupQualityRun{RunID: "old", GroupID: 7, StartedAt: started}
-	mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished"}).AddRow("old", 7, "running", "", 0, 1, started, nil))
+	mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished", "source"}).AddRow("old", 7, "running", "", 0, 1, started, nil, "automatic"))
 	expectManualProgress(mock, now, run, "failed", "Quality check execution stopped or timed out", 0)
 	status, err := checker.ManualRun(context.Background(), 7)
 	require.NoError(t, err)
 	require.Equal(t, "failed", status.Status)
+	require.Equal(t, "automatic", status.Source)
 	parent, cancel := context.WithCancel(context.Background())
 	cancel()
 	expectManualProgress(mock, now, run, "failed", "Quality check execution stopped or timed out", 0)
-	checker.executeManualRun(parent, run, []qualityCandidate{{id: 11}})
+	checker.executeQualityRun(parent, run, []qualityCandidate{{id: 11}})
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -214,7 +222,7 @@ func TestQualityManualRunDoesNotExposeDatabaseErrorInProgress(t *testing.T) {
 	mock.ExpectBegin().WillReturnError(errors.New("private db password"))
 	run := &GroupQualityRun{RunID: "run", GroupID: 7, StartedAt: now}
 	expectManualProgress(mock, now, run, "failed", "Quality check result could not be saved", 0)
-	checker.executeManualRun(context.Background(), run, []qualityCandidate{{groupID: 7, id: 11}})
+	checker.executeQualityRun(context.Background(), run, []qualityCandidate{{groupID: 7, id: 11}})
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -237,6 +245,6 @@ func TestQualityManualRunProgressCannotReviveFinishedOrReplacedRun(t *testing.T)
 	run := &GroupQualityRun{RunID: "old", GroupID: 7}
 	mock.ExpectExec(`(?s)UPDATE group_quality_check_runs SET.*run_id = \$2 AND status = 'running'`).
 		WithArgs(int64(7), "old", "running", "", 1, now).WillReturnResult(sqlmock.NewResult(0, 0))
-	require.ErrorIs(t, checker.saveManualProgress(run, "running", "", 1), ErrQualityConfigChanged)
+	require.ErrorIs(t, checker.saveRunProgress(run, "running", "", 1), ErrQualityConfigChanged)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

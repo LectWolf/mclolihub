@@ -53,20 +53,22 @@ type GroupQualityStatus struct {
 }
 
 type GroupQualityResult struct {
-	ResultID   string    `json:"result_id"`
-	Status     string    `json:"status"`
-	Reason     string    `json:"reason"`
-	ModelID    string    `json:"model_id"`
-	CheckedAt  time.Time `json:"checked_at"`
-	HasPreview bool      `json:"has_preview"`
+	ResultID    string                   `json:"result_id"`
+	Status      string                   `json:"status"`
+	Reason      string                   `json:"reason"`
+	ModelID     string                   `json:"model_id"`
+	CheckedAt   time.Time                `json:"checked_at"`
+	HasPreview  bool                     `json:"has_preview"`
+	Diagnostics *GroupQualityDiagnostics `json:"diagnostics,omitempty"`
 }
 
 type qualityProbeResult struct {
-	Status     string
-	Reason     string
-	ModelID    string
-	Artwork    string
-	PreviewPNG []byte
+	Status      string
+	Reason      string
+	ModelID     string
+	Artwork     string
+	PreviewPNG  []byte
+	Diagnostics *GroupQualityDiagnostics
 }
 
 type qualitySchedulingRepository interface {
@@ -294,7 +296,7 @@ func (c *GroupQualityChecker) Run(ctx context.Context) {
 	}
 	defer release()
 	// The bound is shorter than the lease, including all generation and review requests.
-	ctx, cancel := context.WithTimeout(ctx, 38*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, qualityManualRunTimeout)
 	defer cancel()
 	c.reconcileScheduling(ctx)
 	now := c.now()
@@ -307,6 +309,30 @@ func (c *GroupQualityChecker) Run(ctx context.Context) {
 		slog.Warn("group_quality: candidates failed", "error", err)
 		return
 	}
+	// Batch this tick's candidates by group while retaining their scheduler order.
+	byGroup := make(map[int64][]qualityCandidate)
+	var groups []int64
+	for _, candidate := range candidates {
+		if _, exists := byGroup[candidate.groupID]; !exists {
+			groups = append(groups, candidate.groupID)
+		}
+		byGroup[candidate.groupID] = append(byGroup[candidate.groupID], candidate)
+	}
+	for _, groupID := range groups {
+		if ctx.Err() != nil {
+			return
+		}
+		c.runAutomaticGroup(ctx, groupID, byGroup[groupID])
+	}
+}
+
+func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int64, candidates []qualityCandidate) {
+	release, acquired := tryAcquireSingletonLeaderLock(ctx, c.lockCache, c.db, qualityGroupLockKey(groupID), uuid.NewString(), qualityLockTTL)
+	if !acquired {
+		return
+	}
+	defer release()
+	eligible := make([]qualityCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		if ctx.Err() != nil {
 			return
@@ -318,26 +344,21 @@ func (c *GroupQualityChecker) Run(ctx context.Context) {
 		if !accountAcceptsQualityPrompt(account) {
 			// A skip is not a completed check and does not move the spend window.
 			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
-				slog.Warn("group_quality: save skip failed", "error", err)
+				slog.Warn("group_quality: save skip failed", "group_id", groupID)
 			}
 			continue
 		}
-		probeCtx, stop := context.WithTimeout(ctx, qualityProbeTimeout)
-		var result qualityProbeResult
-		if c.probeFunc != nil {
-			result = c.probeFunc(probeCtx, candidate.id, candidate.modelID)
-		} else {
-			result = c.tests.runPelicanQualityCheck(probeCtx, candidate.id, candidate.modelID)
-		}
-		stop()
-		if err := c.finishCheck(ctx, candidate, c.now(), result); err != nil {
-			if !errors.Is(err, ErrQualityConfigChanged) {
-				slog.Warn("group_quality: save check failed", "group_id", candidate.groupID, "account_id", candidate.id, "error", err)
-			}
-			continue
-		}
-		c.reconcileAccount(ctx, candidate.id)
+		eligible = append(eligible, candidate)
 	}
+	if len(eligible) == 0 {
+		return
+	}
+	run, err := c.createQualityRun(ctx, groupID, "automatic", eligible)
+	if err != nil {
+		slog.Warn("group_quality: create automatic run failed", "group_id", groupID)
+		return
+	}
+	c.executeQualityRun(ctx, run, eligible)
 }
 
 func qualityNextState(streak int, paused bool, status string) (int, bool) {
@@ -422,7 +443,7 @@ func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate quality
         ON CONFLICT (group_id) DO UPDATE SET account_id = EXCLUDED.account_id, result_id = EXCLUDED.result_id,
             status = EXCLUDED.status, reason = EXCLUDED.reason, model_id = EXCLUDED.model_id,
             checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png`,
-		candidate.groupID, candidate.id, uuid.NewString(), result.Status, result.Reason, result.ModelID, now, preview)
+		candidate.groupID, candidate.id, uuid.NewString(), result.Status, encodeQualityReason(result), result.ModelID, now, preview)
 	if err != nil {
 		return err
 	}
@@ -496,7 +517,8 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 		}
 		enabled[id] = on
 		if on && rid.Valid && checked.Valid {
-			results[id] = &GroupQualityResult{rid.String, status.String, reason.String, model.String, checked.Time, preview}
+			displayReason, diagnostics := decodeQualityReason(reason.String)
+			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, Diagnostics: diagnostics}
 		}
 	}
 	return enabled, results, rows.Err()

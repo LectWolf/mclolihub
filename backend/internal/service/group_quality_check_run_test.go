@@ -48,6 +48,17 @@ func expectQualityRunStart(mock sqlmock.Sqlmock, now time.Time, candidate qualit
 			AddRow(candidate.groupID, candidate.id, candidate.version, candidate.modelID, candidate.lastStatus, candidate.streak, candidate.paused))
 }
 
+func expectAutomaticTask(mock sqlmock.Sqlmock, now time.Time, groupID int64, total int) {
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO group_quality_check_runs`).WithArgs(groupID, sqlmock.AnyArg(), total, now, now.Add(-qualityManualRunTimeout), "automatic").
+		WillReturnRows(sqlmock.NewRows([]string{"run_id"}).AddRow("saved"))
+	mock.ExpectCommit()
+}
+
+func expectAutomaticProgress(mock sqlmock.Sqlmock, now time.Time, groupID int64, status string, checked int) {
+	mock.ExpectExec(`UPDATE group_quality_check_runs SET`).WithArgs(groupID, sqlmock.AnyArg(), status, "", checked, now).WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
 func expectQualitySave(mock sqlmock.Sqlmock, now time.Time, candidate qualityCandidate, status string, streak int, paused bool, preview any) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(`SELECT version, enabled`).WithArgs(candidate.groupID).
@@ -76,7 +87,10 @@ func TestQualityRunFailedAndUnknownDoNotRepeatOldDegraded(t *testing.T) {
 			now := time.Date(2026, 10, 11, 1, 0, 0, 0, time.UTC)
 			candidate := qualityCandidate{groupID: 7, id: 11, version: 2, modelID: "text-model", lastStatus: "degraded", streak: 1}
 			expectQualityRunStart(mock, now, candidate)
+			expectAutomaticTask(mock, now, candidate.groupID, 1)
 			expectQualitySave(mock, now, candidate, verdict, 0, false, nil)
+			expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
+			expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
 			accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI}}
 			checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
 			checker.now = func() time.Time { return now }
@@ -100,7 +114,10 @@ func TestQualityRunSecondDegradedPersistsPauseAndPreview(t *testing.T) {
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 2, modelID: "text-model", streak: 1}
 	picture := qualityFixturePNG(t)
 	expectQualityRunStart(mock, now, candidate)
+	expectAutomaticTask(mock, now, candidate.groupID, 1)
 	expectQualitySave(mock, now, candidate, "degraded", 2, true, picture)
+	expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
+	expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
 	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI}}
 	checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }

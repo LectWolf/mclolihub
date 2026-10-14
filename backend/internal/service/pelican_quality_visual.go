@@ -147,8 +147,14 @@ func (w *pelicanCapture) Write(p []byte) (int, error) {
 }
 
 type pelicanTestOutput struct {
-	Text, Model      string
-	Complete, Failed bool
+	Text, Model       string
+	Complete, Failed  bool
+	ReceivedTextBytes int
+	ReceivedEvents    int
+	LastEventType     string
+	CaptureOverflow   bool
+	FailureCode       string
+	DeadlineSource    string
 }
 
 func parsePelicanTestEvents(raw []byte, limit int) (pelicanTestOutput, error) {
@@ -165,11 +171,19 @@ func parsePelicanTestEvents(raw []byte, limit int) (pelicanTestOutput, error) {
 		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
 			return out, errors.New("invalid test event")
 		}
+		out.ReceivedEvents++
+		switch event.Type {
+		case "test_start", "content", "status", "test_complete", "error", "image", "video", "audio":
+			out.LastEventType = event.Type
+		default:
+			out.LastEventType = "other"
+		}
 		if event.Model != "" {
 			out.Model = event.Model
 		}
 		switch event.Type {
 		case "content":
+			out.ReceivedTextBytes += len(event.Text)
 			if len(event.Text) > limit-text.Len() {
 				return out, errors.New("test output limit")
 			}
@@ -219,6 +233,7 @@ func pelicanRequestFailureReason(err error) string {
 }
 
 func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID int64, modelID, prompt string, limit int) (pelicanTestOutput, error) {
+	parentCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	w := &pelicanCapture{header: make(http.Header), limit: 4*limit + (64 << 10)}
@@ -226,17 +241,24 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 	c.Request, _ = http.NewRequestWithContext(ctx, http.MethodPost, "/internal/pelican-quality", nil)
 	err := s.TestAccountConnection(c, accountID, modelID, prompt, "")
 	out, parseErr := parsePelicanTestEvents(w.Bytes(), limit)
-	if w.overflow {
-		return out, errors.New(pelicanRequestFailureReason(errors.New("test output limit")))
+	out.CaptureOverflow = w.overflow
+	failure := parseErr
+	if err != nil {
+		failure = err
 	}
 	if ctx.Err() != nil {
-		return out, errors.New(pelicanRequestFailureReason(ctx.Err()))
+		failure = ctx.Err()
+		out.DeadlineSource = "generation_request"
+		if parentCtx.Err() != nil {
+			out.DeadlineSource = "parent_context"
+		}
 	}
-	if err != nil {
-		return out, errors.New(pelicanRequestFailureReason(err))
+	if w.overflow {
+		failure = errors.New("test output limit")
 	}
-	if parseErr != nil {
-		return out, errors.New(pelicanRequestFailureReason(parseErr))
+	if failure != nil {
+		out.FailureCode = pelicanRequestFailureCode(failure)
+		return out, errors.New(pelicanRequestFailureReason(failure))
 	}
 	return out, nil
 }
@@ -275,8 +297,10 @@ func pelicanHTML(text string) string {
 	return text[start : end+len("</html>")]
 }
 
-func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, accountID int64, modelID string) qualityProbeResult {
-	result := qualityProbeResult{Status: "unknown", ModelID: modelID}
+func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, accountID int64, modelID string) (result qualityProbeResult) {
+	started := time.Now()
+	result = qualityProbeResult{Status: "unknown", ModelID: modelID, Diagnostics: &GroupQualityDiagnostics{Stage: "account_validation", GenerationTimeoutSeconds: 90}}
+	defer func() { result.Diagnostics.TotalDurationMs = time.Since(started).Milliseconds() }()
 	if s == nil || s.accountRepo == nil {
 		result.Reason = "Quality evaluator unavailable"
 		return result
@@ -291,8 +315,24 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 		result.Reason = "Quality evaluation requires a supported text and vision protocol"
 		return result
 	}
+	switch protocol := account.GetAPIProtocol(); protocol {
+	case APIProtocolResponses, APIProtocolChatCompletions, APIProtocolAdaptive:
+		result.Diagnostics.ConfiguredProtocol = protocol
+	default:
+		result.Diagnostics.ConfiguredProtocol = "platform_default"
+	}
+	result.Diagnostics.Stage = "generation"
+	generationStarted := time.Now()
 	generationCtx := context.WithValue(ctx, pelicanQualityContextKey{}, true)
 	generated, err := s.runPelicanRequest(generationCtx, accountID, modelID, DefaultScheduledTestPrompt, pelicanDocumentLimit)
+	result.Diagnostics.GenerationDurationMs = time.Since(generationStarted).Milliseconds()
+	result.Diagnostics.ReceivedTextBytes = generated.ReceivedTextBytes
+	result.Diagnostics.ReceivedEvents = generated.ReceivedEvents
+	result.Diagnostics.LastEventType = generated.LastEventType
+	result.Diagnostics.CompletionReceived = generated.Complete
+	result.Diagnostics.CaptureOverflow = generated.CaptureOverflow
+	result.Diagnostics.FailureCode = generated.FailureCode
+	result.Diagnostics.DeadlineSource = generated.DeadlineSource
 	if generated.Model != "" {
 		result.ModelID = generated.Model
 	}
@@ -308,18 +348,24 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 		return result
 	}
 	result.Artwork = document
+	result.Diagnostics.Stage = "rendering"
 	frames, err := renderPelicanVisualFrames(ctx, document)
 	if err != nil {
 		result.Reason = "Quality evaluation inconclusive: isolated rendering unavailable"
 		return result
 	}
 	result.PreviewPNG, _ = base64.StdEncoding.DecodeString(frames[0].PNG)
+	result.Diagnostics.Stage = "reference_rendering"
 	reference, err := pelicanReferenceFrame(ctx)
 	if err != nil {
 		result.Reason = "Quality evaluation inconclusive: reference rendering unavailable"
 		return result
 	}
+	result.Diagnostics.Stage = "visual_review"
 	result.Status, result.Reason = s.assessPelicanFrames(ctx, accountID, result.ModelID, reference, frames)
+	if result.Status == "success" || result.Status == "degraded" {
+		result.Diagnostics.Stage = "completed"
+	}
 	return result
 }
 
