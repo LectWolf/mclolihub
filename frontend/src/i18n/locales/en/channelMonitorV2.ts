@@ -124,7 +124,7 @@ export default {
       qualityPrompt: 'Default Prompt (read-only)',
       qualityRun: 'Run now',
       qualityRunning: 'Checking',
-      qualityRunHint: 'Checks all supported active accounts, including accounts paused for quality recovery, using the saved model configuration. Spend and interval thresholds are bypassed. Normal upstream usage costs apply.',
+      qualityRunHint: 'Checks one eligible account per group, selected by account priority, using the saved model configuration. Spend and interval thresholds are bypassed. Normal upstream usage costs apply.',
       qualityRunUnsaved: 'Save this group’s configuration before running a check.',
       qualityRunDisabled: 'Enable and save degradation checking for this group first.',
       qualityRunResult: 'Current check',

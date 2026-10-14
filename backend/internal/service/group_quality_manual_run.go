@@ -93,7 +93,7 @@ func (c *GroupQualityChecker) StartManualRun(ctx context.Context, groupID int64)
 	if err != nil {
 		return nil, err
 	}
-	eligible := make([]qualityCandidate, 0, len(candidates))
+	eligible := make([]qualityCandidate, 0, 1)
 	for _, candidate := range candidates {
 		account, err := c.accounts.GetByID(ctx, candidate.id)
 		if err != nil {
@@ -101,6 +101,7 @@ func (c *GroupQualityChecker) StartManualRun(ctx context.Context, groupID int64)
 		}
 		if pelicanVisualProtocolSupported(account) && pelicanTextModel(account.GetMappedModel(candidate.modelID)) {
 			eligible = append(eligible, candidate)
+			break
 		}
 	}
 	if len(eligible) == 0 {

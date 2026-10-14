@@ -122,7 +122,7 @@ export default {
       qualityPrompt: '默认提示词（只读）',
       qualityRun: '立即检测',
       qualityRunning: '检测中',
-      qualityRunHint: '按已保存的模型配置检测全部支持的活跃账号（含因质量暂停可恢复账号），跳过消费金额与时间间隔门槛。会产生正常上游消耗。',
+      qualityRunHint: '每组只检测一个符合条件的账号，按账号优先级选择，使用已保存的模型配置。跳过消费金额与时间间隔门槛，会产生正常上游消耗。',
       qualityRunUnsaved: '请先保存本分组的配置，再立即检测。',
       qualityRunDisabled: '请先开启并保存本分组的降智检测。',
       qualityRunResult: '本次检测',

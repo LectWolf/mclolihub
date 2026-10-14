@@ -332,7 +332,7 @@ func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int
 		return
 	}
 	defer release()
-	eligible := make([]qualityCandidate, 0, len(candidates))
+	eligible := make([]qualityCandidate, 0, 1)
 	for _, candidate := range candidates {
 		if ctx.Err() != nil {
 			return
@@ -349,6 +349,7 @@ func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int
 			continue
 		}
 		eligible = append(eligible, candidate)
+		break
 	}
 	if len(eligible) == 0 {
 		return
