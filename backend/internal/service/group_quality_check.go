@@ -60,6 +60,9 @@ type GroupQualityResult struct {
 	CheckedAt   time.Time                `json:"checked_at"`
 	HasPreview  bool                     `json:"has_preview"`
 	HasArtwork  bool                     `json:"has_artwork"`
+	Score       *float64                 `json:"score"`
+	Passed      *bool                    `json:"passed"`
+	IsDegraded  *bool                    `json:"is_degraded"`
 	Diagnostics *GroupQualityDiagnostics `json:"diagnostics,omitempty"`
 }
 
@@ -69,6 +72,7 @@ type qualityProbeResult struct {
 	ModelID     string
 	Artwork     string
 	PreviewPNG  []byte
+	Score       *float64
 	Diagnostics *GroupQualityDiagnostics
 }
 
@@ -400,6 +404,15 @@ func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate quality
 		result.Status = "unknown"
 		result.Reason = "Quality evaluation unavailable"
 	}
+	if result.Score != nil {
+		if math.IsNaN(*result.Score) || math.IsInf(*result.Score, 0) || *result.Score < 0 || *result.Score > 100 {
+			result.Score = nil
+			result.Status = "unknown"
+			result.Reason = "Quality evaluation inconclusive: invalid content score"
+		} else {
+			result.Status, result.Reason = pelicanScoreVerdict(*result.Score)
+		}
+	}
 	if len(result.Reason) > 2000 {
 		result.Reason = "Quality evaluation unavailable"
 	}
@@ -446,14 +459,18 @@ func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate quality
 	if err != nil {
 		return err
 	}
+	resultID := uuid.NewString()
 	_, err = tx.ExecContext(ctx, `
-        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png, artwork_html)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png, artwork_html, score)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (group_id) DO UPDATE SET account_id = EXCLUDED.account_id, result_id = EXCLUDED.result_id,
             status = EXCLUDED.status, reason = EXCLUDED.reason, model_id = EXCLUDED.model_id,
-            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png, artwork_html = EXCLUDED.artwork_html`,
-		candidate.groupID, candidate.id, uuid.NewString(), result.Status, encodeQualityReason(result), result.ModelID, now, preview, qualityArtworkValue(result.Artwork))
+            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png, artwork_html = EXCLUDED.artwork_html, score = EXCLUDED.score`,
+		candidate.groupID, candidate.id, resultID, result.Status, encodeQualityReason(result), result.ModelID, now, preview, qualityArtworkValue(result.Artwork), result.Score)
 	if err != nil {
+		return err
+	}
+	if err := retainQualityHistory(ctx, tx, candidate, resultID, now, result); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -506,7 +523,7 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 	}
 	rows, err := c.db.QueryContext(ctx, `
         SELECT s.group_id, s.enabled, l.result_id::text, l.status, l.reason, l.model_id, l.checked_at,
-            COALESCE(octet_length(l.preview_png) > 0, FALSE), COALESCE(octet_length(l.artwork_html) > 0, FALSE)
+            COALESCE(octet_length(l.preview_png) > 0, FALSE), COALESCE(octet_length(l.artwork_html) > 0, FALSE), l.score
         FROM group_quality_check_settings s
         LEFT JOIN group_quality_check_latest l ON l.group_id = s.group_id
           AND EXISTS (SELECT 1 FROM accounts a JOIN account_groups ag ON ag.account_id = a.id
@@ -521,13 +538,15 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 		var on, preview, artwork bool
 		var rid, status, reason, model sql.NullString
 		var checked sql.NullTime
-		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview, &artwork); err != nil {
+		var score sql.NullFloat64
+		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview, &artwork, &score); err != nil {
 			return nil, nil, err
 		}
 		enabled[id] = on
 		if on && rid.Valid && checked.Valid {
 			displayReason, diagnostics := decodeQualityReason(reason.String)
-			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, HasArtwork: artwork, Diagnostics: diagnostics}
+			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, HasArtwork: artwork, Score: qualityScorePointer(score), Diagnostics: diagnostics}
+			applyQualityScoreVerdict(results[id])
 		}
 	}
 	return enabled, results, rows.Err()
@@ -565,7 +584,7 @@ func (c *GroupQualityChecker) Artwork(ctx context.Context, groupID int64, result
 	}
 	var document string
 	err := c.db.QueryRowContext(ctx, `
-        SELECT l.artwork_html FROM group_quality_check_latest l
+        SELECT l.artwork_html FROM group_quality_check_history l
         JOIN group_quality_check_settings s ON s.group_id = l.group_id AND s.enabled
         JOIN accounts a ON a.id = l.account_id AND a.deleted_at IS NULL
         JOIN account_groups ag ON ag.account_id = a.id AND ag.group_id = l.group_id

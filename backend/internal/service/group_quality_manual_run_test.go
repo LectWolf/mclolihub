@@ -158,7 +158,7 @@ func TestQualityManualRunStatusRestoresProgressAndLatestResult(t *testing.T) {
 	now := time.Now().UTC()
 	started := now.Add(-time.Minute)
 	mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished", "source"}).AddRow("run", 7, "completed", "", 1, 1, started, now, "manual"))
-	mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest`).WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork"}).AddRow(7, true, "result", "failed", "Artwork generation timed out before completion", "saved-model", now, false, false))
+	mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest`).WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork", "score"}).AddRow(7, true, "result", "failed", "Artwork generation timed out before completion", "saved-model", now, false, false, nil))
 	checker := NewGroupQualityReader(db)
 	checker.now = func() time.Time { return now }
 	run, err := checker.ManualRun(context.Background(), 7)

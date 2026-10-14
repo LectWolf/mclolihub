@@ -191,6 +191,9 @@ export interface MonitorLatestQuality {
   checked_at: string
   has_preview: boolean
   has_artwork?: boolean
+  score?: number | null
+  passed?: boolean | null
+  is_degraded?: boolean | null
   diagnostics?: MonitorQualityDiagnostics | null
 }
 
@@ -205,6 +208,7 @@ export interface MonitorMatrixRow {
   probe_buckets?: MonitorProbeBucket[]
   quality_enabled?: boolean
   latest_quality?: MonitorLatestQuality | null
+  quality_history?: MonitorLatestQuality[]
 }
 
 export interface MonitorMatrixResponse {
@@ -334,4 +338,13 @@ export async function getQualityArtwork(resultId: string, groupId: number, signa
     throw new Error('Invalid quality artwork')
   }
   return data.html
+}
+
+export async function getQualityHistory(groupId: number, signal?: AbortSignal): Promise<MonitorLatestQuality[]> {
+  const { data } = await apiClient.get<{ items?: MonitorLatestQuality[] }>('/channel-monitor-v2/quality-history', {
+    params: { group_id: groupId },
+    signal,
+  })
+  if (!Array.isArray(data?.items)) throw new Error('Invalid quality history')
+  return data.items.slice(0, 5)
 }

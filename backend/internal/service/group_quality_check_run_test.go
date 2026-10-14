@@ -73,8 +73,12 @@ func expectQualitySave(mock sqlmock.Sqlmock, now time.Time, candidate qualityCan
 		WithArgs(candidate.groupID, candidate.id, now, status, streak, paused, retry, candidate.modelID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO group_quality_check_latest`).
-		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, preview, nil).
+		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, preview, nil, nil).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO group_quality_check_history`).
+		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, nil, nil).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`DELETE FROM group_quality_check_history`).WithArgs(candidate.groupID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 }
 
@@ -195,9 +199,9 @@ func TestQualityLatestReturnsNewestFailureAndKeepsPausedAccountVisible(t *testin
 	defer func() { _ = db.Close() }()
 	now := time.Now().UTC()
 	mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest.*s.group_id = ANY`).
-		WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork"}).
-			AddRow(7, true, "latest-id", "failed", "Request failed", "text-model", now, false, false).
-			AddRow(8, false, "old-id", "success", "", "text-model", now, true, false))
+		WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork", "score"}).
+			AddRow(7, true, "latest-id", "failed", "Request failed", "text-model", now, false, false, nil).
+			AddRow(8, false, "old-id", "success", "", "text-model", now, true, false, nil))
 	enabled, results, err := NewGroupQualityReader(db).Latest(context.Background(), []int64{7, 8})
 	require.NoError(t, err)
 	require.True(t, enabled[7])

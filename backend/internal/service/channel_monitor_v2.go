@@ -270,6 +270,7 @@ type ChannelMonitorV2MatrixRow struct {
 	ProbeBuckets   []ChannelMonitorV2ProbeBucket `json:"probe_buckets,omitempty"`
 	QualityEnabled bool                          `json:"quality_enabled,omitempty"`
 	LatestQuality  *GroupQualityResult           `json:"latest_quality,omitempty"`
+	QualityHistory []*GroupQualityResult         `json:"quality_history"`
 }
 
 type ChannelMonitorV2Matrix struct {

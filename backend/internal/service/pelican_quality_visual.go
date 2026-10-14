@@ -105,11 +105,8 @@ func pelicanQualityStreamReader(ctx context.Context, body io.Reader) io.Reader {
 	if !isPelicanQualityRequest(ctx) {
 		return body
 	}
-	limit := int64(4 * pelicanDocumentLimit)
-	if _, reviewing := ctx.Value(pelicanQualityContextKey{}).(*pelicanVisualContext); reviewing {
-		limit = 256 << 10
-	}
-	return io.LimitReader(body, limit)
+	// High reasoning can produce a larger event stream than the visible verdict.
+	return io.LimitReader(body, int64(4*pelicanDocumentLimit))
 }
 
 func (s *AccountTestService) emitPelicanResolvedModel(c *gin.Context, data map[string]any) {
@@ -234,13 +231,13 @@ func pelicanRequestFailureReason(err error) string {
 
 const (
 	pelicanGenerationTimeout = 15 * time.Minute
-	pelicanReviewTimeout     = 90 * time.Second
+	pelicanReviewTimeout     = 3 * time.Minute
 )
 
 func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID int64, modelID, prompt string, limit int) (pelicanTestOutput, error) {
 	parentCtx := ctx
 	timeout := pelicanGenerationTimeout
-	if _, reviewing := ctx.Value(pelicanQualityContextKey{}).(*pelicanVisualContext); reviewing {
+	if isPelicanReviewRequest(ctx) {
 		timeout = pelicanReviewTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -321,7 +318,7 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 		return result
 	}
 	if !pelicanVisualProtocolSupported(account) || !pelicanTextModel(account.GetMappedModel(modelID)) {
-		result.Reason = "Quality evaluation requires a supported text and vision protocol"
+		result.Reason = "Quality evaluation requires a supported text protocol"
 		return result
 	}
 	switch protocol := account.GetAPIProtocol(); protocol {
@@ -358,27 +355,8 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 	}
 	result.Artwork = document
 	result.Diagnostics.ArtworkAvailable = true
-	renderStarted := time.Now()
-	result.Diagnostics.Stage = "rendering"
-	frames, err := renderPelicanVisualFrames(ctx, document)
-	result.Diagnostics.RenderDurationMs = time.Since(renderStarted).Milliseconds()
-	if err != nil {
-		result.Reason = "Quality evaluation inconclusive: isolated rendering unavailable"
-		result.Diagnostics.RenderFailureCode = pelicanRenderFailureCode(err)
-		return result
-	}
-	result.PreviewPNG, _ = base64.StdEncoding.DecodeString(frames[0].PNG)
-	result.Diagnostics.Stage = "reference_rendering"
-	referenceStarted := time.Now()
-	reference, err := pelicanReferenceFrame(ctx)
-	result.Diagnostics.RenderDurationMs += time.Since(referenceStarted).Milliseconds()
-	if err != nil {
-		result.Reason = "Quality evaluation inconclusive: reference rendering unavailable"
-		result.Diagnostics.RenderFailureCode = pelicanRenderFailureCode(err)
-		return result
-	}
-	result.Diagnostics.Stage = "visual_review"
-	result.Status, result.Reason = s.assessPelicanFrames(ctx, accountID, result.ModelID, reference, frames)
+	result.Diagnostics.Stage = "content_review"
+	result.Score, result.Status, result.Reason = s.scorePelicanHTML(ctx, accountID, result.ModelID, document)
 	if result.Status == "success" || result.Status == "degraded" {
 		result.Diagnostics.Stage = "completed"
 	}

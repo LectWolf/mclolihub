@@ -30,6 +30,13 @@ export default {
     probeTimelineTooltip: 'Probe {time} · success {success} · failure {failure} · first token {ttft}',
     quality: {
       title: 'Degradation check',
+      historyHeading: 'Check history · {count}',
+      score: 'Score',
+      verdict: {
+        pass: 'Passed',
+        fail: 'Failed',
+        unscored: 'Unscored',
+      },
       latest: 'Latest degradation check',
       model: 'Test model',
       defaultModel: 'Account default model',

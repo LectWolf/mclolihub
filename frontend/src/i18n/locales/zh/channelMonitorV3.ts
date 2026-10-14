@@ -30,6 +30,13 @@ export default {
     probeTimelineTooltip: '探测 {time} · 成功 {success} · 失败 {failure} · 首 Token {ttft}',
     quality: {
       title: '降智检测',
+      historyHeading: '历史检测 · {count} 条',
+      score: '分数',
+      verdict: {
+        pass: '通过',
+        fail: '未通过',
+        unscored: '未评分',
+      },
       latest: '最新降智检测',
       model: '检测模型',
       defaultModel: '账号默认模型',

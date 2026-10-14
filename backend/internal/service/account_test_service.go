@@ -539,8 +539,8 @@ func qoderFailoverTestMessage(failoverErr *UpstreamFailoverError) string {
 }
 
 func resolveAccountTestModel(ctx context.Context, account *Account, modelID string) string {
-	if visual, ok := ctx.Value(pelicanQualityContextKey{}).(*pelicanVisualContext); ok && visual != nil && visual.ModelID != "" {
-		return visual.ModelID
+	if resolved := pelicanReviewModel(ctx); resolved != "" {
+		return resolved
 	}
 	return account.GetMappedModel(modelID)
 }
@@ -1032,7 +1032,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if mode == AccountTestModeProbe {
 		payload = createOpenAIProbePayload(upstreamTestModelID, isOAuth)
 	}
-	applyPelicanVisualPayload(ctx, payload, true)
+	applyPelicanQualityPayload(ctx, payload, true)
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Send test_start event once. A task-invalid Agent Identity response may
@@ -2279,7 +2279,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	c.Writer.Flush()
 
 	payload := createOpenAIChatCompletionsTestPayload(testModelID, prompt)
-	applyPelicanVisualPayload(ctx, payload, false)
+	applyPelicanQualityPayload(ctx, payload, false)
 	payloadBytes, _ := json.Marshal(payload)
 
 	reportedModelID, _ := payload["model"].(string)

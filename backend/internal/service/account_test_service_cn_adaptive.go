@@ -174,7 +174,7 @@ func (s *AccountTestService) testCNProviderAdaptiveResponsesConnection(c *gin.Co
 	// DeepSeek / Kimi native Responses endpoints are stateless and do not need
 	// the OpenAI probe's synthetic instructions.
 	delete(payload, "instructions")
-	applyPelicanVisualPayload(ctx, payload, true)
+	applyPelicanQualityPayload(ctx, payload, true)
 	payloadBytes, _ := json.Marshal(payload)
 	payloadBytes = normalizeDeepSeekResponsesRequestBody(account, payloadBytes)
 
