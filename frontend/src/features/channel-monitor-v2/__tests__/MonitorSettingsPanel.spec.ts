@@ -18,6 +18,10 @@ vi.mock('@/api/channelMonitorV2', () => ({
   MONITOR_ERROR_CATEGORIES: ['authentication', 'network'],
 }))
 vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: mocks.groups } } }))
+vi.mock('@/api/admin/qualityCheck', () => ({
+  listQuality: vi.fn(async () => []), saveQualitySettings: vi.fn(),
+  getQualityRun: vi.fn(async () => null), runQualityCheck: vi.fn(),
+}))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({
   cachedPublicSettings: { channel_monitor_enabled: true },
   showError: mocks.showError,

@@ -72,8 +72,24 @@ func (s *GroupHealthService) Quality() *GroupQualityChecker {
 	defer s.lifecycleMu.Unlock()
 	if s.quality == nil {
 		s.quality = newGroupQualityChecker(s.db, s.accountRepo, s.testService, s.lockCache, s.instanceID)
+		s.quality.launch = s.launchQualityRun
 	}
 	return s.quality
+}
+
+func (s *GroupHealthService) launchQualityRun(run func(context.Context)) bool {
+	s.lifecycleMu.Lock()
+	if s.stopped || s.ctx.Err() != nil {
+		s.lifecycleMu.Unlock()
+		return false
+	}
+	s.wg.Add(1)
+	s.lifecycleMu.Unlock()
+	go func() {
+		defer s.wg.Done()
+		run(s.ctx)
+	}()
+	return true
 }
 
 func (s *GroupHealthService) qualityLoop() {

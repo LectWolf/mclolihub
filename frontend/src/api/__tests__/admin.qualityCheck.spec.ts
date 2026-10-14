@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../client'
-import { listQuality, saveQualitySettings, setQualityEnabled } from '../admin/qualityCheck'
+import { getQualityRun, listQuality, runQualityCheck, saveQualitySettings, setQualityEnabled } from '../admin/qualityCheck'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -28,5 +28,42 @@ describe('admin quality configuration API', () => {
     expect(put).toHaveBeenCalledWith('/admin/groups/7/quality-check', { enabled: true, model_id: '' })
     expect(await listQuality()).toEqual([status])
     expect(get).toHaveBeenCalledWith('/admin/groups/quality-check')
+  })
+})
+
+describe('admin manual quality run API', () => {
+  const run = { run_id: 'run-7', group_id: 7, status: 'running', reason: '', checked_accounts: 0, total_accounts: 3, started_at: '2026-08-08T10:00:00Z' }
+
+  it('submits a run without a body and passes the abort signal', async () => {
+    const signal = new AbortController().signal
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: run })
+    expect(await runQualityCheck(7, signal)).toEqual(run)
+    expect(post).toHaveBeenCalledWith('/admin/groups/7/quality-check/run', undefined, { signal })
+  })
+
+  it('reads the current run including latest quality for the group preview', async () => {
+    const signal = new AbortController().signal
+    const result = { ...run, status: 'completed', latest_quality: { result_id: 'result-7', status: 'success', reason: 'Passed', model_id: 'saved-model', checked_at: run.started_at, has_preview: true } }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: result })
+    expect(await getQualityRun(7, signal)).toEqual(result)
+    expect(get).toHaveBeenCalledWith('/admin/groups/7/quality-check/run', { signal })
+  })
+
+  it('preserves a null response when no manual run exists', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({ data: null })
+    expect(await getQualityRun(7)).toBeNull()
+  })
+
+  it.each([400, 409])('leaves HTTP %s rejection available to the panel', async status => {
+    const error = { response: { status } }
+    vi.spyOn(apiClient, 'post').mockRejectedValue(error)
+    await expect(runQualityCheck(7)).rejects.toBe(error)
+  })
+
+  it('passes cancellation through quality status refresh', async () => {
+    const signal = new AbortController().signal
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: [] })
+    expect(await listQuality(signal)).toEqual([])
+    expect(get).toHaveBeenCalledWith('/admin/groups/quality-check', { signal })
   })
 })

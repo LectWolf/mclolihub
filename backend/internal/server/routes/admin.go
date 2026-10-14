@@ -346,6 +346,8 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.GET("/:id/health", h.GroupHealth.AdminGet)
 		groups.POST("/:id/health/refresh", h.GroupHealth.AdminRefresh)
 		groups.PUT("/:id/quality-check", h.GroupHealth.SetQuality)
+		groups.POST("/:id/quality-check/run", h.GroupHealth.RunQuality)
+		groups.GET("/:id/quality-check/run", h.GroupHealth.QualityRun)
 		groups.POST("", h.Admin.Group.Create)
 		groups.POST("/:id/duplicate", h.Admin.Group.Duplicate)
 		groups.PUT("/:id", h.Admin.Group.Update)

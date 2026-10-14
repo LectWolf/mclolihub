@@ -212,8 +212,24 @@
                   <Icon name="check" size="sm" />
                   {{ t(qualityBusy[group.id] ? 'channelMonitorV2.settings.qualitySaving' : 'channelMonitorV2.settings.qualitySave') }}
                 </button>
+                <button type="button" class="btn btn-secondary btn-sm" :disabled="!canRunQuality(group.id)" @click="startQualityRun(group.id)" data-quality-run>
+                  {{ t(qualityRuns[group.id]?.status === 'running' ? 'channelMonitorV2.settings.qualityRunning' : 'channelMonitorV2.settings.qualityRun') }}
+                </button>
                 <p v-if="qualityErrors[group.id]" class="text-sm text-red-600" role="alert">{{ qualityErrors[group.id] }}</p>
               </div>
+              <p class="text-xs text-gray-500 dark:text-dark-400">{{ t('channelMonitorV2.settings.qualityRunHint') }}</p>
+              <p v-if="qualityDirty(group.id)" class="text-xs text-amber-700 dark:text-amber-400" data-quality-run-hint>{{ t('channelMonitorV2.settings.qualityRunUnsaved') }}</p>
+              <p v-else-if="!qualityOf(group.id)?.enabled" class="text-xs text-amber-700 dark:text-amber-400" data-quality-run-hint>{{ t('channelMonitorV2.settings.qualityRunDisabled') }}</p>
+              <div v-if="qualityRuns[group.id]" class="space-y-1 text-sm" role="status" data-quality-run-result>
+                <p>{{ t('channelMonitorV2.settings.qualityRunResult') }} · {{ t(`channelMonitorV2.settings.qualityRunStatus.${qualityRuns[group.id]?.status}`) }}</p>
+                <p>{{ t('channelMonitorV2.settings.qualityRunProgress', { checked: qualityRuns[group.id]?.checked_accounts, total: qualityRuns[group.id]?.total_accounts }) }}</p>
+                <p v-if="qualityRuns[group.id]?.status === 'failed'">{{ t('channelMonitorV2.settings.qualityRunFailed') }}</p>
+              </div>
+              <div v-if="qualityRunErrors[group.id]" class="text-sm text-red-600" role="alert" data-quality-run-error>
+                <p>{{ qualityRunErrors[group.id] }}</p>
+                <button type="button" class="btn btn-ghost btn-sm" :disabled="qualityRunPending[group.id]" @click="checkQualityRun(group.id)" data-quality-run-retry>{{ t('channelMonitorV2.settings.qualityRunCheck') }}</button>
+              </div>
+              <ChannelMonitorV3QualityPreview v-if="qualityRuns[group.id]?.latest_quality" :group-id="group.id" :enabled="qualityOf(group.id)?.enabled === true" :latest="qualityRuns[group.id]?.latest_quality" />
             </template>
           </div>
           <p v-if="groups.length === 0" class="empty-state py-8 text-sm text-gray-400">{{ t('channelMonitorV2.settings.groupsEmpty') }}</p>
@@ -328,12 +344,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Select from '@/components/common/Select.vue'
 import { CONCRETE_PLATFORM_OPTIONS } from '@/constants/platforms'
 import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
+import ChannelMonitorV3QualityPreview from '@/components/user/monitor/ChannelMonitorV3QualityPreview.vue'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { platformLabel as catalogPlatformLabel } from '@/utils/platformColors'
@@ -345,7 +362,7 @@ import {
   type MonitorConfig,
 } from '@/api/channelMonitorV2'
 import { adminAPI } from '@/api/admin'
-import { listQuality, saveQualitySettings, type GroupQualityStatus } from '@/api/admin/qualityCheck'
+import { getQualityRun, listQuality, runQualityCheck, saveQualitySettings, type GroupQualityRun, type GroupQualityStatus } from '@/api/admin/qualityCheck'
 import type { AdminGroup } from '@/types'
 
 const { t, te } = useI18n()
@@ -363,6 +380,13 @@ const qualityBusy = ref<Record<number, boolean>>({})
 const qualityErrors = ref<Record<number, string>>({})
 const qualityLoading = ref(true)
 const qualityLoadError = ref(false)
+const qualityRuns = ref<Record<number, GroupQualityRun | null>>({})
+const qualityRunKnown = ref<Record<number, boolean>>({})
+const qualityRunPending = ref<Record<number, boolean>>({})
+const qualityRunErrors = ref<Record<number, string>>({})
+const qualityRunTimers = new Map<number, ReturnType<typeof setTimeout>>()
+const qualityRequests = new Set<AbortController>()
+let disposed = false
 const qualityDefaultPrompt = computed(() => Object.values(qualityByGroup.value).find(row => row.default_prompt)?.default_prompt || '')
 const selectedPlatform = ref('')
 const availablePlatforms = computed(() =>
@@ -478,11 +502,101 @@ function qualityDraft(row?: GroupQualityStatus): QualityDraft {
 function qualityDirty(id: number) {
   return JSON.stringify(qualityDrafts.value[id]) !== qualityOriginal.value[id]
 }
+function canRunQuality(id: number) {
+  return qualityOf(id)?.enabled === true && !qualityDirty(id) && !qualityBusy.value[id]
+    && qualityRunKnown.value[id] === true && !qualityRunPending.value[id]
+    && qualityRuns.value[id]?.status !== 'running'
+}
+function qualityRequest() {
+  const request = new AbortController()
+  qualityRequests.add(request)
+  return request
+}
+function clearQualityRunTimer(id: number) {
+  clearTimeout(qualityRunTimers.get(id))
+  qualityRunTimers.delete(id)
+}
+function scheduleQualityRun(id: number) {
+  clearQualityRunTimer(id)
+  if (disposed) return
+  qualityRunTimers.set(id, setTimeout(() => {
+    qualityRunTimers.delete(id)
+    void checkQualityRun(id)
+  }, 5000))
+}
+async function refreshQualityGroup(id: number, signal: AbortSignal) {
+  try {
+    const rows = await listQuality(signal)
+    if (disposed || signal.aborted) return
+    const row = rows.find(item => item.group_id === id)
+    if (row) qualityByGroup.value[id] = row
+  } catch {
+    if (!disposed && !signal.aborted) qualityRunErrors.value[id] = t('channelMonitorV2.settings.qualityRunRefreshFailed')
+  }
+}
+async function checkQualityRun(id: number) {
+  if (disposed || qualityRunPending.value[id]) return
+  clearQualityRunTimer(id)
+  const request = qualityRequest()
+  qualityRunPending.value[id] = true
+  qualityRunErrors.value[id] = ''
+  try {
+    const run = await getQualityRun(id, request.signal)
+    if (disposed || request.signal.aborted) return
+    qualityRuns.value[id] = run
+    qualityRunKnown.value[id] = true
+    if (run?.status === 'running') scheduleQualityRun(id)
+    else if (run) await refreshQualityGroup(id, request.signal)
+  } catch {
+    if (disposed || request.signal.aborted) return
+    qualityRunKnown.value[id] = false
+    qualityRunErrors.value[id] = t('channelMonitorV2.settings.qualityRunPollFailed')
+  } finally {
+    qualityRequests.delete(request)
+    if (!disposed) qualityRunPending.value[id] = false
+  }
+}
+async function startQualityRun(id: number) {
+  if (!canRunQuality(id) || disposed) return
+  const previous = qualityRuns.value[id] ?? null
+  const request = qualityRequest()
+  qualityRunPending.value[id] = true
+  qualityRunKnown.value[id] = false
+  qualityRunErrors.value[id] = ''
+  qualityRuns.value[id] = { run_id: '', group_id: id, status: 'running', reason: '', checked_accounts: 0, total_accounts: 0, started_at: new Date().toISOString() }
+  try {
+    const run = await runQualityCheck(id, request.signal)
+    if (disposed || request.signal.aborted) return
+    qualityRuns.value[id] = run
+    qualityRunKnown.value[id] = true
+    if (run.status === 'running') scheduleQualityRun(id)
+    else await refreshQualityGroup(id, request.signal)
+  } catch (error) {
+    if (disposed || request.signal.aborted) return
+    const apiError = error as { status?: number; response?: { status?: number } }
+    const status = apiError?.status ?? apiError?.response?.status
+    if (status === 400) {
+      qualityRuns.value[id] = previous
+      qualityRunKnown.value[id] = true
+      qualityRunErrors.value[id] = t('channelMonitorV2.settings.qualityRunUnavailable')
+    } else if (status === 409) {
+      qualityRunErrors.value[id] = t('channelMonitorV2.settings.qualityRunBusy')
+      scheduleQualityRun(id)
+    } else {
+      qualityRunErrors.value[id] = t('channelMonitorV2.settings.qualityRunSubmitFailed')
+    }
+  } finally {
+    qualityRequests.delete(request)
+    if (!disposed) qualityRunPending.value[id] = false
+  }
+}
 async function loadQuality() {
   qualityLoading.value = true
   qualityLoadError.value = false
+  const request = qualityRequest()
   try {
-    const rows = await listQuality()
+    const rows = await listQuality(request.signal)
+    if (disposed || request.signal.aborted) return
     qualityByGroup.value = Object.fromEntries(rows.map(row => [row.group_id, row]))
     for (const group of groups.value) {
       if (qualityDrafts.value[group.id]) continue
@@ -490,10 +604,12 @@ async function loadQuality() {
       qualityDrafts.value[group.id] = value
       qualityOriginal.value[group.id] = JSON.stringify(value)
     }
+    for (const group of groups.value) void checkQualityRun(group.id)
   } catch {
-    qualityLoadError.value = true
+    if (!disposed && !request.signal.aborted) qualityLoadError.value = true
   } finally {
-    qualityLoading.value = false
+    qualityRequests.delete(request)
+    if (!disposed) qualityLoading.value = false
   }
 }
 async function saveQuality(id: number) {
@@ -516,14 +632,15 @@ async function saveQuality(id: number) {
   qualityBusy.value[id] = true
   try {
     const status = await saveQualitySettings(id, { enabled: value.enabled, min_spend_usd: spend, min_interval_minutes: interval, model_id: value.model.trim() })
+    if (disposed) return
     qualityByGroup.value[id] = status
     qualityDrafts.value[id] = qualityDraft(status)
     qualityOriginal.value[id] = JSON.stringify(qualityDrafts.value[id])
     appStore.showSuccess(t('channelMonitorV2.settings.saveSuccess'))
   } catch {
-    qualityErrors.value[id] = t('channelMonitorV2.settings.qualitySaveFailed')
+    if (!disposed) qualityErrors.value[id] = t('channelMonitorV2.settings.qualitySaveFailed')
   } finally {
-    qualityBusy.value[id] = false
+    if (!disposed) qualityBusy.value[id] = false
   }
 }
 function categoryLabel(category: string) {
@@ -556,6 +673,7 @@ async function load() {
       getConfig(),
       adminAPI.groups.getAllIncludingInactive(),
     ])
+    if (disposed) return
     const normalized = normalizeConfig(value)
     draft.value = structuredClone(normalized)
     groups.value = groupRows
@@ -586,4 +704,11 @@ async function save() {
 }
 
 onMounted(load)
+onUnmounted(() => {
+  disposed = true
+  for (const timer of qualityRunTimers.values()) clearTimeout(timer)
+  qualityRunTimers.clear()
+  for (const request of qualityRequests) request.abort()
+  qualityRequests.clear()
+})
 </script>

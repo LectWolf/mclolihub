@@ -3,12 +3,13 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { baseCompile } from '@intlify/message-compiler'
 import MonitorSettingsPanel from '../MonitorSettingsPanel.vue'
-import { listQuality, saveQualitySettings, type GroupQualityStatus } from '@/api/admin/qualityCheck'
+import { getQualityRun, listQuality, runQualityCheck, saveQualitySettings, type GroupQualityRun, type GroupQualityStatus } from '@/api/admin/qualityCheck'
 import { getConfig, updateConfig } from '@/api/channelMonitorV2'
 import en from '@/i18n/locales/en/channelMonitorV2'
-const compiledEn = JSON.parse(JSON.stringify(en), (_key, value) => typeof value === 'string' ? new Function(`return ${baseCompile(value, { mode: 'arrow' }).code}`)() : value)
+import enV3 from '@/i18n/locales/en/channelMonitorV3'
+const compiledEn = JSON.parse(JSON.stringify({ ...en, ...enV3 }), (_key, value) => typeof value === 'string' ? new Function(`return ${baseCompile(value, { mode: 'arrow' }).code}`)() : value)
 
-vi.mock('@/api/admin/qualityCheck', () => ({ listQuality: vi.fn(), saveQualitySettings: vi.fn() }))
+vi.mock('@/api/admin/qualityCheck', () => ({ listQuality: vi.fn(), saveQualitySettings: vi.fn(), getQualityRun: vi.fn(), runQualityCheck: vi.fn() }))
 vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: vi.fn(async () => [
   { id: 7, name: 'Group A', platform: 'openai' }, { id: 8, name: 'Group B', platform: 'openai' },
 ]) } } }))
@@ -34,6 +35,8 @@ async function render() {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(listQuality).mockResolvedValue([status, { ...status, group_id: 8 }])
+  vi.mocked(getQualityRun).mockReset().mockResolvedValue(null)
+  vi.mocked(runQualityCheck).mockReset().mockResolvedValue(running)
   vi.mocked(saveQualitySettings).mockImplementation(async (id, payload) => ({ ...status, ...payload, group_id: id }))
   vi.mocked(getConfig).mockResolvedValue({
     version: 1, enabled: true, refresh_interval_seconds: 60, platforms: [], group_ids: [],
@@ -42,7 +45,7 @@ beforeEach(() => {
       error_weight: 0.6, ttft_weight: 0.2, cache_weight: 0.2 },
   })
 })
-afterEach(() => wrapper?.unmount())
+afterEach(() => { wrapper?.unmount(); vi.useRealTimers() })
 
 describe('MonitorSettingsPanel quality configuration', () => {
   it('keeps group edits local until save and sends all thresholds and the selected model', async () => {
@@ -143,4 +146,193 @@ it('parses the entire numeric spend input rather than a parseFloat prefix', asyn
   await group.find('[data-quality-save]').trigger('click')
   await flushPromises()
   expect(saveQualitySettings).toHaveBeenCalledWith(7, expect.objectContaining({ min_spend_usd: 100 }))
+})
+
+const running: GroupQualityRun = {
+  run_id: 'run-7', group_id: 7, status: 'running', reason: '', checked_accounts: 1, total_accounts: 3, started_at: '2026-08-08T10:00:00Z',
+}
+const latest = { result_id: 'result-7', status: 'success' as const, reason: 'Quality passed', model_id: 'test-model', checked_at: '2026-08-08T10:01:00Z', has_preview: true }
+
+describe('MonitorSettingsPanel manual group quality check', () => {
+  it('requires saved enabled settings and disables the run button for drafts and saves', async () => {
+    const group = await render()
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
+    expect(group.text()).toContain(en.channelMonitorV2.settings.qualityRunHint)
+    await group.find('[data-quality-model]').setValue('unsaved-model')
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    expect(group.find('[data-quality-run-hint]').text()).toBe(en.channelMonitorV2.settings.qualityRunUnsaved)
+    let resolve!: (value: GroupQualityStatus) => void
+    vi.mocked(saveQualitySettings).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    await group.find('[data-quality-save]').trigger('click')
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    resolve({ ...status, model_id: 'unsaved-model' })
+    await flushPromises()
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
+    await group.find('[role="switch"]').trigger('click')
+    await group.find('[data-quality-save]').trigger('click')
+    await flushPromises()
+    expect(group.find('[data-quality-run-hint]').text()).toBe(en.channelMonitorV2.settings.qualityRunDisabled)
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    expect(runQualityCheck).not.toHaveBeenCalled()
+  })
+
+  it('runs immediately, polls every five seconds without overlap, and refreshes only its group', async () => {
+    vi.useFakeTimers()
+    const group = await render()
+    let accept!: (value: GroupQualityRun) => void
+    vi.mocked(runQualityCheck).mockReturnValueOnce(new Promise(done => { accept = done }))
+    await wrapper.find('[data-quality-group="8"] [data-quality-model]').setValue('keep-other-draft')
+    await group.find('[data-quality-run]').trigger('click')
+    expect(group.find('[data-quality-run]').text()).toBe(en.channelMonitorV2.settings.qualityRunning)
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    expect(runQualityCheck).toHaveBeenCalledWith(7, expect.any(AbortSignal))
+    accept(running)
+    await flushPromises()
+    expect(group.find('[data-quality-run-result]').text()).toContain('1 / 3')
+    let finish!: (value: GroupQualityRun) => void
+    vi.mocked(getQualityRun).mockReturnValueOnce(new Promise(done => { finish = done }))
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(getQualityRun).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(getQualityRun).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(getQualityRun).toHaveBeenCalledTimes(3)
+    vi.mocked(listQuality).mockResolvedValueOnce([{ ...status, status: 'suspect' }, { ...status, group_id: 8, model_id: 'server-other' }])
+    finish({ ...running, status: 'completed', checked_accounts: 3, latest_quality: latest })
+    await flushPromises()
+    expect(group.find('[data-quality-run-result]').text()).toContain('Completed')
+    expect(group.find('[data-quality-run-result]').text()).toContain('3 / 3')
+    expect(group.text()).toContain(en.channelMonitorV2.settings.qualityStatus.suspect)
+    expect(group.findComponent({ name: 'ChannelMonitorV3QualityPreview' }).props()).toMatchObject({ groupId: 7, enabled: true, latest })
+    expect((wrapper.find('[data-quality-group="8"] [data-quality-model]').element as HTMLInputElement).value).toBe('keep-other-draft')
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(getQualityRun).toHaveBeenCalledTimes(3)
+  })
+
+  it('restores an existing run after configuration load and displays failed results safely', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getQualityRun).mockImplementation(async id => id === 7 ? running : null)
+    const group = await render()
+    expect(group.find('[data-quality-run]').text()).toBe(en.channelMonitorV2.settings.qualityRunning)
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    vi.mocked(getQualityRun).mockResolvedValueOnce({ ...running, status: 'failed', reason: 'private raw upstream error', latest_quality: latest })
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(group.find('[data-quality-run-result]').text()).toContain(en.channelMonitorV2.settings.qualityRunFailed)
+    expect(wrapper.text()).not.toContain('private raw upstream error')
+    expect(group.findComponent({ name: 'ChannelMonitorV3QualityPreview' }).props('latest')).toEqual(latest)
+    expect(listQuality).toHaveBeenCalledTimes(2)
+    expect(runQualityCheck).not.toHaveBeenCalled()
+  })
+
+  it('keeps an unknown status locked after polling failure and supports checking status', async () => {
+    vi.useFakeTimers()
+    const group = await render()
+    await group.find('[data-quality-run]').trigger('click')
+    await flushPromises()
+    vi.mocked(getQualityRun).mockRejectedValueOnce(new Error('private network details'))
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(group.find('[data-quality-run-error]').text()).toContain(en.channelMonitorV2.settings.qualityRunPollFailed)
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).not.toContain('private network details')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(getQualityRun).toHaveBeenCalledTimes(3)
+    vi.mocked(getQualityRun).mockResolvedValueOnce({ ...running, status: 'completed' })
+    await group.find('[data-quality-run-retry]').trigger('click')
+    await flushPromises()
+    expect(group.find('[data-quality-run-error]').exists()).toBe(false)
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
+    expect(runQualityCheck).toHaveBeenCalledOnce()
+  })
+
+  it('requires initial status recovery to succeed before permitting a run', async () => {
+    vi.mocked(getQualityRun).mockRejectedValueOnce(new Error('initial failure'))
+    const group = await render()
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+    await group.find('[data-quality-run-retry]').trigger('click')
+    await flushPromises()
+    expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
+  })
+
+  it.each([[400, true], [409, true], [500, true], [400, false], [409, false]])('handles POST %s (normalized: %s) using fixed messages and safe retry behavior', async (statusCode, normalized) => {
+    vi.useFakeTimers()
+    vi.mocked(runQualityCheck).mockRejectedValueOnce(normalized
+      ? { status: statusCode, error: 'private response' }
+      : { response: { status: statusCode, data: { error: 'private response' } } })
+    const group = await render()
+    await group.find('[data-quality-run]').trigger('click')
+    await flushPromises()
+    const message = statusCode === 400 ? 'qualityRunUnavailable' : statusCode === 409 ? 'qualityRunBusy' : 'qualityRunSubmitFailed'
+    expect(group.find('[data-quality-run-error]').text()).toContain(en.channelMonitorV2.settings[message])
+    expect(wrapper.text()).not.toContain('private response')
+    expect(group.find('[data-quality-run]').attributes('disabled') !== undefined).toBe(statusCode !== 400)
+    if (statusCode === 409) {
+      vi.mocked(getQualityRun).mockResolvedValueOnce(running)
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
+      expect(getQualityRun).toHaveBeenCalledTimes(3)
+    }
+  })
+
+  it('retries terminal quality refresh while retaining the run result and group drafts', async () => {
+    const group = await render()
+    vi.mocked(runQualityCheck).mockResolvedValueOnce({ ...running, status: 'completed', latest_quality: latest })
+    vi.mocked(listQuality).mockRejectedValueOnce(new Error('private refresh failure'))
+    await group.find('[data-quality-run]').trigger('click')
+    await flushPromises()
+    expect(group.find('[data-quality-run-error]').text()).toContain(en.channelMonitorV2.settings.qualityRunRefreshFailed)
+    await group.find('[data-quality-model]').setValue('new-draft')
+    vi.mocked(getQualityRun).mockResolvedValueOnce({ ...running, status: 'completed', latest_quality: latest })
+    await group.find('[data-quality-run-retry]').trigger('click')
+    await flushPromises()
+    expect(group.find('[data-quality-run-error]').exists()).toBe(false)
+    expect((group.find('[data-quality-model]').element as HTMLInputElement).value).toBe('new-draft')
+    expect(wrapper.text()).not.toContain('private refresh failure')
+  })
+
+  it('clears scheduled polling when unmounted', async () => {
+    vi.useFakeTimers()
+    vi.mocked(getQualityRun).mockImplementation(async id => id === 7 ? running : null)
+    await render()
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(15000)
+    expect(getQualityRun).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('aborts in-flight polling and ignores a late response after unmount', async () => {
+    vi.useFakeTimers()
+    const group = await render()
+    await group.find('[data-quality-run]').trigger('click')
+    await flushPromises()
+    let finish!: (value: GroupQualityRun) => void
+    vi.mocked(getQualityRun).mockReturnValueOnce(new Promise(done => { finish = done }))
+    await vi.advanceTimersByTimeAsync(5000)
+    const signal = vi.mocked(getQualityRun).mock.calls.at(-1)![1]!
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    finish({ ...running, status: 'completed', latest_quality: latest })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(listQuality).toHaveBeenCalledTimes(1)
+    expect(getQualityRun).toHaveBeenCalledTimes(3)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('aborts an in-flight submission and ignores its late accepted response', async () => {
+    vi.useFakeTimers()
+    const group = await render()
+    let accept!: (value: GroupQualityRun) => void
+    vi.mocked(runQualityCheck).mockReturnValueOnce(new Promise(done => { accept = done }))
+    await group.find('[data-quality-run]').trigger('click')
+    const signal = vi.mocked(runQualityCheck).mock.calls[0][1]!
+    wrapper.unmount()
+    expect(signal.aborted).toBe(true)
+    accept(running)
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(getQualityRun).toHaveBeenCalledTimes(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
 })

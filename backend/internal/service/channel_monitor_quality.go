@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
 // NewGroupQualityReader shares the quality read contract with passive monitor repositories.
-func NewGroupQualityReader(db *sql.DB) *GroupQualityChecker { return &GroupQualityChecker{db: db} }
+func NewGroupQualityReader(db *sql.DB) *GroupQualityChecker {
+	return &GroupQualityChecker{db: db, now: time.Now}
+}
 
 type channelMonitorQualityReader interface {
 	LoadGroupQualityLatest(context.Context, []int64) (map[int64]bool, map[int64]*GroupQualityResult, error)

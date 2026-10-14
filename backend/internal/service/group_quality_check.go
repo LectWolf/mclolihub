@@ -81,6 +81,7 @@ type GroupQualityChecker struct {
 	owner     string
 	now       func() time.Time
 	probeFunc func(context.Context, int64, string) qualityProbeResult
+	launch    func(func(context.Context)) bool
 }
 
 func newGroupQualityChecker(db *sql.DB, accounts AccountRepository, tests *AccountTestService, lockCache LeaderLockCache, owner string) *GroupQualityChecker {
