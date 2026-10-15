@@ -2,7 +2,7 @@
 """独立的 Chat Completions HTML 生成器。Python 3.10+，无需第三方依赖。
 
 运行：python html_studio.py
-配置和作品默认保存在脚本旁的 output/html-studio/。
+作品默认保存在脚本旁的 output/html-studio/artworks/；连接信息仅用于本次运行。
 """
 
 import argparse
@@ -126,30 +126,6 @@ def normalize_base(value):
     if not path:
         path = "/v1"
     return urlunsplit(parsed._replace(path=path))
-
-
-def load_config(path):
-    if not path.exists():
-        return {}
-    try:
-        config = json.loads(path.read_text(encoding="utf-8-sig"))
-        if not isinstance(config, dict) or any(not isinstance(config.get(k, ""), str) for k in ("base_url", "api_key", "model")):
-            raise ValueError()
-        return config
-    except (ValueError, UnicodeError) as exc:
-        raise StudioError(f"配置文件格式有误，请加 --configure 重新填写：{path}") from exc
-
-
-def save_config(path, base, key, model=""):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name("." + path.name + "." + uuid.uuid4().hex + ".tmp")
-    try:
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump({"base_url": base, "api_key": key, "model": model}, stream, ensure_ascii=False, indent=2)
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def user_agent():
@@ -547,8 +523,6 @@ def main(argv=None):
     parser.add_argument("--model", help="跳过选择，使用 /models 列表中的指定模型")
     parser.add_argument("--prompt", help="生成需求；默认交互输入，回车使用鹈鹕骑车动画")
     parser.add_argument("--prompt-file", type=Path, help="从 UTF-8 文件读取多行生成需求")
-    parser.add_argument("--config", type=Path, default=ROOT / "config.json")
-    parser.add_argument("--configure", action="store_true", help="重新填写连接配置")
     parser.add_argument("--output", type=Path, default=ROOT / "artworks", help="HTML 作品保存目录")
     parser.add_argument("--max-tokens", type=int, default=16384)
     parser.add_argument("--timeout", type=float, default=900, help="每次生成的总超时秒数")
@@ -563,13 +537,9 @@ def main(argv=None):
     try:
         ui.banner()
         ui.step(1, "连接你的模型服务")
-        config = {} if args.configure else load_config(args.config)
-        base_value = args.base_url or os.getenv("OPENAI_BASE_URL") or config.get("base_url")
-        if not base_value:
-            base_value = input("  Base URL: ").strip()
+        base_value = args.base_url or input("  Base URL: ").strip()
         base = normalize_base(base_value)
-        same_base = bool(config.get("base_url") and normalize_base(config["base_url"]) == base)
-        key = os.getenv("OPENAI_API_KEY") or (config.get("api_key") if same_base else None) or getpass.getpass("  API Key（隐藏输入）: ").strip()
+        key = getpass.getpass("  API Key（隐藏输入）: ").strip()
         if not key:
             raise StudioError("API Key 不能为空。")
         ui.note(base)
@@ -580,10 +550,8 @@ def main(argv=None):
         if model and model not in models:
             raise StudioError(f"模型列表中没有 {model}。")
         if not model:
-            model = choose_model(models, config.get("model", "") if same_base else "", ui)
+            model = choose_model(models, "", ui)
         ui.success("已选择 " + model)
-        save_config(args.config, base, key, model)
-        ui.note(f"连接配置已保存在本机：{args.config.resolve()}")
         ui.step(3, "描述你的 HTML 作品")
         if args.prompt_file:
             prompt = args.prompt_file.read_text(encoding="utf-8-sig").strip()
