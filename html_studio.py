@@ -6,7 +6,6 @@
 """
 
 import argparse
-import getpass
 import http.client
 import json
 import math
@@ -539,7 +538,7 @@ def main(argv=None):
         ui.step(1, "连接你的模型服务")
         base_value = args.base_url or input("  Base URL: ").strip()
         base = normalize_base(base_value)
-        key = getpass.getpass("  API Key（隐藏输入）: ").strip()
+        key = input("  API Key: ").strip()
         if not key:
             raise StudioError("API Key 不能为空。")
         ui.note(base)
