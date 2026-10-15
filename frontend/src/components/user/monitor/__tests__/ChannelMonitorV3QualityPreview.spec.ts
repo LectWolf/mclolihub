@@ -7,6 +7,8 @@ import { apiClient } from '@/api/client'
 import type { MonitorLatestQuality } from '@/api/channelMonitorV2'
 import en from '@/i18n/locales/en/channelMonitorV3'
 
+const { copyToClipboard } = vi.hoisted(() => ({ copyToClipboard: vi.fn().mockResolvedValue(true) }))
+vi.mock('@/composables/useClipboard', () => ({ useClipboard: () => ({ copyToClipboard }) }))
 const compiledEn = JSON.parse(JSON.stringify(en), (_key, value) => typeof value === 'string' ? new Function(`return ${baseCompile(value, { mode: 'arrow' }).code}`)() : value)
 const latest: MonitorLatestQuality = {
   result_id: '123e4567-e89b-12d3-a456-426614174000', status: 'success', reason: 'Animation meets rubric',
@@ -26,11 +28,15 @@ function render(overrides: Record<string, unknown> = {}) {
 const dialog = () => document.querySelector('[role="dialog"]')
 
 beforeEach(() => {
+  vi.stubGlobal('innerHeight', 768)
+  vi.stubGlobal('innerWidth', 1024)
   get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: { items: [] } })
+  copyToClipboard.mockClear()
 })
 afterEach(() => {
   wrapper?.unmount()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('ChannelMonitorV3QualityPreview', () => {
@@ -70,5 +76,91 @@ describe('ChannelMonitorV3QualityPreview', () => {
     await wrapper.setProps({ enabled: false })
     expect(wrapper.find('button, p').exists()).toBe(false)
     expect(dialog()).toBeNull()
+  })
+
+  it('shows and copies the exact raw text for a result without HTML', async () => {
+    const output = '  <svg><script>alert(1)</script></svg>\nunfinished reply  '
+    get.mockResolvedValue({ data: { output } })
+    const item = { ...latest, status: 'failed' as const, has_artwork: false, has_raw_output: true, reason: 'Artwork generation response was incomplete or truncated' }
+    const chip = render({ history: [item] })
+    expect(get).not.toHaveBeenCalled()
+    await chip.trigger('click')
+    await flushPromises()
+    expect(get).toHaveBeenCalledWith(expect.stringContaining('/quality-raw-output/'), expect.objectContaining({ params: { group_id: 7 } }))
+    expect(dialog()?.textContent).toContain(item.reason)
+    expect(dialog()?.querySelector('pre')?.textContent).toBe(output)
+    expect(dialog()?.querySelector('script, iframe')).toBeNull()
+    expect(dialog()?.querySelector('pre')?.children.length).toBe(0)
+    const copy = Array.from(dialog()!.querySelectorAll('button')).find(button => button.textContent === 'Copy raw output')!
+    copy.click()
+    await flushPromises()
+    expect(copyToClipboard).toHaveBeenCalledWith(output)
+    expect(dialog()).not.toBeNull()
+  })
+
+  it('places a short no-HTML panel below the pointer using its actual height', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, 520, this.getAttribute('role') === 'dialog' ? 160 : 22)
+    })
+    const chip = render({ history: [{ ...latest, has_artwork: false }] })
+    await chip.trigger('mouseenter', { clientX: 200, clientY: 400 })
+    await flushPromises()
+    expect((dialog() as HTMLElement).style.top).toBe('412px')
+  })
+
+  it('does not fetch unavailable raw output for old records', async () => {
+    const chip = render({ history: [{ ...latest, has_artwork: false, has_raw_output: false }] })
+    await chip.trigger('click')
+    await flushPromises()
+    expect(get).not.toHaveBeenCalled()
+    expect(dialog()?.textContent).toContain('No saved raw output')
+    expect(dialog()?.querySelector('pre')).toBeNull()
+  })
+
+  it('ignores stale raw replies when switching records', async () => {
+    let resolveFirst!: (value: { data: { output: string } }) => void
+    get.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve })).mockResolvedValueOnce({ data: { output: 'second reply' } })
+    const first = { ...latest, has_artwork: false, has_raw_output: true }
+    const second = { ...first, result_id: 'second-id' }
+    render({ history: [first, second] })
+    await wrapper.findAll('button')[0]!.trigger('mouseenter')
+    await wrapper.findAll('button')[1]!.trigger('mouseenter')
+    await flushPromises()
+    expect(dialog()?.querySelector('pre')?.textContent).toBe('second reply')
+    resolveFirst({ data: { output: 'stale reply' } })
+    await flushPromises()
+    expect(dialog()?.querySelector('pre')?.textContent).toBe('second reply')
+  })
+
+  it('offers retry after a raw-output read fails and handles an empty reply', async () => {
+    get.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ data: { output: '' } })
+    const chip = render({ history: [{ ...latest, has_artwork: false, has_raw_output: true }] })
+    await chip.trigger('click')
+    await flushPromises()
+    expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull()
+    Array.from(dialog()!.querySelectorAll('button')).find(button => button.textContent === 'Retry')!.click()
+    await flushPromises()
+    expect(dialog()?.querySelector('[role="alert"]')).toBeNull()
+    expect(dialog()?.textContent).toContain('No saved raw output')
+    expect(dialog()?.querySelector('pre')).toBeNull()
+  })
+
+  it('repositions above the pointer after asynchronous raw content grows near the viewport edge', async () => {
+    let resolveOutput!: (value: { data: { output: string } }) => void
+    let measuredHeight = 120
+    get.mockImplementationOnce(() => new Promise(resolve => { resolveOutput = resolve }))
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return new DOMRect(0, 0, 520, this.getAttribute('role') === 'dialog' ? measuredHeight : 22)
+    })
+    const chip = render({ history: [{ ...latest, has_artwork: false, has_raw_output: true }] })
+    await chip.trigger('mouseenter', { clientX: 900, clientY: 600 })
+    await flushPromises()
+    expect((dialog() as HTMLElement).style.top).toBe('612px')
+    measuredHeight = 350
+    resolveOutput({ data: { output: 'received text' } })
+    await flushPromises()
+    const style = (dialog() as HTMLElement).style
+    expect(style.top).toBe('238px')
+    expect(Number.parseInt(style.left) + 520).toBeLessThanOrEqual(1008)
   })
 })

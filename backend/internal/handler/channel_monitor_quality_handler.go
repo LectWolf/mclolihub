@@ -85,6 +85,25 @@ func (h *ChannelMonitorV2Handler) QualityArtwork(c *gin.Context) {
 	response.Success(c, gin.H{"html": document})
 }
 
+func (h *ChannelMonitorV2Handler) QualityRawOutput(c *gin.Context) {
+	groupID, resultID, ok := h.qualityAssetScope(c, true)
+	if !ok {
+		return
+	}
+	output, err := h.service.QualityRawOutput(c.Request.Context(), groupID, resultID)
+	if errors.Is(err, sql.ErrNoRows) {
+		response.Error(c, http.StatusNotFound, "raw output unavailable")
+		return
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("X-Content-Type-Options", "nosniff")
+	response.Success(c, gin.H{"output": output})
+}
+
 func (h *ChannelMonitorV2Handler) QualityHistory(c *gin.Context) {
 	groupID, _, ok := h.qualityAssetScope(c, false)
 	if !ok {

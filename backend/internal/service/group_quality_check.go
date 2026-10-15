@@ -53,17 +53,18 @@ type GroupQualityStatus struct {
 }
 
 type GroupQualityResult struct {
-	ResultID    string                   `json:"result_id"`
-	Status      string                   `json:"status"`
-	Reason      string                   `json:"reason"`
-	ModelID     string                   `json:"model_id"`
-	CheckedAt   time.Time                `json:"checked_at"`
-	HasPreview  bool                     `json:"has_preview"`
-	HasArtwork  bool                     `json:"has_artwork"`
-	Score       *float64                 `json:"score"`
-	Passed      *bool                    `json:"passed"`
-	IsDegraded  *bool                    `json:"is_degraded"`
-	Diagnostics *GroupQualityDiagnostics `json:"diagnostics,omitempty"`
+	ResultID     string                   `json:"result_id"`
+	Status       string                   `json:"status"`
+	Reason       string                   `json:"reason"`
+	ModelID      string                   `json:"model_id"`
+	CheckedAt    time.Time                `json:"checked_at"`
+	HasPreview   bool                     `json:"has_preview"`
+	HasArtwork   bool                     `json:"has_artwork"`
+	HasRawOutput bool                     `json:"has_raw_output"`
+	Score        *float64                 `json:"score"`
+	Passed       *bool                    `json:"passed"`
+	IsDegraded   *bool                    `json:"is_degraded"`
+	Diagnostics  *GroupQualityDiagnostics `json:"diagnostics,omitempty"`
 }
 
 type qualityProbeResult struct {
@@ -71,6 +72,7 @@ type qualityProbeResult struct {
 	Reason      string
 	ModelID     string
 	Artwork     string
+	RawOutput   string
 	PreviewPNG  []byte
 	Score       *float64
 	Diagnostics *GroupQualityDiagnostics
@@ -397,6 +399,13 @@ func qualityArtworkValue(document string) any {
 	return document
 }
 
+func qualityRawOutputValue(output string) any {
+	if len(output) == 0 || len(output) > pelicanDocumentLimit {
+		return nil
+	}
+	return output
+}
+
 func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate qualityCandidate, now time.Time, result qualityProbeResult) error {
 	switch result.Status {
 	case "success", "degraded", "unknown", "failed":
@@ -461,12 +470,12 @@ func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate quality
 	}
 	resultID := uuid.NewString()
 	_, err = tx.ExecContext(ctx, `
-        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png, artwork_html, score)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO group_quality_check_latest (group_id, account_id, result_id, status, reason, model_id, checked_at, preview_png, artwork_html, raw_output, score)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (group_id) DO UPDATE SET account_id = EXCLUDED.account_id, result_id = EXCLUDED.result_id,
             status = EXCLUDED.status, reason = EXCLUDED.reason, model_id = EXCLUDED.model_id,
-            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png, artwork_html = EXCLUDED.artwork_html, score = EXCLUDED.score`,
-		candidate.groupID, candidate.id, resultID, result.Status, encodeQualityReason(result), result.ModelID, now, preview, qualityArtworkValue(result.Artwork), result.Score)
+            checked_at = EXCLUDED.checked_at, preview_png = EXCLUDED.preview_png, artwork_html = EXCLUDED.artwork_html, raw_output = EXCLUDED.raw_output, score = EXCLUDED.score`,
+		candidate.groupID, candidate.id, resultID, result.Status, encodeQualityReason(result), result.ModelID, now, preview, qualityArtworkValue(result.Artwork), qualityRawOutputValue(result.RawOutput), result.Score)
 	if err != nil {
 		return err
 	}
@@ -514,7 +523,7 @@ func (c *GroupQualityChecker) reconcileScheduling(ctx context.Context) {
 	}
 }
 
-// Matrix responses contain metadata only; PNG and HTML are loaded on demand.
+// Matrix responses contain metadata only; assets and raw output are loaded on demand.
 func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map[int64]bool, map[int64]*GroupQualityResult, error) {
 	enabled := make(map[int64]bool)
 	results := make(map[int64]*GroupQualityResult)
@@ -523,7 +532,7 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 	}
 	rows, err := c.db.QueryContext(ctx, `
         SELECT s.group_id, s.enabled, l.result_id::text, l.status, l.reason, l.model_id, l.checked_at,
-            COALESCE(octet_length(l.preview_png) > 0, FALSE), COALESCE(octet_length(l.artwork_html) > 0, FALSE), l.score
+            COALESCE(octet_length(l.preview_png) > 0, FALSE), COALESCE(octet_length(l.artwork_html) > 0, FALSE), COALESCE(octet_length(l.raw_output) > 0, FALSE), l.score
         FROM group_quality_check_settings s
         LEFT JOIN group_quality_check_latest l ON l.group_id = s.group_id
           AND EXISTS (SELECT 1 FROM accounts a JOIN account_groups ag ON ag.account_id = a.id
@@ -535,17 +544,17 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
-		var on, preview, artwork bool
+		var on, preview, artwork, hasRawOutput bool
 		var rid, status, reason, model sql.NullString
 		var checked sql.NullTime
 		var score sql.NullFloat64
-		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview, &artwork, &score); err != nil {
+		if err := rows.Scan(&id, &on, &rid, &status, &reason, &model, &checked, &preview, &artwork, &hasRawOutput, &score); err != nil {
 			return nil, nil, err
 		}
 		enabled[id] = on
 		if on && rid.Valid && checked.Valid {
 			displayReason, diagnostics := decodeQualityReason(reason.String)
-			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, HasArtwork: artwork, Score: qualityScorePointer(score), Diagnostics: diagnostics}
+			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, HasArtwork: artwork, HasRawOutput: hasRawOutput, Score: qualityScorePointer(score), Diagnostics: diagnostics}
 			applyQualityScoreVerdict(results[id])
 		}
 	}
@@ -596,4 +605,27 @@ func (c *GroupQualityChecker) Artwork(ctx context.Context, groupID int64, result
 		return "", sql.ErrNoRows
 	}
 	return document, nil
+}
+
+func (c *GroupQualityChecker) RawOutput(ctx context.Context, groupID int64, resultID string) (string, error) {
+	if c == nil || c.db == nil {
+		return "", sql.ErrNoRows
+	}
+	if _, err := uuid.Parse(resultID); err != nil {
+		return "", sql.ErrNoRows
+	}
+	var output string
+	err := c.db.QueryRowContext(ctx, `
+        SELECT l.raw_output FROM group_quality_check_history l
+        JOIN group_quality_check_settings s ON s.group_id = l.group_id AND s.enabled
+        JOIN accounts a ON a.id = l.account_id AND a.deleted_at IS NULL
+        JOIN account_groups ag ON ag.account_id = a.id AND ag.group_id = l.group_id
+        WHERE l.group_id = $1 AND l.result_id = $2 AND l.raw_output IS NOT NULL`, groupID, resultID).Scan(&output)
+	if err != nil {
+		return "", err
+	}
+	if qualityRawOutputValue(output) == nil {
+		return "", sql.ErrNoRows
+	}
+	return output, nil
 }

@@ -17,6 +17,10 @@ func (r *channelMonitorV2Repository) LoadGroupQualityArtwork(ctx context.Context
 	return service.NewGroupQualityReader(r.db).Artwork(ctx, groupID, resultID)
 }
 
+func (r *channelMonitorV2Repository) LoadGroupQualityRawOutput(ctx context.Context, groupID int64, resultID string) (string, error) {
+	return service.NewGroupQualityReader(r.db).RawOutput(ctx, groupID, resultID)
+}
+
 func (r *channelMonitorV2Repository) LoadGroupQualityHistory(ctx context.Context, groupIDs []int64) (map[int64][]*service.GroupQualityResult, error) {
 	return service.NewGroupQualityReader(r.db).History(ctx, groupIDs)
 }

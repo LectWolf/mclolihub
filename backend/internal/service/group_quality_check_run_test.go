@@ -59,7 +59,11 @@ func expectAutomaticProgress(mock sqlmock.Sqlmock, now time.Time, groupID int64,
 	mock.ExpectExec(`UPDATE group_quality_check_runs SET`).WithArgs(groupID, sqlmock.AnyArg(), status, "", checked, now).WillReturnResult(sqlmock.NewResult(0, 1))
 }
 
-func expectQualitySave(mock sqlmock.Sqlmock, now time.Time, candidate qualityCandidate, status string, streak int, paused bool, preview any) {
+func expectQualitySave(mock sqlmock.Sqlmock, now time.Time, candidate qualityCandidate, status string, streak int, paused bool, preview any, rawOutput ...string) {
+	var raw any
+	if len(rawOutput) > 0 {
+		raw = rawOutput[0]
+	}
 	mock.ExpectBegin()
 	mock.ExpectQuery(`SELECT version, enabled`).WithArgs(candidate.groupID).
 		WillReturnRows(sqlmock.NewRows([]string{"version", "enabled"}).AddRow(candidate.version, true))
@@ -73,10 +77,10 @@ func expectQualitySave(mock sqlmock.Sqlmock, now time.Time, candidate qualityCan
 		WithArgs(candidate.groupID, candidate.id, now, status, streak, paused, retry, candidate.modelID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO group_quality_check_latest`).
-		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, preview, nil, nil).
+		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, preview, nil, raw, nil).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO group_quality_check_history`).
-		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, nil, nil).
+		WithArgs(candidate.groupID, candidate.id, sqlmock.AnyArg(), status, "safe reason", candidate.modelID, now, nil, nil, raw).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`DELETE FROM group_quality_check_history`).WithArgs(candidate.groupID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -199,14 +203,15 @@ func TestQualityLatestReturnsNewestFailureAndKeepsPausedAccountVisible(t *testin
 	defer func() { _ = db.Close() }()
 	now := time.Now().UTC()
 	mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest.*s.group_id = ANY`).
-		WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork", "score"}).
-			AddRow(7, true, "latest-id", "failed", "Request failed", "text-model", now, false, false, nil).
-			AddRow(8, false, "old-id", "success", "", "text-model", now, true, false, nil))
+		WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork", "raw", "score"}).
+			AddRow(7, true, "latest-id", "failed", "Request failed", "text-model", now, false, false, true, nil).
+			AddRow(8, false, "old-id", "success", "", "text-model", now, true, false, false, nil))
 	enabled, results, err := NewGroupQualityReader(db).Latest(context.Background(), []int64{7, 8})
 	require.NoError(t, err)
 	require.True(t, enabled[7])
 	require.Equal(t, "failed", results[7].Status)
 	require.False(t, results[7].HasPreview)
+	require.True(t, results[7].HasRawOutput)
 	require.Nil(t, results[8])
 	require.NoError(t, mock.ExpectationsWereMet())
 }

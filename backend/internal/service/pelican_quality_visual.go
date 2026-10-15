@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 )
@@ -154,9 +155,9 @@ type pelicanTestOutput struct {
 	DeadlineSource    string
 }
 
-func parsePelicanTestEvents(raw []byte, limit int) (pelicanTestOutput, error) {
-	var out pelicanTestOutput
+func parsePelicanTestEvents(raw []byte, limit int) (out pelicanTestOutput, err error) {
 	var text strings.Builder
+	defer func() { out.Text = text.String() }()
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 	scanner.Buffer(make([]byte, 4096), 2*pelicanDocumentLimit)
 	for scanner.Scan() {
@@ -182,6 +183,12 @@ func parsePelicanTestEvents(raw []byte, limit int) (pelicanTestOutput, error) {
 		case "content":
 			out.ReceivedTextBytes += len(event.Text)
 			if len(event.Text) > limit-text.Len() {
+				prefix := event.Text[:limit-text.Len()]
+				for len(prefix) > 0 && !utf8.ValidString(prefix) {
+					prefix = prefix[:len(prefix)-1]
+				}
+				_, _ = text.WriteString(prefix)
+				out.CaptureOverflow = true
 				return out, errors.New("test output limit")
 			}
 			_, _ = text.WriteString(event.Text)
@@ -247,7 +254,7 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 	c.Request, _ = http.NewRequestWithContext(ctx, http.MethodPost, "/internal/pelican-quality", nil)
 	err := s.TestAccountConnection(c, accountID, modelID, prompt, "")
 	out, parseErr := parsePelicanTestEvents(w.Bytes(), limit)
-	out.CaptureOverflow = w.overflow
+	out.CaptureOverflow = out.CaptureOverflow || w.overflow
 	failure := parseErr
 	if err != nil {
 		failure = err
@@ -339,6 +346,7 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 	result.Diagnostics.CaptureOverflow = generated.CaptureOverflow
 	result.Diagnostics.FailureCode = generated.FailureCode
 	result.Diagnostics.DeadlineSource = generated.DeadlineSource
+	result.RawOutput = generated.Text
 	if generated.Model != "" {
 		result.ModelID = generated.Model
 	}

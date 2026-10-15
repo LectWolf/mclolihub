@@ -59,6 +59,10 @@ type qualityRunGroupRepository struct {
 	service.GroupRepository
 }
 
+type qualityRunAccountRepository struct {
+	service.AccountRepository
+}
+
 func (qualityRunGroupRepository) GetByID(_ context.Context, id int64) (*service.Group, error) {
 	return &service.Group{ID: id}, nil
 }
@@ -75,7 +79,7 @@ func TestQualityManualHandlerQueriesAutomaticRunForCurrentGroup(t *testing.T) {
 				rows.AddRow("12345678-1234-4234-8234-123456789abc", 7, "running", "", 0, 2, time.Now(), nil, source)
 			}
 			mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(rows)
-			health := service.NewGroupHealthService(nil, nil, nil, nil, db)
+			health := service.NewGroupHealthService(nil, &qualityRunAccountRepository{}, nil, nil, db)
 			h := NewGroupHealthHandler(health, nil, service.NewGroupService(qualityRunGroupRepository{}, nil))
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)

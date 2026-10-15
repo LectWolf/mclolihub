@@ -14,6 +14,7 @@ type channelQualityRepoStub struct {
 	results      map[int64]*GroupQualityResult
 	ids          []int64
 	previewReads int
+	rawReads     int
 }
 
 func (r *channelQualityRepoStub) LoadGroupQualityLatest(_ context.Context, ids []int64) (map[int64]bool, map[int64]*GroupQualityResult, error) {
@@ -23,6 +24,11 @@ func (r *channelQualityRepoStub) LoadGroupQualityLatest(_ context.Context, ids [
 func (r *channelQualityRepoStub) LoadGroupQualityPreview(context.Context, int64, string) ([]byte, error) {
 	r.previewReads++
 	return []byte("fixture"), nil
+}
+
+func (r *channelQualityRepoStub) LoadGroupQualityRawOutput(context.Context, int64, string) (string, error) {
+	r.rawReads++
+	return "raw fixture", nil
 }
 
 func TestQualityMatrixAddsLatestActualResultWithoutImageBytes(t *testing.T) {
@@ -46,4 +52,16 @@ func TestQualityPreviewRespectsMonitorSelectedGroups(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("fixture"), data)
 	require.Equal(t, 1, repo.previewReads)
+}
+
+func TestQualityRawOutputRespectsMonitorSelectedGroups(t *testing.T) {
+	repo := &channelQualityRepoStub{channelMonitorV2RepoStub: channelMonitorV2RepoStub{config: ChannelMonitorV2Config{Enabled: true, GroupIDs: []int64{3}}}}
+	monitor := NewChannelMonitorV2Service(repo)
+	_, err := monitor.QualityRawOutput(context.Background(), 7, "latest")
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	require.Zero(t, repo.rawReads)
+	output, err := monitor.QualityRawOutput(context.Background(), 3, "latest")
+	require.NoError(t, err)
+	require.Equal(t, "raw fixture", output)
+	require.Equal(t, 1, repo.rawReads)
 }

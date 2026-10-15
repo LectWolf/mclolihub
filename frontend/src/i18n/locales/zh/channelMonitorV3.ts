@@ -40,6 +40,12 @@ export default {
       loading: '内容加载中',
       noPreview: '未输出 HTML',
       previewFailed: 'HTML 加载失败，请重试',
+      failureReason: '未生成预览的原因',
+      rawOutput: '模型原始输出',
+      copyRawOutput: '复制原始输出',
+      rawOutputHint: '生成阶段收到的文本，失败时可能不完整；最多保留 1 MB。',
+      noRawOutput: '没有可用原文：旧记录未保存，或本次未收到文本。',
+      rawOutputFailed: '原始输出加载失败，请重试',
       retry: '重试',
       close: '关闭预览',
       status: {

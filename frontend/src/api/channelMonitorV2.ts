@@ -174,6 +174,7 @@ export interface MonitorLatestQuality {
   checked_at: string
   has_preview?: boolean
   has_artwork?: boolean
+  has_raw_output?: boolean
 }
 
 export interface MonitorMatrixRow {
@@ -302,6 +303,17 @@ export async function getQualityArtwork(resultId: string, groupId: number, signa
     throw new Error('Invalid quality artwork')
   }
   return data.html
+}
+
+export async function getQualityRawOutput(resultId: string, groupId: number, signal?: AbortSignal): Promise<string> {
+  const { data } = await apiClient.get<{ output: string }>(`/channel-monitor-v2/quality-raw-output/${encodeURIComponent(resultId)}`, {
+    params: { group_id: groupId },
+    signal,
+  })
+  if (typeof data?.output !== 'string' || new TextEncoder().encode(data.output).length > 1048576) {
+    throw new Error('Invalid quality raw output')
+  }
+  return data.output
 }
 
 export async function getQualityHistory(groupId: number, signal?: AbortSignal): Promise<MonitorLatestQuality[]> {

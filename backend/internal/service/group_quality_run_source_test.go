@@ -92,7 +92,7 @@ func TestQualityAutomaticSkipsManualGroupAndChecksAnotherGroup(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestQualityAutomaticTaskReportsSourceAndBatchProgress(t *testing.T) {
+func TestQualityAutomaticTaskReportsSourceAndSelectedAccountProgress(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -101,29 +101,25 @@ func TestQualityAutomaticTaskReportsSourceAndBatchProgress(t *testing.T) {
 	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	candidates := []qualityCandidate{{groupID: 7, id: 11, version: 1, modelID: "text-model"}, {groupID: 7, id: 12, version: 1, modelID: "text-model"}}
-	expectAutomaticTask(mock, now, 7, 2)
-	for i, candidate := range candidates {
-		mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished", "source"}).AddRow("automatic-id", 7, "running", "", i, 2, now, nil, "automatic"))
-		if i > 0 {
-			mock.ExpectQuery(`(?s)SELECT s.group_id, s.enabled.*group_quality_check_latest`).WillReturnRows(sqlmock.NewRows([]string{"group", "enabled", "result", "status", "reason", "model", "checked", "preview", "artwork", "score"}).AddRow(7, true, "result", "success", "safe reason", "text-model", now, false, false, nil))
-		}
-		expectQualitySave(mock, now, candidate, "success", 0, false, nil)
-		expectAutomaticProgress(mock, now, 7, "running", i+1)
-	}
-	expectAutomaticProgress(mock, now, 7, "completed", 2)
+	expectAutomaticTask(mock, now, 7, 1)
+	mock.ExpectQuery(`SELECT run_id, group_id, status, reason`).WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"run", "group", "status", "reason", "checked", "total", "started", "finished", "source"}).AddRow("automatic-id", 7, "running", "", 0, 1, now, nil, "automatic"))
+	expectQualitySave(mock, now, candidates[0], "success", 0, false, nil)
+	expectAutomaticProgress(mock, now, 7, "running", 1)
+	expectAutomaticProgress(mock, now, 7, "completed", 1)
 	probes := 0
 	checker.probeFunc = func(ctx context.Context, id int64, model string) qualityProbeResult {
 		run, err := checker.ManualRun(ctx, 7)
 		require.NoError(t, err)
 		require.Equal(t, "automatic", run.Source)
 		require.Equal(t, "running", run.Status)
-		require.Equal(t, 2, run.TotalAccounts)
+		require.Equal(t, 1, run.TotalAccounts)
+		require.Equal(t, candidates[0].id, id)
 		require.Equal(t, probes, run.CheckedAccounts)
 		probes++
 		return qualityProbeResult{Status: "success", Reason: "safe reason", ModelID: model}
 	}
 	checker.runAutomaticGroup(context.Background(), 7, candidates)
-	require.Equal(t, 2, probes)
+	require.Equal(t, 1, probes)
 	require.Empty(t, lock.owners)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

@@ -33,8 +33,8 @@
         :id="panelId"
         ref="panel"
         role="dialog"
-        :aria-label="t('channelMonitorV3.quality.htmlOutput')"
-        class="quality-preview-panel fixed z-[60] overflow-hidden overscroll-contain rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-800 shadow-lg dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100"
+        :aria-label="activeItem.has_artwork ? t('channelMonitorV3.quality.htmlOutput') : t('channelMonitorV3.quality.noPreview')"
+        class="quality-preview-panel fixed z-[60] overflow-y-auto overscroll-contain rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-800 shadow-lg dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100"
         :style="panelStyle"
         @mouseenter="cancelClose"
         @mouseleave="leave"
@@ -43,7 +43,7 @@
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="text-sm font-semibold text-blue-700 dark:text-blue-300">{{ t('channelMonitorV3.quality.htmlOutput') }}</p>
+            <p class="text-sm font-semibold" :class="activeItem.has_artwork ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'">{{ activeItem.has_artwork ? t('channelMonitorV3.quality.htmlOutput') : t('channelMonitorV3.quality.noPreview') }}</p>
             <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
               <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.model') }}</dt>
               <dd class="break-words">{{ modelLabel(activeItem) }}</dd>
@@ -70,7 +70,23 @@
         <div v-else-if="artworkDocument" class="quality-stage mt-3 rounded border border-gray-200 bg-white dark:border-dark-600">
           <iframe :srcdoc="artworkDocument" sandbox="" scrolling="no" referrerpolicy="no-referrer" :title="t('channelMonitorV3.quality.htmlPreview')" class="quality-frame" />
         </div>
-        <p v-else class="mt-3 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.noPreview') }}</p>
+        <div v-else class="mt-3 space-y-3">
+          <p v-if="activeItem.reason" class="whitespace-pre-wrap break-words text-gray-600 dark:text-gray-300"><span class="font-medium">{{ t('channelMonitorV3.quality.failureReason') }}: </span>{{ activeItem.reason }}</p>
+          <p v-if="rawOutputLoading" role="status" class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.loading') }}</p>
+          <div v-else-if="rawOutputError" role="alert">
+            <p>{{ t('channelMonitorV3.quality.rawOutputFailed') }}</p>
+            <button type="button" class="btn btn-ghost btn-sm mt-2" @click="retryRawOutput">{{ t('channelMonitorV3.quality.retry') }}</button>
+          </div>
+          <template v-else-if="rawOutput">
+            <div class="flex items-center justify-between gap-3">
+              <p class="font-medium">{{ t('channelMonitorV3.quality.rawOutput') }}</p>
+              <button type="button" class="btn btn-ghost btn-sm" @click="copyRawOutput">{{ t('channelMonitorV3.quality.copyRawOutput') }}</button>
+            </div>
+            <pre class="quality-raw-output overflow-auto rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] dark:border-dark-600 dark:bg-dark-900" tabindex="0" :aria-label="t('channelMonitorV3.quality.rawOutput')">{{ rawOutput }}</pre>
+            <p class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.rawOutputHint') }}</p>
+          </template>
+          <p v-else class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.noRawOutput') }}</p>
+        </div>
       </div>
     </Teleport>
   </div>
@@ -79,9 +95,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getQualityArtwork, getQualityHistory, type MonitorLatestQuality } from '@/api/channelMonitorV2'
+import { getQualityArtwork, getQualityHistory, getQualityRawOutput, type MonitorLatestQuality } from '@/api/channelMonitorV2'
 import Icon from '@/components/icons/Icon.vue'
 import { qualityArtworkDocument } from '@/features/channel-monitor-v2/qualityArtwork'
+import { useClipboard } from '@/composables/useClipboard'
 
 const props = defineProps<{
   groupId?: number
@@ -91,6 +108,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const { copyToClipboard } = useClipboard()
 const panelId = `quality-preview-${useId()}`
 const anchor = ref<HTMLElement>()
 const panel = ref<HTMLElement>()
@@ -105,6 +123,13 @@ const artworkLoading = ref(false)
 const artworkError = ref(false)
 const artworkDocument = ref('')
 const artworkOwner = ref('')
+const rawOutput = ref('')
+const rawOutputLoading = ref(false)
+const rawOutputError = ref(false)
+let rawOutputRequest: AbortController | undefined
+let rawOutputVersion = 0
+let panelObserver: ResizeObserver | undefined
+let placement: { x: number; y: number } | undefined
 let alive = true
 let historyRequest: AbortController | undefined
 let historyVersion = 0
@@ -114,6 +139,7 @@ let closeTimer: ReturnType<typeof setTimeout> | undefined
 const historyCache = new Map<number, MonitorLatestQuality[]>()
 const artworkCache = new Map<string, string>()
 const artworkPending = new Map<string, Promise<string>>()
+const rawOutputCache = new Map<string, string>()
 const PANEL_GUTTER = 16
 const PANEL_MAX_WIDTH = 520
 const PREVIEW_HEIGHT = 320
@@ -184,21 +210,75 @@ function close() {
   pinned.value = false
   activeId.value = ''
   clearArtwork()
+  clearRawOutput()
+  placement = undefined
+}
+function reposition() {
+  if (!placement) return
+  const width = Math.min(PANEL_MAX_WIDTH, Math.max(0, window.innerWidth - PANEL_GUTTER * 2))
+  const maxHeight = Math.max(0, window.innerHeight - PANEL_GUTTER * 2)
+  const fallbackHeight = activeItem.value?.has_artwork ? PREVIEW_HEIGHT + 112 : 160
+  const height = Math.min(maxHeight, panel.value?.getBoundingClientRect().height || fallbackHeight)
+  let left = placement.x + 12
+  if (left + width > window.innerWidth - PANEL_GUTTER) left = placement.x - width - 12
+  left = Math.max(PANEL_GUTTER, Math.min(left, window.innerWidth - width - PANEL_GUTTER))
+  let top = placement.y + 12
+  if (top + height > window.innerHeight - PANEL_GUTTER) top = placement.y - height - 12
+  top = Math.max(PANEL_GUTTER, Math.min(top, window.innerHeight - height - PANEL_GUTTER))
+  panelStyle.value = { width: `${width}px`, maxHeight: `${maxHeight}px`, left: `${left}px`, top: `${top}px` }
 }
 function place(trigger: HTMLElement, event?: Event) {
   const rect = trigger.getBoundingClientRect()
-  const width = Math.min(PANEL_MAX_WIDTH, Math.max(0, window.innerWidth - PANEL_GUTTER * 2))
-  const maxHeight = Math.max(220, Math.min(window.innerHeight - PANEL_GUTTER * 2, PREVIEW_HEIGHT + 112))
-  const pointer = event instanceof MouseEvent && event.clientX > 0 && event.clientY > 0
+  placement = event instanceof MouseEvent && event.clientX > 0 && event.clientY > 0
     ? { x: event.clientX, y: event.clientY }
     : { x: rect.left + rect.width / 2, y: rect.bottom }
-  let left = pointer.x + 12
-  if (left + width > window.innerWidth - PANEL_GUTTER) left = pointer.x - width - 12
-  left = Math.max(PANEL_GUTTER, Math.min(left, window.innerWidth - width - PANEL_GUTTER))
-  let top = pointer.y + 12
-  if (top + maxHeight > window.innerHeight - PANEL_GUTTER) top = pointer.y - maxHeight - 12
-  if (top < PANEL_GUTTER) top = Math.max(PANEL_GUTTER, Math.min(rect.top, window.innerHeight - maxHeight - PANEL_GUTTER))
-  panelStyle.value = { width: `${width}px`, maxHeight: `${maxHeight}px`, left: `${left}px`, top: `${top}px` }
+  reposition()
+}
+function clearRawOutput() {
+  rawOutputVersion += 1
+  rawOutputRequest?.abort()
+  rawOutputRequest = undefined
+  rawOutput.value = ''
+  rawOutputLoading.value = false
+  rawOutputError.value = false
+}
+async function loadRawOutput(item: MonitorLatestQuality) {
+  clearRawOutput()
+  const groupId = props.groupId
+  if (!alive || !open.value || item.has_artwork || !item.has_raw_output || typeof groupId !== 'number') return
+  const owner = `${groupId}:${item.result_id}`
+  if (rawOutputCache.has(owner)) {
+    rawOutput.value = rawOutputCache.get(owner) ?? ''
+    return
+  }
+  const version = rawOutputVersion
+  const request = new AbortController()
+  rawOutputRequest = request
+  rawOutputLoading.value = true
+  try {
+    const output = await getQualityRawOutput(item.result_id, groupId, request.signal)
+    if (!alive || request.signal.aborted || version !== rawOutputVersion) return
+    rawOutputCache.set(owner, output)
+    rawOutput.value = output
+  } catch {
+    if (!alive || request.signal.aborted || version !== rawOutputVersion) return
+    rawOutputError.value = true
+  } finally {
+    if (rawOutputRequest === request) rawOutputRequest = undefined
+    if (version === rawOutputVersion) rawOutputLoading.value = false
+  }
+}
+function retryRawOutput() {
+  if (!activeItem.value || !open.value) return
+  pinned.value = true
+  void loadRawOutput(activeItem.value)
+}
+async function copyRawOutput() {
+  pinned.value = true
+  cancelClose()
+  const focused = document.activeElement
+  await copyToClipboard(rawOutput.value)
+  if (focused instanceof HTMLElement && panel.value?.contains(focused)) focused.focus({ preventScroll: true })
 }
 async function loadArtwork(item: MonitorLatestQuality) {
   const resultId = item.result_id
@@ -353,9 +433,21 @@ watch(visible, shown => { if (!shown) close() })
 watch(displayItems, items => {
   if (activeId.value && !items.some(item => item.result_id === activeId.value)) close()
 })
-watch(() => [open.value, activeItem.value?.result_id, activeItem.value?.has_artwork, props.groupId] as const, () => {
-  if (open.value && activeItem.value) void loadArtwork(activeItem.value)
+watch(() => [open.value, activeItem.value?.result_id, activeItem.value?.has_artwork, activeItem.value?.has_raw_output, props.groupId] as const, () => {
+  if (open.value && activeItem.value) {
+    void loadArtwork(activeItem.value)
+    void loadRawOutput(activeItem.value)
+  }
 })
+watch(panel, element => {
+  panelObserver?.disconnect()
+  if (element && typeof ResizeObserver !== 'undefined') {
+    panelObserver = new ResizeObserver(reposition)
+    panelObserver.observe(element)
+  }
+  reposition()
+}, { flush: 'post' })
+watch([activeItem, artworkLoading, artworkError, artworkDocument, rawOutput, rawOutputLoading, rawOutputError], reposition, { flush: 'post' })
 onMounted(() => {
   document.addEventListener('pointerdown', outside)
   document.addEventListener('keydown', onDocumentKeydown)
@@ -364,6 +456,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   alive = false
+  panelObserver?.disconnect()
   close()
   historyRequest?.abort()
   historyRequest = undefined
@@ -377,6 +470,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .quality-preview-panel { overflow-wrap: anywhere; }
+.quality-raw-output { max-height: min(240px, 40vh); white-space: pre-wrap; overflow-wrap: anywhere; }
 .quality-stage {
   position: relative;
   width: min(480px, calc(100vw - 64px));

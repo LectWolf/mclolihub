@@ -40,6 +40,12 @@ export default {
       loading: 'Loading content',
       noPreview: 'No HTML output',
       previewFailed: 'HTML could not be loaded. Please retry.',
+      failureReason: 'Why no preview was generated',
+      rawOutput: 'Raw model output',
+      copyRawOutput: 'Copy raw output',
+      rawOutputHint: 'Text received during generation; it may be incomplete after a failure. Up to 1 MB is retained.',
+      noRawOutput: 'No saved raw output: older records did not retain it, or no text was received.',
+      rawOutputFailed: 'Raw output could not be loaded. Please retry.',
       retry: 'Retry',
       close: 'Close preview',
       status: {
