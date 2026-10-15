@@ -44,6 +44,7 @@ func TestQualityManualHandlerMapsErrorsWithoutSensitiveDetails(t *testing.T) {
 		{fmt.Errorf("private upstream artifact: %w", service.ErrQualityRunBusy), http.StatusConflict},
 		{service.ErrQualityRunDisabled, http.StatusBadRequest},
 		{service.ErrQualityRunNoAccounts, http.StatusBadRequest},
+		{service.ErrQualityRunModelNotAllowed, http.StatusBadRequest},
 		{service.ErrQualityRunUnavailable, http.StatusServiceUnavailable},
 		{errors.New("private db password"), http.StatusInternalServerError},
 	} {

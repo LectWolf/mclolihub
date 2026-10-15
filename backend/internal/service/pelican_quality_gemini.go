@@ -51,6 +51,9 @@ func (s *AccountTestService) testGeminiQualityChatCompletionsConnection(c *gin.C
 	if !isPelicanQualityRequest(ctx) || account == nil || !account.IsGemini() || account.IsSyntheticUITest() {
 		return s.sendErrorAndEnd(c, "Invalid Gemini quality request context")
 	}
+	if !accountAllowsQualityModel(account, modelID) {
+		return s.sendErrorAndEnd(c, qualityModelNotAllowedReason)
+	}
 	if s.httpUpstream == nil {
 		return s.sendErrorAndEnd(c, "HTTP upstream not configured")
 	}
@@ -66,10 +69,7 @@ func (s *AccountTestService) testGeminiQualityChatCompletionsConnection(c *gin.C
 	if err != nil {
 		return s.sendErrorAndEnd(c, err.Error())
 	}
-	testModelID := strings.TrimSpace(modelID)
-	if testModelID == "" {
-		testModelID = geminicli.DefaultTestModel
-	}
+	testModelID := qualityRequestedModel(account, modelID)
 	testModelID = account.GetMappedModel(testModelID)
 	payload := createOpenAIChatCompletionsTestPayload(testModelID, prompt)
 	applyPelicanQualityPayload(ctx, payload, false)

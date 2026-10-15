@@ -137,6 +137,7 @@ export default {
       qualityRunBusyUnavailable: '该分组检测暂不可用，请稍后重试',
       qualityRunUnavailable: '无法开始检测，请刷新分组设置后重试。',
       qualityRunNoEligibleAccounts: '无法开始检测：本分组没有可用账号，请检查账号状态和有效期。',
+      qualityRunModelNotAllowed: '无法开始检测：本分组可用账号均未允许所选检测模型，请检查账号的模型白名单或映射。',
       qualityRunRefreshFailed: '检测已结束，但分组质量状态刷新失败，请重试检查状态。',
       qualityStatus: {
         unknown: '暂无结果',

@@ -598,7 +598,9 @@ async function startQualityRun(id: number) {
         ? 'qualityRunDisabled'
         : message === 'no available accounts in this group' || message === 'no eligible text and vision accounts in this group'
           ? 'qualityRunNoEligibleAccounts'
-          : 'qualityRunUnavailable'
+          : message === 'no available accounts allow the configured quality model'
+            ? 'qualityRunModelNotAllowed'
+            : 'qualityRunUnavailable'
       qualityRunErrors.value[id] = t(`channelMonitorV2.settings.${key}`)
     } else if (status === 409) {
       try {

@@ -14,10 +14,11 @@ import (
 const qualityManualRunTimeout = qualityProbesPerTick*qualityProbeTimeout + 2*time.Minute
 
 var (
-	ErrQualityRunBusy        = errors.New("another quality check is running; try again after it finishes")
-	ErrQualityRunDisabled    = errors.New("save and enable quality checks before running manually")
-	ErrQualityRunNoAccounts  = errors.New("no available accounts in this group")
-	ErrQualityRunUnavailable = errors.New("quality check execution is unavailable")
+	ErrQualityRunBusy            = errors.New("another quality check is running; try again after it finishes")
+	ErrQualityRunDisabled        = errors.New("save and enable quality checks before running manually")
+	ErrQualityRunNoAccounts      = errors.New("no available accounts in this group")
+	ErrQualityRunModelNotAllowed = errors.New("no available accounts allow the configured quality model")
+	ErrQualityRunUnavailable     = errors.New("quality check execution is unavailable")
 )
 
 type GroupQualityRun struct {
@@ -95,17 +96,25 @@ func (c *GroupQualityChecker) StartManualRun(ctx context.Context, groupID int64)
 		return nil, err
 	}
 	eligible := make([]qualityCandidate, 0, 1)
+	modelRejected := false
 	for _, candidate := range candidates {
 		account, err := c.accounts.GetByID(ctx, candidate.id)
 		if err != nil {
 			return nil, err
 		}
 		if accountAcceptsQualityPrompt(account) {
+			if !accountAllowsQualityModel(account, candidate.modelID) {
+				modelRejected = true
+				continue
+			}
 			eligible = append(eligible, candidate)
 			break
 		}
 	}
 	if len(eligible) == 0 {
+		if modelRejected {
+			return nil, ErrQualityRunModelNotAllowed
+		}
 		return nil, ErrQualityRunNoAccounts
 	}
 	run, err := c.createQualityRun(ctx, groupID, "manual", eligible)

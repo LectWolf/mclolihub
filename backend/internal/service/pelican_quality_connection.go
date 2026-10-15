@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,6 +15,9 @@ func (s *AccountTestService) testQualityChatConnection(c *gin.Context, account *
 	}
 	if account.IsSyntheticUITest() {
 		return s.sendErrorAndEnd(c, "Synthetic UI accounts do not call upstream models")
+	}
+	if !accountAllowsQualityModel(account, modelID) {
+		return s.sendErrorAndEnd(c, qualityModelNotAllowedReason)
 	}
 	credentialAccount := account
 	if account.IsCredentialShadow() {
@@ -43,13 +45,7 @@ func (s *AccountTestService) testQualityChatConnection(c *gin.Context, account *
 		}
 		return s.testGeminiQualityChatCompletionsConnection(c, account, modelID, prompt)
 	}
-	requestedModel := strings.TrimSpace(modelID)
-	if requestedModel == "" {
-		requestedModel = account.providerDefaultTestModel()
-	}
-	if requestedModel == "" {
-		requestedModel = openai.DefaultTestModel
-	}
+	requestedModel := qualityRequestedModel(account, modelID)
 	model := resolveAccountTestModel(c.Request.Context(), account, requestedModel)
 	if strings.TrimSpace(model) == "" {
 		return s.sendErrorAndEnd(c, "No model configured for quality generation")

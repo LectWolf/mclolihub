@@ -166,6 +166,8 @@ func pelicanRequestFailureReason(err error) string {
 	if err != nil {
 		message := err.Error()
 		switch {
+		case message == qualityModelNotAllowedReason:
+			return qualityModelNotAllowedReason
 		case strings.HasPrefix(message, "Chat Completions stream from /v1/chat/completions ended before [DONE]"):
 			return "Artwork generation stream ended without a completion event"
 		case strings.HasPrefix(message, "Chat Completions stream read error"):

@@ -102,6 +102,8 @@ func decodeQualityReason(raw string) (string, *GroupQualityDiagnostics) {
 
 func pelicanRequestFailureCode(err error) string {
 	switch pelicanRequestFailureReason(err) {
+	case qualityModelNotAllowedReason:
+		return "model_not_allowed"
 	case "Artwork generation timed out before completion":
 		return "generation_timeout"
 	case "Artwork generation was canceled before completion":

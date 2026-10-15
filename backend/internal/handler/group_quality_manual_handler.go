@@ -64,6 +64,8 @@ func writeQualityRunError(c *gin.Context, err error) {
 		response.BadRequest(c, service.ErrQualityRunDisabled.Error())
 	case errors.Is(err, service.ErrQualityRunNoAccounts):
 		response.BadRequest(c, service.ErrQualityRunNoAccounts.Error())
+	case errors.Is(err, service.ErrQualityRunModelNotAllowed):
+		response.BadRequest(c, service.ErrQualityRunModelNotAllowed.Error())
 	case errors.Is(err, service.ErrQualityRunUnavailable):
 		response.Error(c, http.StatusServiceUnavailable, service.ErrQualityRunUnavailable.Error())
 	default:

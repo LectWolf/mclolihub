@@ -351,6 +351,14 @@ func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int
 			}
 			continue
 		}
+		if !accountAllowsQualityModel(account, candidate.modelID) {
+			// Not a generation attempt: preserve the previous verdict, streak and
+			// spend window. Back off this candidate so others can enter the scan.
+			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
+				slog.Warn("group_quality: save model skip failed", "group_id", groupID)
+			}
+			continue
+		}
 		eligible = append(eligible, candidate)
 		break
 	}

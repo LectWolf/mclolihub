@@ -139,6 +139,7 @@ export default {
       qualityRunBusyUnavailable: 'Checking is temporarily unavailable for this group. Please try again later.',
       qualityRunUnavailable: 'Cannot start this check. Please refresh the group settings and try again.',
       qualityRunNoEligibleAccounts: 'Cannot start: this group has no available accounts. Check account status and expiry.',
+      qualityRunModelNotAllowed: 'Cannot start: no available account in this group allows the selected check model. Check account model allowlists or mappings.',
       qualityRunRefreshFailed: 'The check has ended, but group quality status could not be refreshed. Retry checking status.',
       qualityStatus: {
         unknown: 'No result yet',
