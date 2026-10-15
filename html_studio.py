@@ -491,6 +491,19 @@ def extract_html(text):
     return text[start:ends[-1].end()].strip()
 
 
+def merge_continuation(prefix, tail):
+    # A provider may restart the whole document despite a continuation request.
+    if extract_html(tail):
+        return tail
+    if tail.startswith("```") and "\n" in tail:
+        tail = tail.split("\n", 1)[1]
+    # Remove a repeated boundary, without dropping short legitimate repetitions.
+    for size in range(min(len(prefix), len(tail), 4096), 31, -1):
+        if prefix.endswith(tail[:size]):
+            return prefix + tail[size:]
+    return prefix + tail
+
+
 def file_stem(base, model):
     parsed = urlsplit(base)
 
@@ -522,8 +535,9 @@ def main(argv=None):
     parser.add_argument("--model", help="跳过选择，使用 /models 列表中的指定模型")
     parser.add_argument("--prompt", help="生成需求；默认交互输入，回车使用鹈鹕骑车动画")
     parser.add_argument("--prompt-file", type=Path, help="从 UTF-8 文件读取多行生成需求")
+    parser.add_argument("--continue-from", type=Path, help="从已有 .partial.txt 继续生成剩余 HTML")
     parser.add_argument("--output", type=Path, default=ROOT / "artworks", help="HTML 作品保存目录")
-    parser.add_argument("--max-tokens", type=int, default=16384)
+    parser.add_argument("--max-tokens", type=int, default=65536, help="每次请求的输出预算，默认 65536；受上游限制")
     parser.add_argument("--timeout", type=float, default=900, help="每次生成的总超时秒数")
     parser.add_argument("--no-open", action="store_true", help="保存后不自动打开浏览器")
     args = parser.parse_args(argv)
@@ -534,6 +548,9 @@ def main(argv=None):
     ui = UI()
     key, state, stem, base, model = "", None, None, "", ""
     try:
+        prefix = args.continue_from.read_text(encoding="utf-8-sig") if args.continue_from else ""
+        if args.continue_from and (not prefix.strip() or len(prefix.encode("utf-8")) > MAX_OUTPUT_BYTES):
+            raise StudioError("续写文件为空或超过 16 MiB。")
         ui.banner()
         ui.step(1, "连接你的模型服务")
         base_value = args.base_url or input("  Base URL: ").strip()
@@ -556,6 +573,8 @@ def main(argv=None):
             prompt = args.prompt_file.read_text(encoding="utf-8-sig").strip()
         elif args.prompt is not None:
             prompt = args.prompt.strip()
+        elif args.continue_from:
+            prompt = DEFAULT_PROMPT
         else:
             ui.note("直接回车：鹈鹕骑车 SVG 动画；也可输入自己的需求。")
             prompt = input("  生成需求: ").strip()
@@ -564,15 +583,38 @@ def main(argv=None):
             prompt = "请生成可直接在浏览器打开的完整单文件 HTML。只输出完整 HTML，不要代码围栏或解释。\n\n" + prompt
         ui.note(clip(prompt.replace("\n", " "), ui.width - 2))
         ui.note("流式 token 为估算；结束后使用上游准确用量。均速包含等待时间。")
-        print()
-        state = Generation()
+        if args.continue_from:
+            ui.note(f"续写来源：{args.continue_from.resolve()}")
         stem = file_stem(base, model)
-        with LiveProgress(state, ui):
-            generate(base, key, build_payload(model, prompt, args.max_tokens), state, args.timeout)
-        html = extract_html(state.text)
-        if not html:
+        request_number = 0
+        while True:
+            request_number += 1
+            ui.note(f"第 {request_number} 次请求 · 输出预算 {args.max_tokens:,} token · 统计仅针对本次请求")
+            payload = build_payload(model, prompt, args.max_tokens)
+            if prefix:
+                payload["messages"].extend([
+                    {"role": "assistant", "content": prefix},
+                    {"role": "user", "content": "上一次 HTML 因输出 token 上限中断。请从断点继续，只输出紧接上文的剩余 HTML，直到完整结束。不要重复已有内容，不要重新开始文档，不要代码围栏或解释。"},
+                ])
+            state = Generation()
+            try:
+                with LiveProgress(state, ui):
+                    generate(base, key, payload, state, args.timeout)
+            finally:
+                if prefix:
+                    state.parts = [merge_continuation(prefix, state.text)]
+                    state.text_bytes = len(state.text.encode("utf-8"))
+            html = extract_html(state.text)
+            if html:
+                break
+            if state.finish_reason == "length" and sys.stdin.isatty():
+                ui.note("本次输出达到上游 token 上限，HTML 尚未完成。")
+                answer = input("  回车继续生成，N 保存残文并退出: ").strip().lower()
+                if answer in ("", "y", "yes"):
+                    prefix = state.text
+                    continue
             suffix = "输出达到 token 上限。" if state.finish_reason == "length" else ""
-            raise StudioError(suffix + "没有收到完整 <html>…</html> 文档，请调整需求或 --max-tokens。")
+            raise StudioError(suffix + "没有收到完整 HTML；可提高 --max-tokens，或用 --continue-from 续写保存的残文。")
         path = save_result(args.output, stem, html, state, base, model, prompt, key)
         print()
         ui.success("HTML 已保存")
