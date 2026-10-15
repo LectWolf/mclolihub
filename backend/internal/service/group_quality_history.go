@@ -36,16 +36,15 @@ func qualityScorePointer(value sql.NullFloat64) *float64 {
 	return &score
 }
 
-// Completed assessments expose two-valued decisions. Missing scores remain null.
-func applyQualityScoreVerdict(result *GroupQualityResult) {
-	if result == nil || result.Score == nil {
+// Decisions follow the saved generation status, never a score threshold.
+func applyQualityStatusVerdict(result *GroupQualityResult) {
+	if result == nil || (result.Status != "success" && result.Status != "degraded") {
 		return
 	}
-	passed := *result.Score >= pelicanPassScore
-	degraded := !passed
+	passed := result.Status == "success"
+	degraded := result.Status == "degraded"
 	result.Passed = &passed
 	result.IsDegraded = &degraded
-	result.Status, result.Reason = pelicanScoreVerdict(*result.Score)
 }
 
 // History returns metadata only; HTML is loaded separately under the same scope.
@@ -87,7 +86,7 @@ func (c *GroupQualityChecker) History(ctx context.Context, groupIDs []int64) (ma
 		result.HasRawOutput = hasRawOutput
 		result.Reason, result.Diagnostics = decodeQualityReason(rawReason)
 		result.Score = qualityScorePointer(score)
-		applyQualityScoreVerdict(&result)
+		applyQualityStatusVerdict(&result)
 		results[groupID] = append(results[groupID], &result)
 	}
 	return results, rows.Err()

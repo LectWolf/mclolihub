@@ -538,10 +538,7 @@ func qoderFailoverTestMessage(failoverErr *UpstreamFailoverError) string {
 	return fmt.Sprintf("Qoder upstream returned HTTP %d: %s", failoverErr.StatusCode, detail)
 }
 
-func resolveAccountTestModel(ctx context.Context, account *Account, modelID string) string {
-	if resolved := pelicanReviewModel(ctx); resolved != "" {
-		return resolved
-	}
+func resolveAccountTestModel(_ context.Context, account *Account, modelID string) string {
 	return account.GetMappedModel(modelID)
 }
 
@@ -565,13 +562,23 @@ func (s *AccountTestService) testModelRoutedAccountConnection(c *gin.Context, ac
 	if account.IsOpenCodeGo() && IsOpenCodeUnsupportedModel(testModelID) {
 		return fmt.Errorf("model %q is not supported on OpenCode standard gateway (gemini models require Google SDK endpoint, jev models require System One endpoint)", testModelID)
 	}
-	// 与网关同一判定（含上游模型目录）；测试没有入站协议，取模型的首选协议。
 	protocol := account.resolveModelRoutedProtocol(testModelID)
 	if s.openaiGatewayService != nil {
 		protocol = s.openaiGatewayService.resolveUpstreamProtocolFor(c.Request.Context(), account, "", testModelID)
 	}
-	if isPelicanQualityRequest(c.Request.Context()) && (protocol == APIProtocolAnthropic || !pelicanTextModel(testModelID)) {
-		return s.sendErrorAndEnd(c, "Quality evaluation requires a supported text and vision protocol")
+	if isPelicanQualityRequest(c.Request.Context()) {
+		if !pelicanTextModel(testModelID) {
+			return s.sendErrorAndEnd(c, "Quality evaluation requires a text model")
+		}
+		authToken := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
+		if authToken == "" {
+			return s.sendErrorAndEnd(c, "No API key available")
+		}
+		baseURL, err := s.validateUpstreamBaseURL(account.GetOpenAIBaseURL())
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
+		}
+		return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, baseURL, authToken)
 	}
 	switch protocol {
 	case APIProtocolAnthropic:
@@ -969,6 +976,25 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		credentialAccount = resolved
 	}
 
+	if isPelicanQualityRequest(ctx) {
+		if credentialAccount.Type != AccountTypeAPIKey {
+			return s.sendErrorAndEnd(c, "Quality generation requires a Chat Completions API key account")
+		}
+		authToken := credentialAccount.GetOpenAIProtocolAPIKey()
+		if authToken == "" {
+			return s.sendErrorAndEnd(c, "No API key available")
+		}
+		baseURL := credentialAccount.GetOpenAIBaseURL()
+		if baseURL == "" {
+			baseURL = "https://api.openai.com"
+		}
+		normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
+		}
+		return s.testOpenAIChatCompletionsConnection(c, credentialAccount, testModelID, prompt, normalizedBaseURL, authToken)
+	}
+
 	// Determine authentication method and API URL
 	var authToken string
 	var apiURL string
@@ -1001,13 +1027,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if err != nil {
 			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
 		}
-		// Group health probes are deliberately protocol-specific: they measure
-		// the Responses path used by the health UI and must not silently fall
-		// back to Chat Completions when an account capability flag is stale or
-		// marked unsupported. A failed /responses probe is more actionable than
-		// reporting healthy based on a different protocol.
-		forceCNResponses := isPelicanQualityRequest(ctx) && account.IsCNProvider() && account.GetAPIProtocol() == APIProtocolResponses
-		if mode != AccountTestModeProbe && !forceCNResponses && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+		// Group health probes deliberately measure the Responses endpoint used
+		// by the health UI and must not silently fall back to another protocol.
+		if mode != AccountTestModeProbe && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 			return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, normalizedBaseURL, authToken)
 		}
 		apiURL = buildOpenAIResponsesURLForPlatform(credentialAccount.Platform, normalizedBaseURL)
@@ -3048,20 +3070,20 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 	seenFinish := false
 
 	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				if seenFinish {
-					s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/chat/completions 验证"})
-					s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
-					return nil
-				}
-				if seenJSON {
-					return s.sendErrorAndEnd(c, "Chat Completions stream from /v1/chat/completions ended before [DONE]")
-				}
-				return s.sendErrorAndEnd(c, "Invalid Chat Completions response from /v1/chat/completions: expected SSE JSON data")
+		line, readErr := reader.ReadString('\n')
+		if readErr != nil && readErr != io.EOF {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions stream read error from /v1/chat/completions: %s", readErr.Error()))
+		}
+		if len(line) == 0 && readErr == io.EOF {
+			if seenFinish {
+				s.sendEvent(c, TestEvent{Type: "status", Text: "已通过 /v1/chat/completions 验证"})
+				s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+				return nil
 			}
-			return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions stream read error from /v1/chat/completions: %s", err.Error()))
+			if seenJSON {
+				return s.sendErrorAndEnd(c, "Chat Completions stream from /v1/chat/completions ended before [DONE]")
+			}
+			return s.sendErrorAndEnd(c, "Invalid Chat Completions response from /v1/chat/completions: expected SSE JSON data")
 		}
 
 		line = strings.TrimSpace(line)
@@ -3111,9 +3133,6 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 				}
 			}
 			if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" {
-				if isPelicanQualityRequest(c.Request.Context()) && finishReason != "stop" {
-					return s.sendErrorAndEnd(c, "Quality response did not complete normally")
-				}
 				seenFinish = true
 			}
 		}
@@ -3144,6 +3163,13 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 			if delta, ok := data["delta"].(string); ok && delta != "" {
 				seenText = true
 				s.sendEvent(c, TestEvent{Type: "content", Text: delta})
+			}
+		case "response.output_text.done", "response.content_part.done":
+			if !seenText {
+				if text := extractOpenAIResponsesEventText(data); text != "" {
+					seenText = true
+					s.sendEvent(c, TestEvent{Type: "content", Text: text})
+				}
 			}
 		case "response.completed", "response.done":
 			if isPelicanQualityRequest(c.Request.Context()) {
@@ -3214,6 +3240,35 @@ func (s *AccountTestService) processOpenAIStream(c *gin.Context, body io.Reader)
 			return s.sendErrorAndEnd(c, "Stream ended before response.completed")
 		}
 	}
+}
+
+func extractOpenAIResponsesEventText(data map[string]any) string {
+	if text, ok := data["text"].(string); ok && text != "" {
+		return text
+	}
+	for _, key := range []string{"part", "item"} {
+		value, ok := data[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		if text, ok := value["text"].(string); ok && text != "" {
+			return text
+		}
+		content, ok := value["content"].([]any)
+		if !ok {
+			continue
+		}
+		for _, contentValue := range content {
+			contentMap, ok := contentValue.(map[string]any)
+			if !ok {
+				continue
+			}
+			if text, ok := contentMap["text"].(string); ok && text != "" {
+				return text
+			}
+		}
+	}
+	return ""
 }
 
 // testOpenAIImageAPIKey tests OpenAI image generation using an API Key account.

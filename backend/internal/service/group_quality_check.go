@@ -413,15 +413,8 @@ func (c *GroupQualityChecker) finishCheck(ctx context.Context, candidate quality
 		result.Status = "unknown"
 		result.Reason = "Quality evaluation unavailable"
 	}
-	if result.Score != nil {
-		if math.IsNaN(*result.Score) || math.IsInf(*result.Score, 0) || *result.Score < 0 || *result.Score > 100 {
-			result.Score = nil
-			result.Status = "unknown"
-			result.Reason = "Quality evaluation inconclusive: invalid content score"
-		} else {
-			result.Status, result.Reason = pelicanScoreVerdict(*result.Score)
-		}
-	}
+	// Score columns remain readable for historical results; new checks do not score HTML.
+	result.Score = nil
 	if len(result.Reason) > 2000 {
 		result.Reason = "Quality evaluation unavailable"
 	}
@@ -555,7 +548,7 @@ func (c *GroupQualityChecker) Latest(ctx context.Context, groupIDs []int64) (map
 		if on && rid.Valid && checked.Valid {
 			displayReason, diagnostics := decodeQualityReason(reason.String)
 			results[id] = &GroupQualityResult{ResultID: rid.String, Status: status.String, Reason: displayReason, ModelID: model.String, CheckedAt: checked.Time, HasPreview: preview, HasArtwork: artwork, HasRawOutput: hasRawOutput, Score: qualityScorePointer(score), Diagnostics: diagnostics}
-			applyQualityScoreVerdict(results[id])
+			applyQualityStatusVerdict(results[id])
 		}
 	}
 	return enabled, results, rows.Err()

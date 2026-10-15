@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"strings"
 	"testing"
 
@@ -46,7 +45,8 @@ func TestAccountTestService_ResponsesStreamCompatibility(t *testing.T) {
 		{"delta-only", delta, "<html></html>", true},
 		{"done-only", "data: [DONE]\n\n", "", true},
 		{"delta-and-done", delta + "data: [DONE]\n\n", "<html></html>", true},
-		{"text-done-is-not-response-completion", delta + "event: response.output_text.done\ndata: {\"text\":\"<html></html>\"}\n\ndata: [DONE]\n\n", "<html></html>", true},
+		{"text-done-only", "event: response.output_text.done\ndata: {\"text\":\"<html>partial\"}\n\ndata: [DONE]\n\n", "<html>partial", true},
+		{"content-part-done-only", "event: response.content_part.done\ndata: {\"part\":{\"type\":\"output_text\",\"text\":\"<html>part\"}}\n\ndata: [DONE]\n\n", "<html>part", true},
 		{"incomplete", delta + "event: response.incomplete\ndata: {\"response\":{\"status\":\"incomplete\"}}\n\n" + complete, "<html></html>", true},
 		{"incomplete-completed-event", delta + "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"incomplete\"}}\n\n", "<html></html>", true},
 		{"failed", delta + "event: response.failed\ndata: {\"response\":{\"error\":{\"message\":\"sk-private https://private.invalid\"}}}\n\n" + complete, "<html></html>", true},
@@ -76,21 +76,6 @@ func TestAccountTestService_ResponsesStreamCompatibility(t *testing.T) {
 	}
 }
 
-func TestPelicanResponsesCompletionSnapshotProducesPreview(t *testing.T) {
-	preview := pelicanMockRenderer(t)
-	verdict := `{"checks":{"pelican":true,"bicycle":true,"riding":true,"motion":true}}`
-	svc, upstream := pelicanMockService(pelicanMockAccount(),
-		newJSONResponse(http.StatusOK, pelicanCompletionSnapshot(pelicanVisualReferenceHTML, "gpt-6.1-sol", true)),
-		newJSONResponse(http.StatusOK, pelicanCompletionSnapshot(verdict, "gpt-6.1-sol", true)),
-	)
-	result := svc.runPelicanQualityCheck(context.Background(), 901, "gpt-6.1-sol")
-	require.Equal(t, "success", result.Status)
-	require.Equal(t, "gpt-6.1-sol", result.ModelID)
-	require.Equal(t, strings.TrimSpace(pelicanVisualReferenceHTML), result.Artwork)
-	require.Equal(t, preview, result.PreviewPNG)
-	require.Len(t, upstream.requests, 2)
-}
-
 func TestPelicanRequestFailureReasonIsBoundedAndSafe(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
@@ -106,20 +91,5 @@ func TestPelicanRequestFailureReasonIsBoundedAndSafe(t *testing.T) {
 		{errors.New("sk-private https://private.invalid"), "Artwork generation failed or did not complete"},
 	} {
 		require.Equal(t, tc.want, pelicanRequestFailureReason(tc.err))
-	}
-}
-
-func TestPelicanGenerationFailureReportsStreamClassification(t *testing.T) {
-	for _, tc := range []struct{ stream, reason string }{
-		{"data: {\"type\":\"response.output_text.delta\",\"delta\":\"<html></html>\"}\n\n", "Artwork generation stream ended without a completion event"},
-		{"event: response.incomplete\ndata: {\"response\":{\"status\":\"incomplete\"}}\n\n", "Artwork generation response was incomplete or truncated"},
-		{"event: response.failed\ndata: {\"response\":{\"error\":{\"message\":\"sk-private https://private.invalid\"}}}\n\n", "Artwork generation was rejected or failed upstream"},
-	} {
-		svc, _ := pelicanMockService(pelicanMockAccount(), newJSONResponse(http.StatusOK, tc.stream))
-		result := svc.runPelicanQualityCheck(context.Background(), 901, "gpt-6.1-sol")
-		require.Equal(t, "failed", result.Status)
-		require.Equal(t, tc.reason, result.Reason)
-		require.Empty(t, result.Artwork)
-		require.Empty(t, result.PreviewPNG)
 	}
 }
