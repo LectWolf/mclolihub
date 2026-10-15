@@ -138,7 +138,7 @@ export default {
       qualityRunBusy: 'A check is running for this group. Check status for progress.',
       qualityRunBusyUnavailable: 'Checking is temporarily unavailable for this group. Please try again later.',
       qualityRunUnavailable: 'Cannot start this check. Please refresh the group settings and try again.',
-      qualityRunNoEligibleAccounts: 'Cannot start: this group has no eligible accounts supporting both text and vision.',
+      qualityRunNoEligibleAccounts: 'Cannot start: this group has no available accounts. Check account status and expiry.',
       qualityRunRefreshFailed: 'The check has ended, but group quality status could not be refreshed. Retry checking status.',
       qualityStatus: {
         unknown: 'No result yet',

@@ -10,17 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQualityAccountEligibilityMatchesSupportedChatAccounts(t *testing.T) {
+func TestQualityAccountEligibilityDoesNotUsePlatformOrType(t *testing.T) {
 	for _, platform := range []string{PlatformOpenAI, PlatformGemini, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax, PlatformAnthropic, PlatformGrok, PlatformAntigravity, PlatformQoder, PlatformOpenCodeGo} {
 		for _, kind := range []string{AccountTypeAPIKey, AccountTypeOAuth, AccountTypeServiceAccount, ""} {
 			account := &Account{Platform: platform, Type: kind}
-			want := kind == AccountTypeAPIKey && (platform == PlatformOpenAI || platform == PlatformGemini || IsCNProvider(platform))
-			require.Equal(t, want, accountAcceptsQualityPrompt(account), "%s/%s", platform, kind)
+			require.True(t, accountAcceptsQualityPrompt(account), "%s/%s", platform, kind)
 		}
 	}
 	for _, protocol := range []string{APIProtocolChatCompletions, APIProtocolResponses, APIProtocolAdaptive, APIProtocolAnthropic, "invalid"} {
 		account := &Account{Platform: PlatformKimi, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_protocol": protocol}}
-		require.Equal(t, protocol != APIProtocolAnthropic, accountAcceptsQualityPrompt(account), protocol)
+		require.True(t, accountAcceptsQualityPrompt(account), protocol)
 	}
 	require.False(t, accountAcceptsQualityPrompt(&Account{Platform: PlatformGemini, Type: AccountTypeAPIKey, Extra: map[string]any{"synthetic_ui_test": true}}))
 }
@@ -29,7 +28,11 @@ func TestQualityCandidateSQLUsesSharedEligibilityBeforeLimit(t *testing.T) {
 	for _, query := range []string{qualityCandidatesSQL, qualityManualCandidatesSQL} {
 		require.Contains(t, query, "("+QualityAccountEligibilitySQL+")")
 	}
-	require.Less(t, regexp.MustCompile(`a.type = 'apikey'`).FindStringIndex(qualityCandidatesSQL)[0], regexp.MustCompile(`LIMIT`).FindStringIndex(qualityCandidatesSQL)[0])
+	for _, query := range []string{qualityCandidatesSQL, qualityManualCandidatesSQL, QualityAccountEligibilitySQL} {
+		require.NotContains(t, query, "a.type")
+		require.NotContains(t, query, "a.platform")
+		require.NotContains(t, query, "api_protocol")
+	}
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -71,7 +74,7 @@ func TestQualityGeminiManualAndAutomaticEligibility(t *testing.T) {
 				}
 				var worker func(context.Context)
 				checker.launch = func(fn func(context.Context)) bool { worker = fn; return true }
-				eligible := name == "apikey"
+				eligible := name != "synthetic"
 				if source == "manual" {
 					if eligible {
 						expectManualStart(mock, now, candidate)

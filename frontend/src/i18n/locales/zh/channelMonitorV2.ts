@@ -136,7 +136,7 @@ export default {
       qualityRunBusy: '本分组检测正在执行，可检查状态查看进度。',
       qualityRunBusyUnavailable: '该分组检测暂不可用，请稍后重试',
       qualityRunUnavailable: '无法开始检测，请刷新分组设置后重试。',
-      qualityRunNoEligibleAccounts: '无法开始检测：本分组没有符合条件且同时支持文本和视觉的账号。',
+      qualityRunNoEligibleAccounts: '无法开始检测：本分组没有可用账号，请检查账号状态和有效期。',
       qualityRunRefreshFailed: '检测已结束，但分组质量状态刷新失败，请重试检查状态。',
       qualityStatus: {
         unknown: '暂无结果',

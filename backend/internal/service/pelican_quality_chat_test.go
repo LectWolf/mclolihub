@@ -135,12 +135,17 @@ func TestPelicanRetryWaitStopsOnCancellation(t *testing.T) {
 	require.ErrorIs(t, pelicanRetryWait(ctx, 1), context.Canceled)
 }
 
-func TestPelicanChatGenerationRejectsOAuthWithoutResponsesFallback(t *testing.T) {
-	svc, upstream := pelicanMockService(pelicanMockAccount())
+func TestPelicanChatGenerationTriesOAuthWithoutResponsesFallback(t *testing.T) {
+	account := pelicanChatAccount()
+	account.Type = AccountTypeOAuth
+	delete(account.Credentials, "api_key")
+	account.Credentials["access_token"] = "mock-access-token"
+	svc, upstream := pelicanMockService(account, pelicanMockResponse("<html>ok</html>", "actual", true))
 	result := svc.runPelicanQualityCheck(context.Background(), 901, "requested")
-	require.Equal(t, "failed", result.Status)
-	require.Contains(t, result.Reason, "Chat Completions")
-	require.Empty(t, upstream.requests)
+	require.Equal(t, "success", result.Status, result.Reason)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "/v1/chat/completions", upstream.requests[0].URL.Path)
+	require.Equal(t, "Bearer mock-access-token", upstream.requests[0].Header.Get("Authorization"))
 }
 
 func TestPelicanChatFailureClassification(t *testing.T) {

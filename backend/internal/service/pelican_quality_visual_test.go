@@ -118,18 +118,14 @@ func TestPelicanGenerationFailureHasNoArtworkAndSafeReason(t *testing.T) {
 	}
 }
 
-func TestPelicanTextModelsExcludeImagesAndUnsupportedProtocols(t *testing.T) {
-	for _, model := range []string{"gpt-image-2", "GEMINI-IMAGE", "dall-e-3", "video-1", "text-embedding-3"} {
-		svc, upstream := pelicanMockService(pelicanMockAccount())
+func TestPelicanQualityTriesConfiguredModelsWithoutNameHeuristics(t *testing.T) {
+	for _, model := range []string{"gpt-image-2", "GEMINI-IMAGE", "dall-e-3", "video-1", "text-embedding-3", "custom-tts-model"} {
+		svc, upstream := pelicanMockService(pelicanChatAccount(), pelicanMockResponse("<html>ok</html>", model, true))
 		result := svc.runPelicanQualityCheck(context.Background(), 901, model)
-		require.Equal(t, "unknown", result.Status)
-		require.Empty(t, upstream.requests)
+		require.Equal(t, "success", result.Status, result.Reason)
+		require.Len(t, upstream.requests, 1)
+		require.Equal(t, model, result.ModelID)
 	}
-	account := pelicanMockAccount()
-	account.Platform = PlatformGemini
-	svc, upstream := pelicanMockService(account)
-	require.Equal(t, "unknown", svc.runPelicanQualityCheck(context.Background(), 901, "gemini-native").Status)
-	require.Empty(t, upstream.requests)
 }
 
 func TestPelicanFrameParsingAndPreviewLimits(t *testing.T) {
@@ -177,12 +173,12 @@ func TestPelicanRendererAutodiscovery(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestPelicanDefaultModelMappingCannotGenerateImages(t *testing.T) {
-	account := pelicanMockAccount()
+func TestPelicanDefaultModelMappingIsActuallyRequested(t *testing.T) {
+	account := pelicanChatAccount()
 	account.Credentials["model_mapping"] = map[string]any{"*": "gpt-image-2"}
-	svc, upstream := pelicanMockService(account)
+	svc, upstream := pelicanMockService(account, pelicanMockResponse("<html>ok</html>", "actual", true))
 	result := svc.runPelicanQualityCheck(context.Background(), 901, "")
-	require.NotEqual(t, "success", result.Status)
-	require.Empty(t, upstream.requests)
-	require.Empty(t, result.Artwork)
+	require.Equal(t, "success", result.Status, result.Reason)
+	require.Len(t, upstream.requests, 1)
+	requirePelicanStudioRequest(t, upstream.requests[0], "gpt-image-2", DefaultScheduledTestPrompt)
 }

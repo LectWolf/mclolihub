@@ -111,11 +111,7 @@ func qualityShouldPause(previous, current string) bool {
 func qualityShouldResume(paused bool, current string) bool { return paused && current == "success" }
 
 func accountAcceptsQualityPrompt(account *Account) bool {
-	if account == nil || account.Type != AccountTypeAPIKey || account.IsSyntheticUITest() {
-		return false
-	}
-	return account.IsOpenAI() || account.IsGemini() ||
-		(account.IsCNProvider() && account.GetAPIProtocol() != APIProtocolAnthropic)
+	return account != nil && !account.IsSyntheticUITest()
 }
 
 func validateQualityConfig(cfg GroupQualityConfig) error {
@@ -348,7 +344,7 @@ func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int
 		if err != nil || account == nil {
 			continue
 		}
-		if !accountAcceptsQualityPrompt(account) || !pelicanTextModel(account.GetMappedModel(candidate.modelID)) {
+		if !accountAcceptsQualityPrompt(account) {
 			// A skip is not a completed check and does not move the spend window.
 			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
 				slog.Warn("group_quality: save skip failed", "group_id", groupID)

@@ -146,11 +146,11 @@ func TestQualityRunSkipDoesNotWriteCheckedTimeOrSpendWindow(t *testing.T) {
 	expectQualityRunStart(mock, now, candidate)
 	mock.ExpectExec(regexp.QuoteMeta(`UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`)).
 		WithArgs(int64(7), int64(11), now.Add(time.Hour)).WillReturnResult(sqlmock.NewResult(0, 1))
-	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformAnthropic}}
+	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformAnthropic, Extra: map[string]any{"synthetic_ui_test": true}}}
 	checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
-		t.Fatal("unsupported account must not make a request")
+		t.Fatal("synthetic UI account must not make a request")
 		return qualityProbeResult{}
 	}
 	checker.Run(context.Background())

@@ -48,15 +48,15 @@ func buildGeminiQualityChatCompletionsURL(baseURL string) (string, error) {
 // Normal Gemini connectivity checks retain their native generateContent path.
 func (s *AccountTestService) testGeminiQualityChatCompletionsConnection(c *gin.Context, account *Account, modelID, prompt string) error {
 	ctx := c.Request.Context()
-	if !isPelicanQualityRequest(ctx) || account == nil || !account.IsGemini() || account.Type != AccountTypeAPIKey || account.IsSyntheticUITest() {
-		return s.sendErrorAndEnd(c, "Quality generation requires a Chat Completions API key account")
+	if !isPelicanQualityRequest(ctx) || account == nil || !account.IsGemini() || account.IsSyntheticUITest() {
+		return s.sendErrorAndEnd(c, "Invalid Gemini quality request context")
 	}
 	if s.httpUpstream == nil {
 		return s.sendErrorAndEnd(c, "HTTP upstream not configured")
 	}
-	apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+	apiKey := qualityChatCredential(account)
 	if apiKey == "" {
-		return s.sendErrorAndEnd(c, "No API key configured")
+		return s.sendErrorAndEnd(c, "No credentials available for quality generation")
 	}
 	apiURL, err := buildGeminiQualityChatCompletionsURL(account.GetCredential("base_url"))
 	if err != nil {
@@ -71,9 +71,6 @@ func (s *AccountTestService) testGeminiQualityChatCompletionsConnection(c *gin.C
 		testModelID = geminicli.DefaultTestModel
 	}
 	testModelID = account.GetMappedModel(testModelID)
-	if !pelicanTextModel(testModelID) {
-		return s.sendErrorAndEnd(c, "Quality evaluation requires a supported text protocol")
-	}
 	payload := createOpenAIChatCompletionsTestPayload(testModelID, prompt)
 	applyPelicanQualityPayload(ctx, payload, false)
 	body, err := json.Marshal(payload)

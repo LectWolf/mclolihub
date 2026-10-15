@@ -178,8 +178,6 @@ func pelicanRequestFailureReason(err error) string {
 			strings.HasPrefix(message, "Chat Completions API (/v1/chat/completions) returned 429:"),
 			message == pelicanRetryableStreamErrorMessage:
 			return "Artwork generation was rejected or failed upstream"
-		case message == "Quality generation requires a Chat Completions API key account":
-			return message
 		}
 		switch err.Error() {
 		case "Stream ended before response.completed":
@@ -308,24 +306,6 @@ func pelicanRetryWait(ctx context.Context, retry int) error {
 	}
 }
 
-func pelicanTextModel(model string) bool {
-	model = strings.ToLower(strings.TrimSpace(model))
-	return !isOpenAIImageModel(model) && !strings.Contains(model, "image") && !strings.HasPrefix(model, "dall-e") && !strings.Contains(model, "video") && !strings.Contains(model, "tts") && !strings.Contains(model, "embedding")
-}
-
-func pelicanVisualProtocolSupported(account *Account) bool {
-	if account == nil || account.IsSyntheticUITest() {
-		return false
-	}
-	if account.IsGemini() {
-		return account.Type == AccountTypeAPIKey
-	}
-	if account.IsOpenAI() {
-		return true
-	}
-	return account.IsCNProvider() && (account.GetAPIProtocol() == APIProtocolResponses || account.GetAPIProtocol() == APIProtocolChatCompletions || account.GetAPIProtocol() == APIProtocolAdaptive)
-}
-
 func pelicanHTML(text string) string {
 	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```") {
@@ -359,8 +339,8 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 		result.Reason = "Account unavailable for quality generation"
 		return result
 	}
-	if !pelicanVisualProtocolSupported(account) || !pelicanTextModel(account.GetMappedModel(modelID)) {
-		result.Reason = "Quality evaluation requires a supported text protocol"
+	if account.IsSyntheticUITest() {
+		result.Reason = "Synthetic UI accounts do not call upstream models"
 		return result
 	}
 	switch protocol := account.GetAPIProtocol(); protocol {

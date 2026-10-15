@@ -596,7 +596,7 @@ async function startQualityRun(id: number) {
       const message = apiError?.response?.data?.message ?? apiError?.message
       const key = message === 'save and enable quality checks before running manually'
         ? 'qualityRunDisabled'
-        : message === 'no eligible text and vision accounts in this group'
+        : message === 'no available accounts in this group' || message === 'no eligible text and vision accounts in this group'
           ? 'qualityRunNoEligibleAccounts'
           : 'qualityRunUnavailable'
       qualityRunErrors.value[id] = t(`channelMonitorV2.settings.${key}`)

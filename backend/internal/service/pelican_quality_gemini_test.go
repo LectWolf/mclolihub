@@ -86,22 +86,16 @@ func TestGeminiQualityChatDefaultModel(t *testing.T) {
 	requirePelicanStudioRequest(t, upstream.requests[0], geminicli.DefaultTestModel, DefaultScheduledTestPrompt)
 }
 
-func TestGeminiQualityChatRejectsIneligibleRequestsWithoutUpstream(t *testing.T) {
-	for _, name := range []string{"ordinary", "oauth", "serviceaccount", "missing-key", "synthetic", "image-model", "invalid-url"} {
+func TestGeminiQualityChatRejectsInvalidRequestsWithoutUpstream(t *testing.T) {
+	for _, name := range []string{"ordinary", "missing-key", "synthetic", "invalid-url"} {
 		t.Run(name, func(t *testing.T) {
 			account := pelicanGeminiAccount()
 			model := "gemini-text"
 			switch name {
-			case "oauth":
-				account.Type = AccountTypeOAuth
-			case "serviceaccount":
-				account.Type = AccountTypeServiceAccount
 			case "missing-key":
 				account.Credentials["api_key"] = " "
 			case "synthetic":
 				account.Extra["synthetic_ui_test"] = true
-			case "image-model":
-				account.Credentials["model_mapping"] = map[string]any{model: "gemini-image"}
 			case "invalid-url":
 				account.Credentials["base_url"] = "https://gateway.example?key=mock"
 			}

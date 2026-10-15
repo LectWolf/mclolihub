@@ -373,10 +373,13 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 
 	// Get account
 	account, err := s.accountRepo.GetByID(ctx, accountID)
-	if err != nil {
+	if err != nil || account == nil {
 		return s.sendErrorAndEnd(c, "Account not found")
 	}
 	bindAccountTestPlatform(c, account)
+	if isPelicanQualityRequest(ctx) {
+		return s.testQualityChatConnection(c, account, modelID, prompt)
+	}
 
 	// Synthetic UI load-test accounts exercise the real SSE parsing and modal
 	// interactions, but intentionally do not send their placeholder credentials
@@ -397,9 +400,6 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	if account.RoutesProtocolByInbound() {
 		switch account.GetAPIProtocol() {
 		case APIProtocolAdaptive:
-			if isPelicanQualityRequest(ctx) {
-				return s.testCNProviderChatCompletionsConnection(c, account, modelID, prompt)
-			}
 			return s.testCNProviderAdaptiveConnection(c, account, modelID, prompt)
 		case APIProtocolResponses:
 			return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
@@ -419,9 +419,6 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	if account.IsGemini() {
-		if isPelicanQualityRequest(ctx) {
-			return s.testGeminiQualityChatCompletionsConnection(c, account, modelID, prompt)
-		}
 		return s.testGeminiAccountConnection(c, account, modelID, prompt)
 	}
 
@@ -554,6 +551,9 @@ func resolveAccountTestModel(_ context.Context, account *Account, modelID string
 // credentials.base_url + /v1/messages?beta=true, which 404s as HTML on
 // https://opencode.ai/zen/go/v1/v1/messages.
 func (s *AccountTestService) testModelRoutedAccountConnection(c *gin.Context, account *Account, modelID string, prompt string) error {
+	if isPelicanQualityRequest(c.Request.Context()) {
+		return s.testQualityChatConnection(c, account, modelID, prompt)
+	}
 	testModelID := strings.TrimSpace(modelID)
 	if testModelID == "" {
 		testModelID = account.providerDefaultTestModel()
@@ -568,20 +568,6 @@ func (s *AccountTestService) testModelRoutedAccountConnection(c *gin.Context, ac
 	protocol := account.resolveModelRoutedProtocol(testModelID)
 	if s.openaiGatewayService != nil {
 		protocol = s.openaiGatewayService.resolveUpstreamProtocolFor(c.Request.Context(), account, "", testModelID)
-	}
-	if isPelicanQualityRequest(c.Request.Context()) {
-		if !pelicanTextModel(testModelID) {
-			return s.sendErrorAndEnd(c, "Quality evaluation requires a text model")
-		}
-		authToken := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
-		if authToken == "" {
-			return s.sendErrorAndEnd(c, "No API key available")
-		}
-		baseURL, err := s.validateUpstreamBaseURL(account.GetOpenAIBaseURL())
-		if err != nil {
-			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
-		}
-		return s.testOpenAIChatCompletionsConnection(c, account, testModelID, prompt, baseURL, authToken)
 	}
 	switch protocol {
 	case APIProtocolAnthropic:
@@ -621,9 +607,6 @@ func (s *AccountTestService) testCNProviderChatCompletionsConnection(c *gin.Cont
 
 // Resolved probes must not apply model_mapping again: aliases can form chains.
 func (s *AccountTestService) testCNProviderChatCompletionsResolvedConnection(c *gin.Context, account *Account, testModelID string, prompt string) error {
-	if isPelicanQualityRequest(c.Request.Context()) && !pelicanTextModel(testModelID) {
-		return s.sendErrorAndEnd(c, "Quality evaluation requires a text model")
-	}
 
 	authToken := strings.TrimSpace(account.GetOpenAIProtocolAPIKey())
 	if authToken == "" {
@@ -954,9 +937,6 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	if mode == AccountTestModeCompact {
 		return s.testOpenAICompactConnection(c, account, testModelID)
 	}
-	if isPelicanQualityRequest(ctx) && !pelicanTextModel(testModelID) {
-		return s.sendErrorAndEnd(c, "Quality evaluation requires a text model")
-	}
 
 	// Route to image generation test if an image model is selected
 	if isOpenAIImageModel(testModelID) {
@@ -980,22 +960,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 
 	if isPelicanQualityRequest(ctx) {
-		if credentialAccount.Type != AccountTypeAPIKey {
-			return s.sendErrorAndEnd(c, "Quality generation requires a Chat Completions API key account")
-		}
-		authToken := credentialAccount.GetOpenAIProtocolAPIKey()
-		if authToken == "" {
-			return s.sendErrorAndEnd(c, "No API key available")
-		}
-		baseURL := credentialAccount.GetOpenAIBaseURL()
-		if baseURL == "" {
-			baseURL = "https://api.openai.com"
-		}
-		normalizedBaseURL, err := s.validateUpstreamBaseURL(baseURL)
-		if err != nil {
-			return s.sendErrorAndEnd(c, fmt.Sprintf("Invalid base URL: %s", err.Error()))
-		}
-		return s.testOpenAIChatCompletionsConnection(c, credentialAccount, testModelID, prompt, normalizedBaseURL, authToken)
+		return s.testQualityChatConnection(c, account, modelID, prompt)
 	}
 
 	// Determine authentication method and API URL

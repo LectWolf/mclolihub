@@ -180,13 +180,14 @@ func TestAccountTestService_ModelRoutedQualityUsesChatCompletions(t *testing.T) 
 	}
 }
 
-func TestAccountTestService_ModelRoutedQualityRejectsImageModels(t *testing.T) {
+func TestAccountTestService_ModelRoutedQualityTriesMappedModelWithoutNameFilter(t *testing.T) {
 	account := openCodeGoTestAccount(409)
 	account.Credentials["model_mapping"] = map[string]any{"public-alias": "gpt-image-1"}
-	svc, upstream := adaptiveCNAccountTestService(account)
+	svc, upstream := adaptiveCNAccountTestService(account, adaptiveCNChatTestResponse())
 	c, _ := newTestContext()
 	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), pelicanQualityContextKey{}, true))
 	err := svc.TestAccountConnection(c, account.ID, "public-alias", "quality prompt", AccountTestModeDefault)
-	require.ErrorContains(t, err, "text model")
-	require.Empty(t, upstream.requests)
+	require.NoError(t, err)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "gpt-image-1", gjson.GetBytes(upstream.lastBody, "model").String())
 }

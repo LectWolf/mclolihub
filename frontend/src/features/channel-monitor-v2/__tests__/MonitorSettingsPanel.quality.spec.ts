@@ -282,6 +282,7 @@ describe('MonitorSettingsPanel manual group quality check', () => {
   it.each([
     ['save and enable quality checks before running manually', 'qualityRunDisabled'],
     ['no eligible text and vision accounts in this group', 'qualityRunNoEligibleAccounts'],
+    ['no available accounts in this group', 'qualityRunNoEligibleAccounts'],
   ] as const)('distinguishes HTTP 400 reason %s in both error shapes', async (message, key) => {
     const group = await render()
     for (const error of [{ status: 400, message }, { message: 'Request failed with status code 400', response: { status: 400, data: { message } } }]) {

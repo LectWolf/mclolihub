@@ -16,7 +16,7 @@ const qualityManualRunTimeout = qualityProbesPerTick*qualityProbeTimeout + 2*tim
 var (
 	ErrQualityRunBusy        = errors.New("another quality check is running; try again after it finishes")
 	ErrQualityRunDisabled    = errors.New("save and enable quality checks before running manually")
-	ErrQualityRunNoAccounts  = errors.New("no eligible text and vision accounts in this group")
+	ErrQualityRunNoAccounts  = errors.New("no available accounts in this group")
 	ErrQualityRunUnavailable = errors.New("quality check execution is unavailable")
 )
 
@@ -100,7 +100,7 @@ func (c *GroupQualityChecker) StartManualRun(ctx context.Context, groupID int64)
 		if err != nil {
 			return nil, err
 		}
-		if accountAcceptsQualityPrompt(account) && pelicanTextModel(account.GetMappedModel(candidate.modelID)) {
+		if accountAcceptsQualityPrompt(account) {
 			eligible = append(eligible, candidate)
 			break
 		}

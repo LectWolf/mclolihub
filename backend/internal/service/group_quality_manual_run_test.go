@@ -99,15 +99,15 @@ func TestQualityManualRunBypassesGatesAndSurvivesRequestCancellation(t *testing.
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestQualityManualRunDisabledAndUnsupportedAccountsMakeNoRequests(t *testing.T) {
-	for _, name := range []string{"disabled", "unsupported", "empty"} {
+func TestQualityManualRunDisabledAndSyntheticAccountsMakeNoRequests(t *testing.T) {
+	for _, name := range []string{"disabled", "synthetic", "empty"} {
 		t.Run(name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
 			defer db.Close()
 			now := time.Now().UTC()
 			lock := &qualityManualLock{}
-			checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformAnthropic}}, nil, lock, "test")
+			checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformAnthropic, Extra: map[string]any{"synthetic_ui_test": true}}}, nil, lock, "test")
 			checker.now = func() time.Time { return now }
 			checker.launch = func(func(context.Context)) bool { t.Fatal("must not launch"); return false }
 			checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
@@ -119,7 +119,7 @@ func TestQualityManualRunDisabledAndUnsupportedAccountsMakeNoRequests(t *testing
 			want := ErrQualityRunDisabled
 			if name != "disabled" {
 				rows := sqlmock.NewRows([]string{"group", "account", "version", "model", "status", "streak", "paused"})
-				if name == "unsupported" {
+				if name == "synthetic" {
 					rows = manualCandidateRows(qualityCandidate{groupID: 7, id: 11, version: 1})
 				}
 				mock.ExpectQuery(regexp.QuoteMeta(qualityManualCandidatesSQL)).WithArgs(int64(7), now).WillReturnRows(rows)
