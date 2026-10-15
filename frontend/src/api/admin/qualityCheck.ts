@@ -89,12 +89,15 @@ export interface QualityAttemptDiagnostic {
 
 export interface GroupQualityDiagnosticResult {
   result_id: string
+  group_id?: number
+  group_name?: string
   reason: string
   diagnostics: GroupQualityDiagnostics | null
   attempts?: QualityAttemptDiagnostic[] | null
   details_truncated?: boolean
   route?: {
     account_id: number
+    account_name?: string
     platform: string
     endpoint: string
     model: string
@@ -104,6 +107,6 @@ export interface GroupQualityDiagnosticResult {
 
 export async function getQualityDiagnostics(groupId: number, resultId: string, signal?: AbortSignal): Promise<GroupQualityDiagnosticResult> {
   const { data } = await apiClient.get<GroupQualityDiagnosticResult>(`/admin/groups/${groupId}/quality-check/diagnostics/${encodeURIComponent(resultId)}`, { signal })
-  if (!data || data.result_id !== resultId) throw new Error('Invalid quality diagnostics')
+  if (!data || data.result_id !== resultId || (data.group_id != null && data.group_id !== groupId)) throw new Error('Invalid quality diagnostics')
   return data
 }

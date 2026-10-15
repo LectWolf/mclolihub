@@ -148,6 +148,7 @@ type AccountTestService struct {
 	cfg                       *config.Config
 	settingService            *SettingService
 	tlsFPProfileService       *TLSFingerprintProfileService
+	qualityRateLimitService   *RateLimitService
 	modelMetadataRegistryMu   sync.Mutex
 	modelMetadataRegistry     map[string]modelsDevProvider
 	modelMetadataRegistryAt   time.Time
@@ -2311,12 +2312,16 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		recordQualityHTTPError(ctx, body)
-		if resp.StatusCode == http.StatusTooManyRequests {
-			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
-		}
-		if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
-			errMsg := fmt.Sprintf("Chat Completions authentication failed (401): %s", string(body))
-			_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+		if isPelicanQualityRequest(ctx) && s.qualityRateLimitService != nil {
+			s.qualityRateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, testModelID)
+		} else {
+			if resp.StatusCode == http.StatusTooManyRequests {
+				s.reconcileOpenAI429State(ctx, account, resp.Header, body)
+			}
+			if resp.StatusCode == http.StatusUnauthorized && s.accountRepo != nil {
+				errMsg := fmt.Sprintf("Chat Completions authentication failed (401): %s", string(body))
+				_ = s.accountRepo.SetError(ctx, account.ID, errMsg)
+			}
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) returned %d: %s", resp.StatusCode, string(body)))
 	}

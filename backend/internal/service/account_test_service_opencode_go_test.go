@@ -158,6 +158,7 @@ func TestAccountTestService_ModelRoutedQualityUsesChatCompletions(t *testing.T) 
 	for _, protocol := range []string{APIProtocolChatCompletions, APIProtocolResponses, APIProtocolAdaptive, APIProtocolAnthropic} {
 		t.Run(protocol, func(t *testing.T) {
 			account := openCodeGoTestAccount(408)
+			account.Status, account.Schedulable = StatusActive, true
 			account.Credentials["api_protocol"] = protocol
 			account.Credentials["model_mapping"] = map[string]any{"public-alias": "resolved-model", "resolved-model": "wrong-second-mapping"}
 			svc, upstream := adaptiveCNAccountTestService(account, adaptiveCNChatTestResponse())
@@ -182,6 +183,7 @@ func TestAccountTestService_ModelRoutedQualityUsesChatCompletions(t *testing.T) 
 
 func TestAccountTestService_ModelRoutedQualityTriesMappedModelWithoutNameFilter(t *testing.T) {
 	account := openCodeGoTestAccount(409)
+	account.Status, account.Schedulable = StatusActive, true
 	account.Credentials["model_mapping"] = map[string]any{"public-alias": "gpt-image-1"}
 	svc, upstream := adaptiveCNAccountTestService(account, adaptiveCNChatTestResponse())
 	c, _ := newTestContext()

@@ -63,7 +63,7 @@ func TestQualityUpstreamDiagnosticsHTTPAndRetrySuccess(t *testing.T) {
 			require.Equal(t, "provider_error", first.ErrorType)
 			require.Contains(t, first.Message, "unsupported parameter")
 			require.NotContains(t, first.Message, "mock-secret")
-			if status == 429 || status == 502 {
+			if status == 502 {
 				require.Equal(t, "success", result.Status)
 				require.Len(t, result.Diagnostics.Attempts, 2)
 				require.Empty(t, result.Diagnostics.Attempts[1].FailureCode)
@@ -82,7 +82,13 @@ func TestQualityDiagnosticRedactionAndBoundedStorage(t *testing.T) {
 	req := httptest.NewRequest("POST", "https://user:password@example.test/prefix/private-key/v1/chat/completions?token=query-secret", nil)
 	req.Header.Set("Authorization", "Bearer private-key")
 	req.Header.Set("X-Custom-Auth", "custom-header-secret")
-	recordQualityRequest(ctx, pelicanChatAccount(), req, "model", "http://proxy-user:proxy-password@proxy.test:8080", "private-key")
+	account := pelicanChatAccount()
+	account.Name = "诊断账号 private-key custom-header-secret query-secret proxy-password\nproduction"
+	recordQualityRequest(ctx, account, req, "model", "http://proxy-user:proxy-password@proxy.test:8080", "private-key")
+	require.Contains(t, capture.route.AccountName, "诊断账号")
+	for _, secret := range []string{"private-key", "custom-header-secret", "query-secret", "proxy-password", "\n"} {
+		require.NotContains(t, capture.route.AccountName, secret)
+	}
 	text := capture.sanitize("private-key custom-header-secret query-secret password https://name:another-password@host/path?token=hidden Bearer unknown-secret api_key=other-secret sk-unconfiguredtoken", 1024)
 	for _, secret := range []string{"private-key", "custom-header-secret", "query-secret", "password", "another-password", "hidden", "unknown-secret", "other-secret", "sk-unconfiguredtoken"} {
 		require.NotContains(t, text, secret)
@@ -114,21 +120,34 @@ func TestQualityAdminDiagnosticsScopedReadAndLegacy(t *testing.T) {
 	const id = "12345678-1234-4234-8234-123456789abc"
 	_, err = reader.AdminDiagnostics(context.Background(), 7, "invalid")
 	require.ErrorIs(t, err, sql.ErrNoRows)
-	query := `SELECT reason FROM group_quality_check_history WHERE group_id = \$1 AND result_id = \$2`
-	raw := encodeQualityReason(qualityProbeResult{Reason: "safe", Diagnostics: &GroupQualityDiagnostics{AttemptCount: 1, Attempts: []QualityAttemptDiagnostic{{Number: 1, HTTPStatus: 502, ErrorType: "server_error", Message: "private diagnostic"}}}})
-	mock.ExpectQuery(query).WithArgs(int64(7), id).WillReturnRows(sqlmock.NewRows([]string{"reason"}).AddRow(raw))
+	query := `SELECT h.group_id, COALESCE\(g.name, ''\), h.reason FROM group_quality_check_history h LEFT JOIN groups g ON g.id = h.group_id WHERE h.group_id = \$1 AND h.result_id = \$2`
+	raw := encodeQualityReason(qualityProbeResult{Reason: "safe", Diagnostics: &GroupQualityDiagnostics{AttemptCount: 1, Route: &QualityRequestRoute{AccountID: 23, AccountName: "诊断账号"}, Attempts: []QualityAttemptDiagnostic{{Number: 1, HTTPStatus: 502, ErrorType: "server_error", Message: "private diagnostic"}}}})
+	mock.ExpectQuery(query).WithArgs(int64(7), id).WillReturnRows(sqlmock.NewRows([]string{"group_id", "group_name", "reason"}).AddRow(7, "质量分组", raw))
 	result, err := reader.AdminDiagnostics(context.Background(), 7, id)
 	require.NoError(t, err)
 	require.Equal(t, "private diagnostic", result.Attempts[0].Message)
-	mock.ExpectQuery(query).WithArgs(int64(8), id).WillReturnRows(sqlmock.NewRows([]string{"reason"}))
+	require.Equal(t, int64(7), result.GroupID)
+	require.Equal(t, "质量分组", result.GroupName)
+	require.Equal(t, "诊断账号", result.Route.AccountName)
+	mock.ExpectQuery(query).WithArgs(int64(8), id).WillReturnRows(sqlmock.NewRows([]string{"group_id", "group_name", "reason"}))
 	_, err = reader.AdminDiagnostics(context.Background(), 8, id)
 	require.ErrorIs(t, err, sql.ErrNoRows)
-	mock.ExpectQuery(query).WithArgs(int64(7), id).WillReturnRows(sqlmock.NewRows([]string{"reason"}).AddRow("old safe reason"))
+	mock.ExpectQuery(query).WithArgs(int64(7), id).WillReturnRows(sqlmock.NewRows([]string{"group_id", "group_name", "reason"}).AddRow(7, "历史分组", "old safe reason"))
 	result, err = reader.AdminDiagnostics(context.Background(), 7, id)
 	require.NoError(t, err)
 	require.Nil(t, result.Diagnostics)
 	require.Empty(t, result.Attempts)
 	require.Equal(t, "old safe reason", result.Reason)
+	require.Equal(t, "历史分组", result.GroupName)
+	require.Equal(t, int64(7), result.GroupID)
+	require.Nil(t, result.Route)
+	// A missing group label must not make an otherwise readable history disappear.
+	mock.ExpectQuery(query).WithArgs(int64(7), id).WillReturnRows(sqlmock.NewRows([]string{"group_id", "group_name", "reason"}).AddRow(7, "", "orphaned history"))
+	result, err = reader.AdminDiagnostics(context.Background(), 7, id)
+	require.NoError(t, err)
+	require.Empty(t, result.GroupName)
+	require.Equal(t, int64(7), result.GroupID)
+	require.Equal(t, "orphaned history", result.Reason)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -136,13 +155,51 @@ func TestQualityDiagnosticsPublicHistoryHidesPrivateEvidence(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
-	raw := encodeQualityReason(qualityProbeResult{Reason: "safe", Diagnostics: &GroupQualityDiagnostics{AttemptCount: 1, Route: &QualityRequestRoute{Endpoint: "https://private.example"}, Attempts: []QualityAttemptDiagnostic{{Number: 1, Message: "private provider details"}}}})
+	raw := encodeQualityReason(qualityProbeResult{Reason: "safe", Diagnostics: &GroupQualityDiagnostics{AttemptCount: 1, Route: &QualityRequestRoute{Endpoint: "https://private.example", AccountID: 23, AccountName: "private account name"}, Attempts: []QualityAttemptDiagnostic{{Number: 1, Message: "private provider details"}}}})
 	mock.ExpectQuery(`(?s)SELECT s.group_id, h.result_id.*group_quality_check_history`).WillReturnRows(sqlmock.NewRows([]string{"group", "id", "status", "reason", "model", "checked", "artwork", "raw", "score"}).AddRow(7, "id", "failed", raw, "model", time.Now(), false, false, nil))
 	history, err := NewGroupQualityReader(db).History(context.Background(), []int64{7})
 	require.NoError(t, err)
 	encoded, err := json.Marshal(history)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "private")
+	require.NotContains(t, string(encoded), "account_name")
 	require.Contains(t, string(encoded), "safe")
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestQualityRequestAccountNameIsBoundedUTF8(t *testing.T) {
+	capture := &qualityAttemptCapture{}
+	ctx := context.WithValue(context.Background(), qualityAttemptContextKey{}, capture)
+	account := pelicanChatAccount()
+	account.Name = strings.Repeat("账号", 100)
+	recordQualityRequest(ctx, account, httptest.NewRequest("POST", "https://example.test/v1/responses", nil), "model", "", "secret")
+	require.LessOrEqual(t, len(capture.route.AccountName), 96)
+	require.True(t, utf8.ValidString(capture.route.AccountName))
+	require.True(t, capture.truncated)
+	encoded := encodeQualityReason(qualityProbeResult{Reason: "safe", Diagnostics: &GroupQualityDiagnostics{Route: capture.route, DetailsTruncated: capture.truncated}})
+	require.LessOrEqual(t, len(encoded), 2000)
+	_, decoded := decodeQualityReason(encoded)
+	require.NotNil(t, decoded)
+	require.Equal(t, capture.route.AccountName, decoded.Route.AccountName)
+	require.True(t, decoded.DetailsTruncated)
+}
+
+func TestQualityReasonShrinksAccountNameBeforeDroppingRoute(t *testing.T) {
+	route := &QualityRequestRoute{AccountID: 23, Endpoint: "https://example.test/v1/responses"}
+	diagnostics := &GroupQualityDiagnostics{Stage: "generation", AttemptCount: 6, Route: route}
+	for i := 1; i <= 6; i++ {
+		diagnostics.Attempts = append(diagnostics.Attempts, QualityAttemptDiagnostic{Number: i, HTTPStatus: 502, ErrorType: "upstream_error", FailureCode: "upstream_failure", DurationMs: 100000})
+	}
+	baseline := encodeQualityReason(qualityProbeResult{Diagnostics: diagnostics})
+	route.AccountName = strings.Repeat("<", 96)
+	encoded := encodeQualityReason(qualityProbeResult{Reason: strings.Repeat("r", 1900-len(baseline)), Diagnostics: diagnostics})
+	require.LessOrEqual(t, len(encoded), 2000)
+	_, decoded := decodeQualityReason(encoded)
+	require.NotNil(t, decoded)
+	require.NotNil(t, decoded.Route)
+	require.Equal(t, int64(23), decoded.Route.AccountID)
+	require.Less(t, len(decoded.Route.AccountName), len(route.AccountName))
+	require.Len(t, decoded.Attempts, 6)
+	require.True(t, decoded.DetailsTruncated)
+	require.Equal(t, strings.Repeat("<", 96), route.AccountName, "encoding must not mutate the captured account name")
 }

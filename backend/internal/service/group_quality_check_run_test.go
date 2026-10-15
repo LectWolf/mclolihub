@@ -100,7 +100,7 @@ func TestQualityRunFailedAndUnknownDoNotRepeatOldDegraded(t *testing.T) {
 			expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
 			expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
 			accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}
-			checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
+			checker := newQualityTestChecker(db, accounts, nil, qualityRunLock{}, "test")
 			checker.now = func() time.Time { return now }
 			checker.probeFunc = func(_ context.Context, id int64, model string) qualityProbeResult {
 				require.EqualValues(t, 11, id)
@@ -127,7 +127,7 @@ func TestQualityRunSecondDegradedPersistsPauseAndPreview(t *testing.T) {
 	expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
 	expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
 	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}
-	checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
+	checker := newQualityTestChecker(db, accounts, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
 		return qualityProbeResult{Status: "degraded", Reason: "safe reason", ModelID: "text-model", PreviewPNG: picture}
@@ -144,10 +144,9 @@ func TestQualityRunSkipDoesNotWriteCheckedTimeOrSpendWindow(t *testing.T) {
 	now := time.Now().UTC()
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 1}
 	expectQualityRunStart(mock, now, candidate)
-	mock.ExpectExec(regexp.QuoteMeta(`UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`)).
-		WithArgs(int64(7), int64(11), now.Add(time.Hour)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`UPDATE group_account_quality_checks SET retry_after = $3 WHERE group_id = $1 AND account_id = $2`)).WithArgs(int64(7), int64(11), now.Add(5*time.Minute)).WillReturnResult(sqlmock.NewResult(0, 1))
 	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformAnthropic, Extra: map[string]any{"synthetic_ui_test": true}}}
-	checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
+	checker := newQualityTestChecker(db, accounts, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
 		t.Fatal("synthetic UI account must not make a request")

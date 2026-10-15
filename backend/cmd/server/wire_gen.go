@@ -191,7 +191,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	pluginKVStore := repository.NewPluginKVStore(redisClient)
 	pluginManager := service.ProvidePluginManager(pluginRepository, secretEncryptor, configConfig, pluginHostInfo, pluginKVStore, openAIGatewayService)
 	accountTestService := service.ProvideAccountTestService(accountRepository, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, configConfig, tlsFingerprintProfileService, openAIGatewayService, qoderGatewayService, settingService, pluginManager)
-	groupHealthService := service.ProvideGroupHealthService(groupHealthRepository, accountRepository, accountTestService, leaderLockCache, db, rateLimitService)
+	groupHealthService := service.ProvideGroupHealthService(groupHealthRepository, accountRepository, accountTestService, leaderLockCache, db, rateLimitService, gatewayService, openAIGatewayService, concurrencyService)
 	groupService := service.NewGroupService(groupRepository, apiKeyAuthCacheInvalidator)
 	groupHealthHandler := handler.NewGroupHealthHandler(groupHealthService, apiKeyService, groupService)
 	dashboardAggregationRepository := repository.NewDashboardAggregationRepository(db)

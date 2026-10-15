@@ -22,13 +22,17 @@ import (
 )
 
 func pelicanMockService(account *Account, responses ...*http.Response) (*AccountTestService, *queuedHTTPUpstream) {
+	if account.Status == "" {
+		account.Status = StatusActive
+		account.Schedulable = true
+	}
 	repo := &openAIAccountTestRepo{mockAccountRepoForGemini: mockAccountRepoForGemini{accountsByID: map[int64]*Account{account.ID: account}}}
 	upstream := &queuedHTTPUpstream{responses: responses}
 	return &AccountTestService{accountRepo: repo, httpUpstream: upstream, cfg: rawChatCompletionsTestConfig()}, upstream
 }
 
 func pelicanMockAccount() *Account {
-	return &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1, Credentials: map[string]any{"access_token": "mock-secret"}}
+	return &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"access_token": "mock-secret"}}
 }
 
 func pelicanMockResponse(text, model string, chat bool) *http.Response {

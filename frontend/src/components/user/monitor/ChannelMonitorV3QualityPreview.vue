@@ -45,6 +45,8 @@
           <div class="min-w-0">
             <p class="text-sm font-semibold" :class="activeItem.has_artwork ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'">{{ activeItem.has_artwork ? t('channelMonitorV3.quality.htmlOutput') : t('channelMonitorV3.quality.noPreview') }}</p>
             <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+              <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.diagnosticFields.group_name') }}</dt>
+              <dd class="break-words">{{ groupLabel }}<span v-if="typeof groupId === 'number'" class="ml-1 text-gray-500 dark:text-gray-400">(#{{ groupId }})</span></dd>
               <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.model') }}</dt>
               <dd class="break-words">{{ modelLabel(activeItem) }}</dd>
               <dt class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.checkedAt') }}</dt>
@@ -95,7 +97,10 @@
           <p v-if="diagnosticsLoading" role="status">{{ t('channelMonitorV3.quality.diagnosticsLoading') }}</p>
           <p v-else-if="diagnosticsError" role="alert">{{ t('channelMonitorV3.quality.diagnosticsFailed') }}</p>
           <template v-else-if="diagnosticsResult">
-            <p class="font-medium">{{ t('channelMonitorV3.quality.diagnosticsTitle') }}</p>
+            <div class="flex items-center justify-between gap-3">
+              <p class="font-medium">{{ t('channelMonitorV3.quality.diagnosticsTitle') }}</p>
+              <button type="button" class="btn btn-ghost btn-sm" @click="copyDiagnostics">{{ t('channelMonitorV3.quality.copyDiagnostics') }}</button>
+            </div>
             <pre class="quality-raw-output mt-2 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] dark:border-dark-600 dark:bg-dark-900" tabindex="0">{{ diagnosticsText }}</pre>
             <p v-if="!diagnosticsResult.attempts?.length" class="mt-2 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.diagnosticsLegacy') }}</p>
             <p v-if="diagnosticsResult.details_truncated" class="mt-2 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.diagnosticsTruncated') }}</p>
@@ -117,6 +122,7 @@ import { useClipboard } from '@/composables/useClipboard'
 
 const props = withDefaults(defineProps<{
   groupId?: number
+  groupName?: string
   enabled?: boolean
   latest?: MonitorLatestQuality | null
   history?: MonitorLatestQuality[] | null
@@ -198,15 +204,16 @@ const displayItems = computed(() => {
 const visible = computed(() => props.enabled !== false && Boolean(props.enabled || props.latest || displayItems.value.length))
 const activeItem = computed(() => displayItems.value.find(item => item.result_id === activeId.value) ?? null)
 const heading = computed(() => t('channelMonitorV3.quality.historyHeading', { count: displayItems.value.length }))
+const groupLabel = computed(() => props.groupName?.trim() || (props.adminDiagnostics ? diagnosticsResult.value?.group_name?.trim() : '') || t('channelMonitorV3.unknownGroup'))
 
 const diagnosticsText = computed(() => {
   const result = diagnosticsResult.value
-  if (!result) return ''
+  if (!props.adminDiagnostics || !result) return ''
   const label = (key: string, value: string | number | boolean | undefined) => {
     const text = typeof value === 'boolean' ? t(`channelMonitorV3.quality.${value ? 'yes' : 'no'}`) : value ?? '—'
     return `${t(`channelMonitorV3.quality.diagnosticFields.${key}`)}: ${text}`
   }
-  const lines = [label('reason', result.reason), label('attempt_count', result.diagnostics?.attempt_count ?? (result.attempts?.length || undefined))]
+  const lines = [label('group_name', groupLabel.value), label('group_id', result.group_id ?? props.groupId), label('reason', result.reason), label('attempt_count', result.diagnostics?.attempt_count ?? (result.attempts?.length || undefined))]
   if (result.diagnostics) {
     const fields = ['stage', 'configured_protocol', 'total_duration_ms', 'generation_duration_ms', 'generation_timeout_seconds', 'received_text_bytes', 'received_events', 'last_event_type', 'completion_received', 'capture_overflow', 'failure_code', 'deadline_source', 'artwork_available', 'render_duration_ms', 'render_failure_code'] as const
     for (const field of fields) {
@@ -220,7 +227,7 @@ const diagnosticsText = computed(() => {
     }
   }
   if (result.route) {
-    lines.push('', t('channelMonitorV3.quality.diagnosticRoute'))
+    lines.push('', t('channelMonitorV3.quality.diagnosticRoute'), label('account_name', result.route.account_name?.trim() || undefined))
     for (const field of ['account_id', 'platform', 'endpoint', 'model', 'proxy_enabled'] as const) {
       lines.push(label(field, result.route[field]))
     }
@@ -361,6 +368,14 @@ async function copyRawOutput() {
   cancelClose()
   const focused = document.activeElement
   await copyToClipboard(rawOutput.value)
+  if (focused instanceof HTMLElement && panel.value?.contains(focused)) focused.focus({ preventScroll: true })
+}
+async function copyDiagnostics() {
+  if (!props.adminDiagnostics || !diagnosticsText.value) return
+  pinned.value = true
+  cancelClose()
+  const focused = document.activeElement
+  await copyToClipboard(diagnosticsText.value)
   if (focused instanceof HTMLElement && panel.value?.contains(focused)) focused.focus({ preventScroll: true })
 }
 async function loadArtwork(item: MonitorLatestQuality) {

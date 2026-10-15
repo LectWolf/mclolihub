@@ -230,7 +230,7 @@
                 <p>{{ qualityRunErrors[group.id] }}</p>
                 <button type="button" class="btn btn-ghost btn-sm" :disabled="qualityRunPending[group.id]" @click="checkQualityRun(group.id)" data-quality-run-retry>{{ t('channelMonitorV2.settings.qualityRunCheck') }}</button>
               </div>
-              <ChannelMonitorV3QualityPreview v-if="qualityRuns[group.id]?.latest_quality" :group-id="group.id" :enabled="qualityOf(group.id)?.enabled === true" :latest="qualityRuns[group.id]?.latest_quality" :quality-run="qualityRuns[group.id] ?? undefined" :admin-diagnostics="true" />
+              <ChannelMonitorV3QualityPreview v-if="qualityRuns[group.id]?.latest_quality" :group-id="group.id" :group-name="group.name" :enabled="qualityOf(group.id)?.enabled === true" :latest="qualityRuns[group.id]?.latest_quality" :quality-run="qualityRuns[group.id] ?? undefined" :admin-diagnostics="true" />
             </template>
           </div>
           <p v-if="groups.length === 0" class="empty-state py-8 text-sm text-gray-400">{{ t('channelMonitorV2.settings.groupsEmpty') }}</p>

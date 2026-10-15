@@ -14,7 +14,7 @@ import (
 )
 
 func pelicanChatAccount() *Account {
-	return &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1,
+	return &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1,
 		Credentials: map[string]any{"api_key": "mock-secret", "base_url": "http://chat-test.example/v1"},
 		Extra:       map[string]any{"openai_responses_supported": true}}
 }
@@ -163,6 +163,7 @@ func TestPelicanCNGenerationAlwaysUsesChatCompletions(t *testing.T) {
 	for _, protocol := range []string{APIProtocolChatCompletions, APIProtocolAdaptive, APIProtocolResponses} {
 		t.Run(protocol, func(t *testing.T) {
 			account := adaptiveCNAccountTestAccount(901, PlatformKimi)
+			account.Status, account.Schedulable = StatusActive, true
 			account.Credentials["api_protocol"] = protocol
 			account.Credentials["base_url"] = "http://cn-test.example/v1"
 			svc, upstream := pelicanMockService(account, pelicanMockResponse("<html>final</html>", "actual-model", true))

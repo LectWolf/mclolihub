@@ -51,8 +51,12 @@ func (s *AccountTestService) testGeminiQualityChatCompletionsConnection(c *gin.C
 	if !isPelicanQualityRequest(ctx) || account == nil || !account.IsGemini() || account.IsSyntheticUITest() {
 		return s.sendErrorAndEnd(c, "Invalid Gemini quality request context")
 	}
-	if !accountAllowsQualityModel(account, modelID) {
+	policyModel := qualityPolicyModel(ctx, account, modelID)
+	if !accountAllowsQualityModel(account, policyModel) {
 		return s.sendErrorAndEnd(c, qualityModelNotAllowedReason)
+	}
+	if !account.IsSchedulableForModelWithContext(ctx, policyModel) {
+		return s.sendErrorAndEnd(c, "Account is not schedulable for quality generation")
 	}
 	if s.httpUpstream == nil {
 		return s.sendErrorAndEnd(c, "HTTP upstream not configured")
@@ -108,6 +112,9 @@ func (s *AccountTestService) testGeminiQualityChatCompletionsConnection(c *gin.C
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
 		recordQualityHTTPError(ctx, body)
+		if s.qualityRateLimitService != nil {
+			s.qualityRateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, testModelID)
+		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) returned %d: %s", resp.StatusCode, string(body)))
 	}
 	return s.processOpenAIChatCompletionsStream(c, resp.Body)

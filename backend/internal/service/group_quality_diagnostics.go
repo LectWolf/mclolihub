@@ -75,6 +75,23 @@ func encodeQualityReason(result qualityProbeResult) string {
 			return string(payload)
 		}
 	}
+	// A long escaped account label must not displace the request route or attempts.
+	if envelope.Route != nil && envelope.Route.AccountName != "" {
+		route := *envelope.Route
+		envelope.Route = &route
+		for _, limit := range []int{64, 32, 0} {
+			if len(route.AccountName) <= limit {
+				continue
+			}
+			route.AccountName = qualityBoundedText(route.AccountName, limit)
+			envelope.DetailsTruncated = true
+			payload, err := json.Marshal(envelope)
+			if err == nil && len(payload) <= 2000 {
+				return string(payload)
+			}
+		}
+	}
+
 	// Extreme legacy/local metadata must not drop the final upstream evidence.
 	envelope.Route = nil
 	envelope.DetailsTruncated = true

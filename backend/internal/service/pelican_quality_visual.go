@@ -277,6 +277,12 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 			return out, nil
 		}
 		last, lastErr = out, failure
+		// Scheduler-backed generation yields failures to the group failover loop.
+		// A 429 is never an invitation to immediately repeat the same account.
+		_, scheduled := ctx.Value(qualityScheduledRequestContextKey{}).(bool)
+		if scheduled || capture.attempt.HTTPStatus == http.StatusTooManyRequests || capture.attempt.ErrorType == "billing_not_active" || capture.attempt.ErrorType == "insufficient_quota" {
+			return out, errors.New(pelicanRequestFailureReason(failure))
+		}
 		if !pelicanRetryableFailure(out.FailureCode) || retry == pelicanGenerationRetryLimit {
 			return out, errors.New(pelicanRequestFailureReason(failure))
 		}

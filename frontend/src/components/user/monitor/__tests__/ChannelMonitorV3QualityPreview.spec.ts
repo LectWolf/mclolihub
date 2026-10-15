@@ -60,6 +60,19 @@ describe('ChannelMonitorV3QualityPreview', () => {
     expect(dialog()).toBeNull()
   })
 
+  it('shows the parent group name as plain text with its ID in the preview', async () => {
+    await render({ history: [{ ...latest, has_artwork: false }], groupName: '<b>Named group</b>' }).trigger('click')
+    expect(dialog()?.textContent).toContain('<b>Named group</b>(#7)')
+    expect(dialog()?.querySelector('b')).toBeNull()
+    expect(dialog()?.textContent).not.toContain('undefined')
+  })
+
+  it('uses an unknown-group label when an older caller supplies no name', async () => {
+    await render({ history: [{ ...latest, has_artwork: false }], groupName: '  ' }).trigger('click')
+    expect(dialog()?.textContent).toContain('Unknown group(#7)')
+    expect(dialog()?.textContent).not.toContain('undefined')
+  })
+
   it('does not show a blue lamp when the result has no HTML output', async () => {
     const item = { ...latest, has_artwork: false }
     const chip = render({ history: [item], latest: item })
@@ -169,6 +182,8 @@ describe('ChannelMonitorV3QualityPreview', () => {
 const noArtwork = { ...latest, has_artwork: false }
 const diagnosticResult: GroupQualityDiagnosticResult = {
   result_id: latest.result_id,
+  group_id: 7,
+  group_name: 'Quality group',
   reason: 'Upstream failure',
   diagnostics: {
     stage: 'generation', configured_protocol: 'responses', total_duration_ms: 320,
@@ -179,7 +194,7 @@ const diagnosticResult: GroupQualityDiagnosticResult = {
     { number: 1, http_status: 429, error_type: 'rate_limit', message: '<script>alert(1)</script>', duration_ms: 120 },
     { number: 2, http_status: 503, failure_code: 'upstream_failure', message: 'Unavailable', duration_ms: 180 },
   ],
-  route: { account_id: 23, platform: 'openai', endpoint: '/v1/responses', model: 'chosen-model', proxy_enabled: false },
+  route: { account_id: 23, account_name: 'Primary upstream', platform: 'openai', endpoint: '/v1/responses', model: 'chosen-model', proxy_enabled: false },
 }
 const diagnosticsSection = () => dialog()!.querySelector('section')!
 async function requestDiagnostics() {
@@ -230,10 +245,42 @@ describe('admin quality diagnostics', () => {
     expect(pre.textContent).toContain('Failure code: upstream_failure')
     expect(pre.textContent).toContain('Duration (ms): 180')
     expect(pre.textContent).toContain('Completion received: No')
-    expect(pre.textContent).toContain('Request route\nAccount ID: 23\nPlatform: openai\nEndpoint: /v1/responses\nModel: chosen-model\nProxy enabled: No')
+    expect(pre.textContent).toContain('Group name: Quality group\nGroup ID: 7')
+    expect(dialog()?.querySelector('dl')?.textContent).toContain('Quality group')
+    expect(pre.textContent).toContain('Request route\nAccount name: Primary upstream\nAccount ID: 23\nPlatform: openai\nEndpoint: /v1/responses\nModel: chosen-model\nProxy enabled: No')
     expect(pre.children.length).toBe(0)
     expect(diagnosticsSection().querySelector('script, iframe, a')).toBeNull()
     expect(diagnosticsSection().textContent).not.toContain(en.channelMonitorV3.quality.diagnosticsLegacy)
+  })
+
+  it('copies names and auxiliary IDs exactly as shown, and clears account names when permission is revoked', async () => {
+    get.mockResolvedValueOnce({ data: diagnosticResult })
+    await render({ history: [noArtwork], groupName: 'Parent group', adminDiagnostics: true }).trigger('click')
+    await requestDiagnostics()
+    const text = diagnosticsSection().querySelector('pre')!.textContent!
+    expect(text).toContain('Group name: Parent group\nGroup ID: 7')
+    expect(text).not.toContain('Quality group')
+    expect(text).toContain('Account name: Primary upstream\nAccount ID: 23')
+    const copy = Array.from(diagnosticsSection().querySelectorAll('button')).find(button => button.textContent === 'Copy diagnostics')!
+    copy.click()
+    await flushPromises()
+    expect(copyToClipboard).toHaveBeenCalledWith(text)
+    expect(dialog()).not.toBeNull()
+    await wrapper.setProps({ adminDiagnostics: false })
+    expect(diagnosticsSection()).toBeNull()
+    expect(document.body.textContent).not.toContain('Primary upstream')
+    expect(dialog()?.textContent).toContain('Parent group')
+  })
+
+  it.each([undefined, '', '  ', null])('keeps IDs usable when legacy diagnostics have no group or account name (%s)', async name => {
+    get.mockResolvedValueOnce({ data: { ...diagnosticResult, group_id: undefined, group_name: name, route: { ...diagnosticResult.route, account_name: name } } })
+    await render({ history: [noArtwork], adminDiagnostics: true }).trigger('click')
+    await requestDiagnostics()
+    const text = diagnosticsSection().querySelector('pre')!.textContent!
+    expect(text).toContain('Group name: Unknown group\nGroup ID: 7')
+    expect(text).toContain('Account name: —\nAccount ID: 23')
+    expect(text).not.toContain('undefined')
+    expect(text).not.toContain('Primary upstream')
   })
 
   it('keeps the HTML sandbox while allowing diagnostics on artwork results', async () => {
@@ -302,6 +349,7 @@ describe('admin quality diagnostics', () => {
     pending.resolve({ data: diagnosticResult })
     await flushPromises()
     expect(document.body.textContent).not.toContain('Account ID: 23')
+    expect(document.body.textContent).not.toContain('Primary upstream')
     if (action === 'group' || action === 'close') {
       await wrapper.find('button').trigger('click')
       expect(diagnosticsSection().querySelector('pre')).toBeNull()

@@ -204,7 +204,7 @@ describe('MonitorSettingsPanel manual group quality check', () => {
     expect(group.find('[data-quality-run-result]').text()).toContain('Completed')
     expect(group.find('[data-quality-run-result]').text()).toContain('3 / 3')
     expect(group.text()).toContain(en.channelMonitorV2.settings.qualityStatus.suspect)
-    expect(group.findComponent({ name: 'ChannelMonitorV3QualityPreview' }).props()).toMatchObject({ groupId: 7, enabled: true, latest, adminDiagnostics: true })
+    expect(group.findComponent({ name: 'ChannelMonitorV3QualityPreview' }).props()).toMatchObject({ groupId: 7, groupName: 'Group A', enabled: true, latest, adminDiagnostics: true })
     expect((wrapper.find('[data-quality-group="8"] [data-quality-model]').element as HTMLInputElement).value).toBe('keep-other-draft')
     expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
     await vi.advanceTimersByTimeAsync(10000)

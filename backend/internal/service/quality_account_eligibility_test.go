@@ -63,7 +63,7 @@ func TestQualityGeminiManualAndAutomaticEligibility(t *testing.T) {
 				case "synthetic":
 					account.Extra = map[string]any{"synthetic_ui_test": true}
 				}
-				checker := newGroupQualityChecker(db, &qualityRunAccounts{account: account}, nil, &qualityManualLock{}, "test")
+				checker := newQualityTestChecker(db, &qualityRunAccounts{account: account}, nil, &qualityManualLock{}, "test")
 				checker.now = func() time.Time { return now }
 				probes := 0
 				checker.probeFunc = func(_ context.Context, id int64, model string) qualityProbeResult {
@@ -101,7 +101,7 @@ func TestQualityGeminiManualAndAutomaticEligibility(t *testing.T) {
 						expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
 						expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
 					} else {
-						mock.ExpectExec(`UPDATE group_account_quality_checks SET retry_after`).WithArgs(candidate.groupID, candidate.id, now.Add(time.Hour)).WillReturnResult(sqlmock.NewResult(0, 1))
+						mock.ExpectExec(`UPDATE group_account_quality_checks SET retry_after`).WithArgs(candidate.groupID, candidate.id, now.Add(5*time.Minute)).WillReturnResult(sqlmock.NewResult(0, 1))
 					}
 					checker.Run(context.Background())
 				}

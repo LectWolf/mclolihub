@@ -747,11 +747,16 @@ func ProvideGroupHealthService(
 	lockCache LeaderLockCache,
 	db *sql.DB,
 	rateLimitSvc *RateLimitService,
+	gateway *GatewayService,
+	openai *OpenAIGatewayService,
+	concurrency *ConcurrencyService,
 ) *GroupHealthService {
 	if rateLimitSvc != nil {
 		rateLimitSvc.SetGroupHealthRepository(repo)
 	}
 	svc := NewGroupHealthService(repo, accountRepo, accountTestSvc, lockCache, db)
+	svc.qualityScheduler = &gatewayQualityAccountScheduler{gateway: gateway, openai: openai, concurrency: concurrency}
+	accountTestSvc.qualityRateLimitService = rateLimitSvc
 	svc.Start()
 	return svc
 }

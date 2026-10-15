@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
@@ -37,4 +38,15 @@ func accountAllowsQualityModel(account *Account, configured string) bool {
 	// Reuse the account policy for wildcards, normalized aliases and its explicit
 	// passthrough mode. That mode intentionally ignores stale stored restrictions.
 	return account.IsModelSupported(qualityRequestedModel(account, configured))
+}
+
+type qualityPolicyModelContextKey struct{}
+
+func qualityPolicyModel(ctx context.Context, account *Account, model string) string {
+	if ctx != nil {
+		if requested, ok := ctx.Value(qualityPolicyModelContextKey{}).(string); ok && requested != "" {
+			return requested
+		}
+	}
+	return qualityRequestedModel(account, model)
 }

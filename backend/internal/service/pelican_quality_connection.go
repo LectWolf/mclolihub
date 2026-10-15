@@ -16,8 +16,12 @@ func (s *AccountTestService) testQualityChatConnection(c *gin.Context, account *
 	if account.IsSyntheticUITest() {
 		return s.sendErrorAndEnd(c, "Synthetic UI accounts do not call upstream models")
 	}
-	if !accountAllowsQualityModel(account, modelID) {
+	policyModel := qualityPolicyModel(c.Request.Context(), account, modelID)
+	if !accountAllowsQualityModel(account, policyModel) {
 		return s.sendErrorAndEnd(c, qualityModelNotAllowedReason)
+	}
+	if !account.IsSchedulableForModelWithContext(c.Request.Context(), policyModel) {
+		return s.sendErrorAndEnd(c, "Account is not schedulable for quality generation")
 	}
 	credentialAccount := account
 	if account.IsCredentialShadow() {

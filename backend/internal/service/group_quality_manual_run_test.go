@@ -68,7 +68,7 @@ func TestQualityManualRunBypassesGatesAndSurvivesRequestCancellation(t *testing.
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 2, modelID: "saved-model", streak: 2, paused: true}
 	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}
 	lock := &qualityManualLock{}
-	checker := newGroupQualityChecker(db, accounts, nil, lock, "test")
+	checker := newQualityTestChecker(db, accounts, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	var worker func(context.Context)
 	checker.launch = func(fn func(context.Context)) bool { worker = fn; return true }
@@ -107,7 +107,7 @@ func TestQualityManualRunDisabledAndSyntheticAccountsMakeNoRequests(t *testing.T
 			defer db.Close()
 			now := time.Now().UTC()
 			lock := &qualityManualLock{}
-			checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformAnthropic, Extra: map[string]any{"synthetic_ui_test": true}}}, nil, lock, "test")
+			checker := newQualityTestChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformAnthropic, Extra: map[string]any{"synthetic_ui_test": true}}}, nil, lock, "test")
 			checker.now = func() time.Time { return now }
 			checker.launch = func(func(context.Context)) bool { t.Fatal("must not launch"); return false }
 			checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
@@ -139,7 +139,7 @@ func TestQualityManualRunConfigChangeStopsWithoutReplacingPreview(t *testing.T) 
 	defer db.Close()
 	now := time.Now().UTC()
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 2, modelID: "saved-model"}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, qualityRunLock{}, "test")
+	checker := newQualityTestChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult { return qualityProbeResult{Status: "success"} }
 	run := &GroupQualityRun{RunID: "run", GroupID: 7, StartedAt: now, TotalAccounts: 1}
@@ -198,7 +198,7 @@ func TestQualityManualRunStartFailureReleasesLock(t *testing.T) {
 	defer db.Close()
 	now := time.Now().UTC()
 	lock := &qualityManualLock{}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
+	checker := newQualityTestChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult { return qualityProbeResult{} }
 	checker.launch = func(func(context.Context)) bool { return false }
@@ -216,7 +216,7 @@ func TestQualityManualRunDoesNotExposeDatabaseErrorInProgress(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	now := time.Now().UTC()
-	checker := NewGroupQualityReader(db)
+	checker := newQualityTestChecker(db, &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI}}, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult { return qualityProbeResult{Status: "success"} }
 	mock.ExpectBegin().WillReturnError(errors.New("private db password"))

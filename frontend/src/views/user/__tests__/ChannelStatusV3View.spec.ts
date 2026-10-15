@@ -76,6 +76,7 @@ describe('channel status V3 filters and range cache rate', () => {
     const previews = wrapper.findAllComponents({ name: 'ChannelMonitorV3QualityPreview' })
     expect(previews).toHaveLength(3)
     expect(previews.every(preview => preview.props('adminDiagnostics') === isAdmin)).toBe(true)
+    expect(previews.map(preview => preview.props('groupName'))).toEqual(['Group 7', 'Group 8', 'Group 9'])
   })
 
   it('uses selected-window metrics even when public counts are hidden and the latest bucket differs', async () => {

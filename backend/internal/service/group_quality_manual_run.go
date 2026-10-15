@@ -95,35 +95,18 @@ func (c *GroupQualityChecker) StartManualRun(ctx context.Context, groupID int64)
 	if err != nil {
 		return nil, err
 	}
-	eligible := make([]qualityCandidate, 0, 1)
-	modelRejected := false
-	for _, candidate := range candidates {
-		account, err := c.accounts.GetByID(ctx, candidate.id)
-		if err != nil {
-			return nil, err
-		}
-		if accountAcceptsQualityPrompt(account) {
-			if !accountAllowsQualityModel(account, candidate.modelID) {
-				modelRejected = true
-				continue
-			}
-			eligible = append(eligible, candidate)
-			break
-		}
+	_, selected, err := c.selectQualityAccount(ctx, groupID, candidates, make(map[int64]struct{}))
+	if err != nil {
+		return nil, err
 	}
-	if len(eligible) == 0 {
-		if modelRejected {
-			return nil, ErrQualityRunModelNotAllowed
-		}
-		return nil, ErrQualityRunNoAccounts
-	}
-	run, err := c.createQualityRun(ctx, groupID, "manual", eligible)
+	releaseQualityAccount(selected)
+	run, err := c.createQualityRun(ctx, groupID, "manual", candidates)
 	if err != nil {
 		return nil, err
 	}
 	if !c.launch(func(parent context.Context) {
 		defer release()
-		c.executeQualityRun(parent, run, eligible)
+		c.executeQualityRun(parent, run, candidates)
 	}) {
 		c.saveRunProgress(run, "failed", "Quality check execution stopped", 0)
 		return nil, ErrQualityRunUnavailable
@@ -139,7 +122,7 @@ func qualityGroupLockKey(groupID int64) string {
 // Commit the task before any upstream request so both sources are observable.
 func (c *GroupQualityChecker) createQualityRun(ctx context.Context, groupID int64, source string, candidates []qualityCandidate) (*GroupQualityRun, error) {
 	now := c.now()
-	run := &GroupQualityRun{RunID: uuid.NewString(), GroupID: groupID, Source: source, Status: "running", TotalAccounts: len(candidates), StartedAt: now}
+	run := &GroupQualityRun{RunID: uuid.NewString(), GroupID: groupID, Source: source, Status: "running", TotalAccounts: 1, StartedAt: now}
 	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -185,18 +168,37 @@ func (c *GroupQualityChecker) executeQualityRun(parent context.Context, run *Gro
 			c.saveRunProgress(run, "failed", "Quality check execution failed", checked)
 		}
 	}()
-	for _, candidate := range candidates {
+	excluded := make(map[int64]struct{})
+	for checked < qualityProbesPerTick {
 		if ctx.Err() != nil {
 			c.saveRunProgress(run, "failed", "Quality check execution stopped or timed out", checked)
 			return
 		}
-		probeCtx, stop := context.WithTimeout(ctx, qualityProbeTimeout)
-		var result qualityProbeResult
-		if c.probeFunc != nil {
-			result = c.probeFunc(probeCtx, candidate.id, candidate.modelID)
-		} else {
-			result = c.tests.runPelicanQualityCheck(probeCtx, candidate.id, candidate.modelID)
+		candidate, selected, err := c.selectQualityAccount(ctx, run.GroupID, candidates, excluded)
+		if err != nil {
+			if checked > 0 && (errors.Is(err, ErrQualityRunNoAccounts) || errors.Is(err, ErrQualityRunModelNotAllowed)) {
+				break
+			}
+			c.saveRunProgress(run, "failed", "No schedulable accounts available for this quality check", checked)
+			return
 		}
+		excluded[candidate.id] = struct{}{}
+		probeCtx, stop := context.WithTimeout(selected.Context, qualityProbeTimeout)
+		var result qualityProbeResult
+		func() {
+			defer stop()
+			defer releaseQualityAccount(selected)
+			if c.probeFunc != nil {
+				result = c.probeFunc(probeCtx, candidate.id, selected.Model)
+			} else {
+				result = c.tests.runPelicanQualityCheck(probeCtx, candidate.id, selected.Model)
+			}
+			if reporter, ok := c.scheduler.(interface {
+				Report(*Account, string, qualityProbeResult)
+			}); ok {
+				reporter.Report(selected.Account, selected.Model, result)
+			}
+		}()
 		stop()
 		if err := c.finishCheck(ctx, candidate, c.now(), result); err != nil {
 			reason := "Quality check result could not be saved"
@@ -212,6 +214,9 @@ func (c *GroupQualityChecker) executeQualityRun(parent context.Context, run *Gro
 			c.saveRunProgress(run, "failed", "Quality check progress could not be saved", checked)
 			return
 		}
+		if result.Status == "success" || result.Status == "degraded" {
+			break
+		}
 	}
 	c.saveRunProgress(run, "completed", "", checked)
 }
@@ -220,7 +225,7 @@ func (c *GroupQualityChecker) saveRunProgress(run *GroupQualityRun, status, reas
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	result, err := c.db.ExecContext(ctx, `UPDATE group_quality_check_runs SET status = $3::varchar, reason = $4,
-        checked_accounts = $5, finished_at = CASE WHEN $3::varchar = 'running' THEN NULL ELSE $6::timestamptz END
+		checked_accounts = $5, total_accounts = GREATEST(total_accounts, $5), finished_at = CASE WHEN $3::varchar = 'running' THEN NULL ELSE $6::timestamptz END
         WHERE group_id = $1 AND run_id = $2 AND status = 'running'`, run.GroupID, run.RunID, status, reason, checked, c.now())
 	if err != nil {
 		slog.Warn("group_quality: save progress failed", "group_id", run.GroupID)

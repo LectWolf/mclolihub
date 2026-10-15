@@ -91,6 +91,7 @@ type GroupQualityChecker struct {
 	now       func() time.Time
 	probeFunc func(context.Context, int64, string) qualityProbeResult
 	launch    func(func(context.Context)) bool
+	scheduler qualityAccountScheduler
 }
 
 func newGroupQualityChecker(db *sql.DB, accounts AccountRepository, tests *AccountTestService, lockCache LeaderLockCache, owner string) *GroupQualityChecker {
@@ -238,9 +239,10 @@ type qualityCandidate struct {
 	paused     bool
 }
 
-// Spend eligibility is evaluated before LIMIT so idle accounts cannot starve busy accounts.
+// Limit groups rather than accounts so scheduling sees every due member of a group.
 const qualityCandidatesSQL = `
-    SELECT q.group_id, q.account_id, s.version, s.model_id, q.last_status, q.degraded_streak, q.paused
+    WITH due AS (
+    SELECT q.group_id, q.account_id, s.version, s.model_id, q.last_status, q.degraded_streak, q.paused, q.last_attempt_at
     FROM group_account_quality_checks q
     JOIN account_groups ag ON ag.group_id = q.group_id AND ag.account_id = q.account_id
     JOIN group_quality_check_settings s ON s.group_id = q.group_id AND s.enabled
@@ -257,7 +259,14 @@ const qualityCandidatesSQL = `
             AND COALESCE((SELECT SUM(u.actual_cost) FROM usage_logs u
                 WHERE u.group_id = q.group_id AND u.account_id = q.account_id AND u.created_at >= q.window_started_at), 0) >= s.min_spend_usd)
       )
-    ORDER BY q.last_attempt_at NULLS FIRST, q.group_id, q.account_id LIMIT $2`
+    )
+    SELECT group_id, account_id, version, model_id, last_status, degraded_streak, paused
+    FROM due
+    WHERE group_id IN (
+        SELECT group_id FROM due GROUP BY group_id
+        ORDER BY MIN(last_attempt_at) NULLS FIRST, group_id LIMIT $2
+    )
+    ORDER BY last_attempt_at NULLS FIRST, group_id, account_id`
 
 func (c *GroupQualityChecker) initializeWindows(ctx context.Context, now time.Time) error {
 	_, err := c.db.ExecContext(ctx, `
@@ -335,42 +344,25 @@ func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int
 		return
 	}
 	defer release()
-	eligible := make([]qualityCandidate, 0, 1)
-	for _, candidate := range candidates {
-		if ctx.Err() != nil {
-			return
-		}
-		account, err := c.accounts.GetByID(ctx, candidate.id)
-		if err != nil || account == nil {
-			continue
-		}
-		if !accountAcceptsQualityPrompt(account) {
-			// A skip is not a completed check and does not move the spend window.
-			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
-				slog.Warn("group_quality: save skip failed", "group_id", groupID)
-			}
-			continue
-		}
-		if !accountAllowsQualityModel(account, candidate.modelID) {
-			// Not a generation attempt: preserve the previous verdict, streak and
-			// spend window. Back off this candidate so others can enter the scan.
-			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
-				slog.Warn("group_quality: save model skip failed", "group_id", groupID)
-			}
-			continue
-		}
-		eligible = append(eligible, candidate)
-		break
-	}
-	if len(eligible) == 0 {
+	if c.scheduler == nil {
 		return
 	}
-	run, err := c.createQualityRun(ctx, groupID, "automatic", eligible)
+	_, selected, err := c.selectQualityAccount(ctx, groupID, candidates, make(map[int64]struct{}))
+	if err != nil {
+		if errors.Is(err, ErrQualityRunNoAccounts) || errors.Is(err, ErrQualityRunModelNotAllowed) {
+			for _, candidate := range candidates {
+				_, _ = c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(5*time.Minute))
+			}
+		}
+		return
+	}
+	releaseQualityAccount(selected)
+	run, err := c.createQualityRun(ctx, groupID, "automatic", candidates[:1])
 	if err != nil {
 		slog.Warn("group_quality: create automatic run failed", "group_id", groupID)
 		return
 	}
-	c.executeQualityRun(ctx, run, eligible)
+	c.executeQualityRun(ctx, run, candidates)
 }
 
 func qualityNextState(streak int, paused bool, status string) (int, bool) {

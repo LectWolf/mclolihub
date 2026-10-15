@@ -56,7 +56,7 @@
       :length="timelineLength"
       :data-through-ms="dataThroughMs"
     />
-    <ChannelMonitorV3QualityPreview :group-id="row.group_id" :enabled="row.quality_enabled" :latest="row.latest_quality" :history="row.quality_history" :admin-diagnostics="authStore.isAdmin" />
+    <ChannelMonitorV3QualityPreview :group-id="row.group_id" :group-name="row.group_name" :enabled="row.quality_enabled" :latest="row.latest_quality" :history="row.quality_history" :admin-diagnostics="authStore.isAdmin" />
   </article>
 </template>
 

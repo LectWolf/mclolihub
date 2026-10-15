@@ -84,6 +84,13 @@ describe('admin quality diagnostics API', () => {
     expect(get).toHaveBeenCalledWith('/admin/groups/7/quality-check/diagnostics/result%2Fid', { signal })
   })
 
+  it('retains admin group and account names and rejects a different group while accepting legacy responses', async () => {
+    const result = { result_id: 'result', group_id: 7, group_name: 'Quality group', reason: 'Failed', diagnostics: null, route: { account_id: 23, account_name: 'Primary upstream', platform: 'openai', endpoint: '/v1/responses', model: 'model', proxy_enabled: false } }
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: result }).mockResolvedValueOnce({ data: { ...result, group_id: 8 } })
+    expect(await getQualityDiagnostics(7, 'result')).toEqual(result)
+    await expect(getQualityDiagnostics(7, 'result')).rejects.toThrow('Invalid quality diagnostics')
+  })
+
   it('rejects mismatched records and forwards request failures for retry', async () => {
     const error = new Error('offline')
     vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: { result_id: 'other-result' } }).mockRejectedValueOnce(error)

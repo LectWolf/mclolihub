@@ -29,6 +29,7 @@ type QualityAttemptDiagnostic struct {
 
 type QualityRequestRoute struct {
 	AccountID    int64  `json:"account_id"`
+	AccountName  string `json:"account_name,omitempty"`
 	Platform     string `json:"platform"`
 	Endpoint     string `json:"endpoint"`
 	Model        string `json:"model"`
@@ -37,6 +38,8 @@ type QualityRequestRoute struct {
 
 type GroupQualityAdminDiagnostics struct {
 	ResultID         string                     `json:"result_id"`
+	GroupID          int64                      `json:"group_id"`
+	GroupName        string                     `json:"group_name"`
 	Reason           string                     `json:"reason"`
 	Diagnostics      *GroupQualityDiagnostics   `json:"diagnostics"`
 	Attempts         []QualityAttemptDiagnostic `json:"attempts"`
@@ -163,7 +166,7 @@ func recordQualityRequest(ctx context.Context, account *Account, req *http.Reque
 	if len(endpoint) > 160 {
 		capture.truncated = true
 	}
-	capture.route = &QualityRequestRoute{AccountID: account.ID, Platform: account.Platform, Endpoint: qualityBoundedText(endpoint, 160), Model: capture.sanitize(model, 80), ProxyEnabled: proxyURL != ""}
+	capture.route = &QualityRequestRoute{AccountID: account.ID, AccountName: capture.sanitize(account.Name, 96), Platform: account.Platform, Endpoint: qualityBoundedText(endpoint, 160), Model: capture.sanitize(model, 80), ProxyEnabled: proxyURL != ""}
 }
 
 func recordQualityHTTPStatus(ctx context.Context, status int) {
@@ -211,13 +214,14 @@ func (c *GroupQualityChecker) AdminDiagnostics(ctx context.Context, groupID int6
 	if _, err := uuid.Parse(resultID); err != nil {
 		return nil, sql.ErrNoRows
 	}
-	var raw string
-	err := c.db.QueryRowContext(ctx, `SELECT reason FROM group_quality_check_history WHERE group_id = $1 AND result_id = $2`, groupID, resultID).Scan(&raw)
+	var raw, groupName string
+	var historyGroupID int64
+	err := c.db.QueryRowContext(ctx, `SELECT h.group_id, COALESCE(g.name, ''), h.reason FROM group_quality_check_history h LEFT JOIN groups g ON g.id = h.group_id WHERE h.group_id = $1 AND h.result_id = $2`, groupID, resultID).Scan(&historyGroupID, &groupName, &raw)
 	if err != nil {
 		return nil, err
 	}
 	reason, diagnostics := decodeQualityReason(raw)
-	result := &GroupQualityAdminDiagnostics{ResultID: resultID, Reason: reason, Diagnostics: diagnostics, Attempts: []QualityAttemptDiagnostic{}}
+	result := &GroupQualityAdminDiagnostics{ResultID: resultID, GroupID: historyGroupID, GroupName: groupName, Reason: reason, Diagnostics: diagnostics, Attempts: []QualityAttemptDiagnostic{}}
 	if diagnostics != nil {
 		result.Attempts = diagnostics.Attempts
 		if result.Attempts == nil {

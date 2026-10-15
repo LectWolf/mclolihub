@@ -50,7 +50,7 @@ func TestQualityModelAllowlistSelectionSkipsUnlistedAccount(t *testing.T) {
 				denied.id:  {ID: denied.id, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"model_mapping": map[string]any{"other-model": "other-model"}}},
 				allowed.id: {ID: allowed.id, Platform: PlatformGemini, Type: AccountTypeOAuth, Credentials: map[string]any{"model_mapping": map[string]any{"gpt-6.1-sol": "provider-model"}}},
 			}}
-			checker := newGroupQualityChecker(db, accounts, nil, &qualityManualLock{}, "test")
+			checker := newQualityTestChecker(db, accounts, nil, &qualityManualLock{}, "test")
 			checker.now = func() time.Time { return now }
 			probes := []int64{}
 			checker.probeFunc = func(_ context.Context, id int64, model string) qualityProbeResult {
@@ -66,6 +66,7 @@ func TestQualityModelAllowlistSelectionSkipsUnlistedAccount(t *testing.T) {
 				mock.ExpectQuery(regexp.QuoteMeta(qualityManualCandidatesSQL)).WithArgs(int64(7), now).WillReturnRows(manualCandidateRows(denied).AddRow(allowed.groupID, allowed.id, allowed.version, allowed.modelID, "", 0, false))
 				mock.ExpectBegin()
 				mock.ExpectQuery(`INSERT INTO group_quality_check_runs`).WithArgs(int64(7), sqlmock.AnyArg(), 1, now, now.Add(-qualityManualRunTimeout), "manual").WillReturnRows(sqlmock.NewRows([]string{"run_id"}).AddRow("saved"))
+				mock.ExpectExec(`INSERT INTO group_account_quality_checks`).WithArgs(int64(7), denied.id, now).WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec(`INSERT INTO group_account_quality_checks`).WithArgs(int64(7), allowed.id, now).WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectCommit()
 				run, err := checker.StartManualRun(context.Background(), 7)
@@ -75,7 +76,6 @@ func TestQualityModelAllowlistSelectionSkipsUnlistedAccount(t *testing.T) {
 				expectManualProgress(mock, now, run, "completed", "", 1)
 				worker(context.Background())
 			} else {
-				mock.ExpectExec(`UPDATE group_account_quality_checks SET retry_after = \$3 WHERE group_id = \$1 AND account_id = \$2`).WithArgs(denied.groupID, denied.id, now.Add(time.Hour)).WillReturnResult(sqlmock.NewResult(0, 1))
 				expectAutomaticTask(mock, now, 7, 1)
 				expectQualitySave(mock, now, allowed, "success", 0, false, nil)
 				expectAutomaticProgress(mock, now, 7, "running", 1)
@@ -136,8 +136,9 @@ func TestQualityModelAllowlistNoMatchingAccountDoesNotLaunch(t *testing.T) {
 	now := time.Now().UTC()
 	candidate := qualityCandidate{groupID: 7, id: 109, version: 2, modelID: "gpt-6.1-sol"}
 	account := pelicanChatAccount()
+	account.ID = candidate.id
 	account.Credentials["model_mapping"] = map[string]any{"other": "other"}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: account}, nil, &qualityManualLock{}, "test")
+	checker := newQualityTestChecker(db, &qualityRunAccounts{account: account}, nil, &qualityManualLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.launch = func(func(context.Context)) bool { t.Fatal("must not create a worker"); return false }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
@@ -212,14 +213,23 @@ func TestQualityModelAllowlistAutomaticSkipPreservesHistory(t *testing.T) {
 	now := time.Now().UTC()
 	candidate := qualityCandidate{groupID: 7, id: 109, version: 2, modelID: "gpt-6.1-sol"}
 	account := pelicanChatAccount()
+	account.ID = candidate.id
 	account.Credentials["model_mapping"] = map[string]any{"other": "other"}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: account}, nil, &qualityManualLock{}, "test")
+	checker := newQualityTestChecker(db, &qualityRunAccounts{account: account}, nil, &qualityManualLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
 		t.Fatal("must not probe an unlisted model")
 		return qualityProbeResult{}
 	}
-	mock.ExpectExec(`^UPDATE group_account_quality_checks SET retry_after = \$3 WHERE group_id = \$1 AND account_id = \$2$`).WithArgs(candidate.groupID, candidate.id, now.Add(time.Hour)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`^UPDATE group_account_quality_checks SET retry_after = \$3 WHERE group_id = \$1 AND account_id = \$2$`).WithArgs(candidate.groupID, candidate.id, now.Add(5*time.Minute)).WillReturnResult(sqlmock.NewResult(0, 1))
 	checker.runAutomaticGroup(context.Background(), candidate.groupID, []qualityCandidate{candidate})
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func (r *qualityAllowlistAccounts) qualityFixtureAccounts() []*Account {
+	items := make([]*Account, 0, len(r.byID))
+	for _, account := range r.byID {
+		items = append(items, account)
+	}
+	return items
 }

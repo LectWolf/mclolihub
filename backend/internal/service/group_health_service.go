@@ -23,13 +23,14 @@ const (
 // aggregation. Probe requests reuse AccountTestService adapters but never write
 // user usage logs.
 type GroupHealthService struct {
-	repo        GroupHealthRepository
-	accountRepo AccountRepository
-	testService *AccountTestService
-	lockCache   LeaderLockCache
-	db          *sql.DB
-	instanceID  string
-	quality     *GroupQualityChecker
+	repo             GroupHealthRepository
+	accountRepo      AccountRepository
+	testService      *AccountTestService
+	lockCache        LeaderLockCache
+	db               *sql.DB
+	instanceID       string
+	quality          *GroupQualityChecker
+	qualityScheduler qualityAccountScheduler
 
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -72,6 +73,7 @@ func (s *GroupHealthService) Quality() *GroupQualityChecker {
 	defer s.lifecycleMu.Unlock()
 	if s.quality == nil {
 		s.quality = newGroupQualityChecker(s.db, s.accountRepo, s.testService, s.lockCache, s.instanceID)
+		s.quality.scheduler = s.qualityScheduler
 		s.quality.launch = s.launchQualityRun
 	}
 	return s.quality

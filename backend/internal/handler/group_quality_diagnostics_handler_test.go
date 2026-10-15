@@ -31,13 +31,13 @@ func TestQualityDiagnosticsHandlerValidatesAndScopesResult(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 			if tc.status != 400 {
-				query := mock.ExpectQuery(`SELECT reason FROM group_quality_check_history WHERE group_id = \$1 AND result_id = \$2`).WithArgs(int64(7), resultID)
+				query := mock.ExpectQuery(`SELECT h.group_id, COALESCE\(g.name, ''\), h.reason FROM group_quality_check_history h LEFT JOIN groups g ON g.id = h.group_id WHERE h.group_id = \$1 AND h.result_id = \$2`).WithArgs(int64(7), resultID)
 				if tc.dbError != nil {
 					query.WillReturnError(tc.dbError)
 				} else {
-					rows := sqlmock.NewRows([]string{"reason"})
+					rows := sqlmock.NewRows([]string{"group_id", "group_name", "reason"})
 					if tc.reason != "" {
-						rows.AddRow(tc.reason)
+						rows.AddRow(7, "诊断分组", tc.reason)
 					}
 					query.WillReturnRows(rows)
 				}
@@ -55,6 +55,8 @@ func TestQualityDiagnosticsHandlerValidatesAndScopesResult(t *testing.T) {
 			if tc.status == 200 {
 				require.Contains(t, recorder.Body.String(), `"attempts":[]`)
 				require.Contains(t, recorder.Body.String(), "old reason")
+				require.Contains(t, recorder.Body.String(), `"group_id":7`)
+				require.Contains(t, recorder.Body.String(), `"group_name":"诊断分组"`)
 			}
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
