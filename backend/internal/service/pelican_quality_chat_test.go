@@ -219,3 +219,27 @@ func TestQualityResultStatusDoesNotDependOnScore(t *testing.T) {
 		}
 	}
 }
+
+func TestPelicanChatGenerationRetriesStreamUpstreamError(t *testing.T) {
+	for _, errorType := range []string{"upstream_error", "server_error", "overloaded_error", "rate_limit_error"} {
+		t.Run(errorType, func(t *testing.T) {
+			broken := "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n" +
+				"data: {\"error\":{\"type\":\"" + errorType + "\",\"message\":\"Our servers are currently overloaded. private-secret\"}}\n\n"
+			svc, upstream := pelicanMockService(pelicanChatAccount(), newJSONResponse(http.StatusOK, broken),
+				pelicanMockResponse("<html>retry</html>", "retry-model", true))
+			result := svc.runPelicanQualityCheck(context.Background(), 901, "requested")
+			require.Equal(t, "success", result.Status, result.Reason)
+			require.Equal(t, "<html>retry</html>", result.Artwork)
+			require.Len(t, upstream.requests, 2)
+		})
+	}
+}
+
+func TestPelicanChatGenerationDoesNotRetryPermanentStreamError(t *testing.T) {
+	broken := "data: {\"error\":{\"type\":\"invalid_request_error\",\"message\":\"private-secret\"}}\n\n"
+	svc, upstream := pelicanMockService(pelicanChatAccount(), newJSONResponse(http.StatusOK, broken))
+	result := svc.runPelicanQualityCheck(context.Background(), 901, "requested")
+	require.Equal(t, "failed", result.Status)
+	require.Len(t, upstream.requests, 1)
+	require.NotContains(t, result.Reason, "private")
+}

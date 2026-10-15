@@ -2316,6 +2316,9 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+authToken)
+	if isPelicanQualityRequest(ctx) {
+		req.Header.Set("User-Agent", pelicanQualityUserAgent())
+	}
 
 	// 官方 OpenCode / Command Code 上游收敛为规范客户端 UA，与真实转发路径一致。
 	applyOpenCodeUpstreamUserAgent(account, apiURL, req.Header)
@@ -3106,6 +3109,9 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 		s.emitPelicanResolvedModel(c, data)
 
 		if errData, ok := data["error"].(map[string]any); ok {
+			if isPelicanQualityRequest(c.Request.Context()) && pelicanRetryableStreamError(errData) {
+				return s.sendErrorAndEnd(c, pelicanRetryableStreamErrorMessage)
+			}
 			errorMsg := "Chat Completions API (/v1/chat/completions) returned an error"
 			if msg, ok := errData["message"].(string); ok && msg != "" {
 				errorMsg = msg

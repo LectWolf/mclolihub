@@ -47,7 +47,7 @@ func pelicanQualityStreamReader(ctx context.Context, body io.Reader) io.Reader {
 	if !isPelicanQualityRequest(ctx) {
 		return body
 	}
-	// High reasoning can produce a larger event stream than the visible verdict.
+	// Reasoning and usage events can make the stream larger than the visible HTML.
 	return io.LimitReader(body, int64(4*pelicanDocumentLimit))
 }
 
@@ -172,7 +172,8 @@ func pelicanRequestFailureReason(err error) string {
 		case strings.HasPrefix(message, "Chat Completions API (/v1/chat/completions) request failed:"):
 			return "Artwork generation response was incomplete or truncated"
 		case strings.HasPrefix(message, "Chat Completions API (/v1/chat/completions) returned 5"),
-			strings.HasPrefix(message, "Chat Completions API (/v1/chat/completions) returned 429:"):
+			strings.HasPrefix(message, "Chat Completions API (/v1/chat/completions) returned 429:"),
+			message == pelicanRetryableStreamErrorMessage:
 			return "Artwork generation was rejected or failed upstream"
 		case message == "Quality generation requires a Chat Completions API key account":
 			return message
@@ -191,6 +192,18 @@ func pelicanRequestFailureReason(err error) string {
 		}
 	}
 	return "Artwork generation failed or did not complete"
+}
+
+const pelicanRetryableStreamErrorMessage = "Chat Completions API (/v1/chat/completions) retryable upstream error"
+
+func pelicanRetryableStreamError(data map[string]any) bool {
+	errorType, _ := data["type"].(string)
+	switch strings.ToLower(strings.TrimSpace(errorType)) {
+	case "upstream_error", "server_error", "overloaded_error", "rate_limit_error":
+		return true
+	default:
+		return false
+	}
 }
 
 const (
