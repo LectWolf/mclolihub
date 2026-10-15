@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -27,7 +28,7 @@ func TestQualitySchedulingOwnershipAndSharedHolds(t *testing.T) {
 			defer func() { _ = db.Close() }()
 			mock.ExpectBegin()
 			mock.ExpectQuery(`SELECT schedulable, status`).WithArgs(int64(11)).WillReturnRows(sqlmock.NewRows([]string{"schedulable", "usable"}).AddRow(tc.schedulable, tc.usable))
-			mock.ExpectQuery(`(?s)SELECT.*EXISTS.*account_quality_checks.*EXISTS.*group_account_quality_checks`).WithArgs(int64(11)).WillReturnRows(sqlmock.NewRows([]string{"owned", "held"}).AddRow(tc.owned, tc.held))
+			mock.ExpectQuery(`(?s)SELECT.*EXISTS.*account_quality_checks.*EXISTS.*group_account_quality_checks.*JOIN accounts a.*` + regexp.QuoteMeta(service.QualityAccountEligibilitySQL)).WithArgs(int64(11)).WillReturnRows(sqlmock.NewRows([]string{"owned", "held"}).AddRow(tc.owned, tc.held))
 			if tc.change {
 				mock.ExpectExec(`UPDATE accounts SET schedulable`).WithArgs(int64(11), tc.next).WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec(`INSERT INTO account_quality_checks`).WithArgs(int64(11), tc.nextOwned).WillReturnResult(sqlmock.NewResult(0, 1))

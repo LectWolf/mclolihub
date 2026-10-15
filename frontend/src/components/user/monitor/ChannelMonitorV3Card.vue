@@ -56,13 +56,14 @@
       :length="timelineLength"
       :data-through-ms="dataThroughMs"
     />
-    <ChannelMonitorV3QualityPreview :group-id="row.group_id" :enabled="row.quality_enabled" :latest="row.latest_quality" :history="row.quality_history" />
+    <ChannelMonitorV3QualityPreview :group-id="row.group_id" :enabled="row.quality_enabled" :latest="row.latest_quality" :history="row.quality_history" :admin-diagnostics="authStore.isAdmin" />
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
 import type { MonitorMatrixRow, MonitorRange } from '@/api/channelMonitorV2'
 import { availabilityTextClass, formatMonitorMs, formatMonitorPercent } from '@/features/channel-monitor-v2/monitorFormat'
 import {
@@ -91,6 +92,7 @@ const props = defineProps<{
   dataThroughMs?: number
 }>()
 const { t } = useI18n()
+const authStore = useAuthStore()
 const { statusLabel, statusBadgeClass, providerLabel, providerBadgeClass } = useChannelMonitorFormat()
 
 const groupLabel = computed(() => props.row.group_name || t('channelMonitorV3.unknownGroup'))

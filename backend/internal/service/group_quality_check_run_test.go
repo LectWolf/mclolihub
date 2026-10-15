@@ -99,7 +99,7 @@ func TestQualityRunFailedAndUnknownDoNotRepeatOldDegraded(t *testing.T) {
 			expectQualitySave(mock, now, candidate, verdict, 0, false, nil)
 			expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
 			expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
-			accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI}}
+			accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}
 			checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
 			checker.now = func() time.Time { return now }
 			checker.probeFunc = func(_ context.Context, id int64, model string) qualityProbeResult {
@@ -126,7 +126,7 @@ func TestQualityRunSecondDegradedPersistsPauseAndPreview(t *testing.T) {
 	expectQualitySave(mock, now, candidate, "degraded", 2, true, picture)
 	expectAutomaticProgress(mock, now, candidate.groupID, "running", 1)
 	expectAutomaticProgress(mock, now, candidate.groupID, "completed", 1)
-	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI}}
+	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}
 	checker := newGroupQualityChecker(db, accounts, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {

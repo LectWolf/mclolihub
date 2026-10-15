@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../client'
-import { getQualityRun, listQuality, runQualityCheck, saveQualitySettings, setQualityEnabled } from '../admin/qualityCheck'
+import { getQualityDiagnostics, getQualityRun, listQuality, runQualityCheck, saveQualitySettings, setQualityEnabled } from '../admin/qualityCheck'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -72,5 +72,22 @@ describe('admin manual quality run API', () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: [] })
     expect(await listQuality(signal)).toEqual([])
     expect(get).toHaveBeenCalledWith('/admin/groups/quality-check', { signal })
+  })
+})
+
+describe('admin quality diagnostics API', () => {
+  it('scopes and encodes the result ID and forwards cancellation', async () => {
+    const result = { result_id: 'result/id', reason: 'Old record', diagnostics: null, attempts: [] }
+    const signal = new AbortController().signal
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: result })
+    expect(await getQualityDiagnostics(7, result.result_id, signal)).toEqual(result)
+    expect(get).toHaveBeenCalledWith('/admin/groups/7/quality-check/diagnostics/result%2Fid', { signal })
+  })
+
+  it('rejects mismatched records and forwards request failures for retry', async () => {
+    const error = new Error('offline')
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: { result_id: 'other-result' } }).mockRejectedValueOnce(error)
+    await expect(getQualityDiagnostics(7, 'result')).rejects.toThrow('Invalid quality diagnostics')
+    await expect(getQualityDiagnostics(7, 'result')).rejects.toBe(error)
   })
 })

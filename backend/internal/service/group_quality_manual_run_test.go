@@ -66,7 +66,7 @@ func TestQualityManualRunBypassesGatesAndSurvivesRequestCancellation(t *testing.
 	defer db.Close()
 	now := time.Now().UTC()
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 2, modelID: "saved-model", streak: 2, paused: true}
-	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI}}
+	accounts := &qualityRunAccounts{account: &Account{ID: 11, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}
 	lock := &qualityManualLock{}
 	checker := newGroupQualityChecker(db, accounts, nil, lock, "test")
 	checker.now = func() time.Time { return now }
@@ -139,7 +139,7 @@ func TestQualityManualRunConfigChangeStopsWithoutReplacingPreview(t *testing.T) 
 	defer db.Close()
 	now := time.Now().UTC()
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 2, modelID: "saved-model"}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, qualityRunLock{}, "test")
+	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, qualityRunLock{}, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult { return qualityProbeResult{Status: "success"} }
 	run := &GroupQualityRun{RunID: "run", GroupID: 7, StartedAt: now, TotalAccounts: 1}
@@ -198,7 +198,7 @@ func TestQualityManualRunStartFailureReleasesLock(t *testing.T) {
 	defer db.Close()
 	now := time.Now().UTC()
 	lock := &qualityManualLock{}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
+	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult { return qualityProbeResult{} }
 	checker.launch = func(func(context.Context)) bool { return false }

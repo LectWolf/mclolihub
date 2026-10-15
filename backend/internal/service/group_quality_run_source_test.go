@@ -21,7 +21,7 @@ func TestQualityRunsDifferentGroupsOverlapWithoutScanLock(t *testing.T) {
 	acquired, err := lock.TryAcquireLeaderLock(context.Background(), qualityLockKey, "scheduler", qualityLockTTL)
 	require.NoError(t, err)
 	require.True(t, acquired)
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
+	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	var workers []func(context.Context)
 	checker.launch = func(fn func(context.Context)) bool { workers = append(workers, fn); return true }
@@ -57,7 +57,7 @@ func TestQualityAutomaticSkipsManualGroupAndChecksAnotherGroup(t *testing.T) {
 	defer db.Close()
 	now := time.Now().UTC()
 	lock := &qualityManualLock{}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
+	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	var worker func(context.Context)
 	checker.launch = func(fn func(context.Context)) bool { worker = fn; return true }
@@ -98,7 +98,7 @@ func TestQualityAutomaticTaskReportsSourceAndSelectedAccountProgress(t *testing.
 	defer db.Close()
 	now := time.Now().UTC()
 	lock := &qualityManualLock{}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
+	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	candidates := []qualityCandidate{{groupID: 7, id: 11, version: 1, modelID: "text-model"}, {groupID: 7, id: 12, version: 1, modelID: "text-model"}}
 	expectAutomaticTask(mock, now, 7, 1)
@@ -132,7 +132,7 @@ func TestQualityAutomaticCannotProbeWithoutPersistentTask(t *testing.T) {
 			defer db.Close()
 			now := time.Now().UTC()
 			lock := &qualityManualLock{}
-			checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
+			checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 			checker.now = func() time.Time { return now }
 			checker.probeFunc = func(context.Context, int64, string) qualityProbeResult {
 				t.Fatal("must not execute without committed task")
@@ -168,7 +168,7 @@ func TestQualityAutomaticPanicMarksFailureAndReleasesLocks(t *testing.T) {
 	defer db.Close()
 	now := time.Now().UTC()
 	lock := &qualityManualLock{}
-	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI}}, nil, lock, "test")
+	checker := newGroupQualityChecker(db, &qualityRunAccounts{account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}}, nil, lock, "test")
 	checker.now = func() time.Time { return now }
 	checker.probeFunc = func(context.Context, int64, string) qualityProbeResult { panic("private upstream artifact") }
 	candidate := qualityCandidate{groupID: 7, id: 11, version: 1}

@@ -44,6 +44,7 @@ const qualityManualCandidatesSQL = `
     LEFT JOIN group_account_quality_checks q ON q.group_id = ag.group_id AND q.account_id = a.id
     LEFT JOIN account_quality_checks ownership ON ownership.account_id = a.id
     WHERE ag.group_id = $1
+      AND (` + QualityAccountEligibilitySQL + `)
       AND (a.schedulable OR COALESCE(ownership.paused, FALSE))
       AND (a.expires_at IS NULL OR a.expires_at > $2 OR NOT a.auto_pause_on_expired)
     ORDER BY a.priority, a.id`
@@ -99,7 +100,7 @@ func (c *GroupQualityChecker) StartManualRun(ctx context.Context, groupID int64)
 		if err != nil {
 			return nil, err
 		}
-		if pelicanVisualProtocolSupported(account) && pelicanTextModel(account.GetMappedModel(candidate.modelID)) {
+		if accountAcceptsQualityPrompt(account) && pelicanTextModel(account.GetMappedModel(candidate.modelID)) {
 			eligible = append(eligible, candidate)
 			break
 		}

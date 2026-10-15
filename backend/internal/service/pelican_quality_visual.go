@@ -94,6 +94,9 @@ type pelicanTestOutput struct {
 	CaptureOverflow   bool
 	FailureCode       string
 	DeadlineSource    string
+	Attempts          []QualityAttemptDiagnostic
+	Route             *QualityRequestRoute
+	DetailsTruncated  bool
 }
 
 func parsePelicanTestEvents(raw []byte, limit int) (out pelicanTestOutput, err error) {
@@ -218,6 +221,8 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 	defer cancel()
 	var last pelicanTestOutput
 	var lastErr error
+	var attempts []QualityAttemptDiagnostic
+	var detailsTruncated bool
 	for retry := 0; retry <= pelicanGenerationRetryLimit; retry++ {
 		if err := ctx.Err(); err != nil {
 			last.FailureCode = pelicanRequestFailureCode(err)
@@ -237,9 +242,12 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 				return last, errors.New(pelicanRequestFailureReason(err))
 			}
 		}
+		attemptStarted := time.Now()
+		capture := &qualityAttemptCapture{}
+		attemptCtx := context.WithValue(ctx, qualityAttemptContextKey{}, capture)
 		w := &pelicanCapture{header: make(http.Header), limit: 4*limit + (64 << 10)}
 		c, _ := gin.CreateTestContext(w)
-		c.Request, _ = http.NewRequestWithContext(ctx, http.MethodPost, "/internal/pelican-quality", nil)
+		c.Request, _ = http.NewRequestWithContext(attemptCtx, http.MethodPost, "/internal/pelican-quality", nil)
 		requestErr := s.TestAccountConnection(c, accountID, modelID, prompt, "")
 		out, parseErr := parsePelicanTestEvents(w.Bytes(), limit)
 		out.CaptureOverflow = out.CaptureOverflow || w.overflow
@@ -257,10 +265,17 @@ func (s *AccountTestService) runPelicanRequest(ctx context.Context, accountID in
 		if w.overflow {
 			failure = errors.New("test output limit")
 		}
+		if failure != nil {
+			out.FailureCode = pelicanRequestFailureCode(failure)
+		}
+		attempts = append(attempts, finishQualityAttempt(capture, attemptStarted, retry+1, failure, out.FailureCode))
+		out.Attempts = attempts
+		out.Route = capture.route
+		detailsTruncated = detailsTruncated || capture.truncated
+		out.DetailsTruncated = detailsTruncated
 		if failure == nil {
 			return out, nil
 		}
-		out.FailureCode = pelicanRequestFailureCode(failure)
 		last, lastErr = out, failure
 		if !pelicanRetryableFailure(out.FailureCode) || retry == pelicanGenerationRetryLimit {
 			return out, errors.New(pelicanRequestFailureReason(failure))
@@ -301,6 +316,9 @@ func pelicanTextModel(model string) bool {
 func pelicanVisualProtocolSupported(account *Account) bool {
 	if account == nil || account.IsSyntheticUITest() {
 		return false
+	}
+	if account.IsGemini() {
+		return account.Type == AccountTypeAPIKey
 	}
 	if account.IsOpenAI() {
 		return true
@@ -363,6 +381,10 @@ func (s *AccountTestService) runPelicanQualityCheck(ctx context.Context, account
 	result.Diagnostics.CaptureOverflow = generated.CaptureOverflow
 	result.Diagnostics.FailureCode = generated.FailureCode
 	result.Diagnostics.DeadlineSource = generated.DeadlineSource
+	result.Diagnostics.Attempts = generated.Attempts
+	result.Diagnostics.AttemptCount = len(generated.Attempts)
+	result.Diagnostics.Route = generated.Route
+	result.Diagnostics.DetailsTruncated = generated.DetailsTruncated
 	result.RawOutput = generated.Text
 	if generated.Model != "" {
 		result.ModelID = generated.Model

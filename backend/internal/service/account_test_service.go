@@ -419,6 +419,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	if account.IsGemini() {
+		if isPelicanQualityRequest(ctx) {
+			return s.testGeminiQualityChatCompletionsConnection(c, account, modelID, prompt)
+		}
 		return s.testGeminiAccountConnection(c, account, modelID, prompt)
 	}
 
@@ -2332,14 +2335,17 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 		proxyURL = account.Proxy.URL()
 	}
 
+	recordQualityRequest(ctx, account, req, reportedModelID, proxyURL, authToken)
 	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Chat Completions API (/v1/chat/completions) request failed: %s", err.Error()))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	recordQualityHTTPStatus(ctx, resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(pelicanQualityStreamReader(ctx, resp.Body))
+		recordQualityHTTPError(ctx, body)
 		if resp.StatusCode == http.StatusTooManyRequests {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
@@ -3109,6 +3115,7 @@ func (s *AccountTestService) processOpenAIChatCompletionsStream(c *gin.Context, 
 		s.emitPelicanResolvedModel(c, data)
 
 		if errData, ok := data["error"].(map[string]any); ok {
+			recordQualityUpstreamError(c.Request.Context(), errData)
 			if isPelicanQualityRequest(c.Request.Context()) && pelicanRetryableStreamError(errData) {
 				return s.sendErrorAndEnd(c, pelicanRetryableStreamErrorMessage)
 			}

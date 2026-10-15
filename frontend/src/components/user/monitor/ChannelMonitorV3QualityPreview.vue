@@ -87,6 +87,20 @@
           </template>
           <p v-else class="text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.noRawOutput') }}</p>
         </div>
+
+        <section v-if="adminDiagnostics && typeof groupId === 'number'" class="mt-3 border-t border-gray-100 pt-3 dark:border-dark-700" :aria-label="t('channelMonitorV3.quality.diagnosticsTitle')">
+          <button v-if="!diagnosticsResult" type="button" class="btn btn-ghost btn-sm" :disabled="diagnosticsLoading" @click="loadDiagnostics">
+            {{ diagnosticsLoading ? t('channelMonitorV3.quality.diagnosticsLoading') : diagnosticsError ? t('channelMonitorV3.quality.retry') : t('channelMonitorV3.quality.viewDiagnostics') }}
+          </button>
+          <p v-if="diagnosticsLoading" role="status">{{ t('channelMonitorV3.quality.diagnosticsLoading') }}</p>
+          <p v-else-if="diagnosticsError" role="alert">{{ t('channelMonitorV3.quality.diagnosticsFailed') }}</p>
+          <template v-else-if="diagnosticsResult">
+            <p class="font-medium">{{ t('channelMonitorV3.quality.diagnosticsTitle') }}</p>
+            <pre class="quality-raw-output mt-2 rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] dark:border-dark-600 dark:bg-dark-900" tabindex="0">{{ diagnosticsText }}</pre>
+            <p v-if="!diagnosticsResult.attempts?.length" class="mt-2 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.diagnosticsLegacy') }}</p>
+            <p v-if="diagnosticsResult.details_truncated" class="mt-2 text-gray-500 dark:text-gray-400">{{ t('channelMonitorV3.quality.diagnosticsTruncated') }}</p>
+          </template>
+        </section>
       </div>
     </Teleport>
   </div>
@@ -96,16 +110,18 @@
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getQualityArtwork, getQualityHistory, getQualityRawOutput, type MonitorLatestQuality } from '@/api/channelMonitorV2'
+import { getQualityDiagnostics, type GroupQualityDiagnosticResult } from '@/api/admin/qualityCheck'
 import Icon from '@/components/icons/Icon.vue'
 import { qualityArtworkDocument } from '@/features/channel-monitor-v2/qualityArtwork'
 import { useClipboard } from '@/composables/useClipboard'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   groupId?: number
   enabled?: boolean
   latest?: MonitorLatestQuality | null
   history?: MonitorLatestQuality[] | null
-}>()
+  adminDiagnostics?: boolean
+}>(), { adminDiagnostics: false })
 
 const { t } = useI18n()
 const { copyToClipboard } = useClipboard()
@@ -126,6 +142,11 @@ const artworkOwner = ref('')
 const rawOutput = ref('')
 const rawOutputLoading = ref(false)
 const rawOutputError = ref(false)
+const diagnosticsResult = ref<GroupQualityDiagnosticResult | null>(null)
+const diagnosticsLoading = ref(false)
+const diagnosticsError = ref(false)
+let diagnosticsRequest: AbortController | undefined
+let diagnosticsVersion = 0
 let rawOutputRequest: AbortController | undefined
 let rawOutputVersion = 0
 let panelObserver: ResizeObserver | undefined
@@ -178,6 +199,67 @@ const visible = computed(() => props.enabled !== false && Boolean(props.enabled 
 const activeItem = computed(() => displayItems.value.find(item => item.result_id === activeId.value) ?? null)
 const heading = computed(() => t('channelMonitorV3.quality.historyHeading', { count: displayItems.value.length }))
 
+const diagnosticsText = computed(() => {
+  const result = diagnosticsResult.value
+  if (!result) return ''
+  const label = (key: string, value: string | number | boolean | undefined) => {
+    const text = typeof value === 'boolean' ? t(`channelMonitorV3.quality.${value ? 'yes' : 'no'}`) : value ?? '—'
+    return `${t(`channelMonitorV3.quality.diagnosticFields.${key}`)}: ${text}`
+  }
+  const lines = [label('reason', result.reason), label('attempt_count', result.diagnostics?.attempt_count ?? (result.attempts?.length || undefined))]
+  if (result.diagnostics) {
+    const fields = ['stage', 'configured_protocol', 'total_duration_ms', 'generation_duration_ms', 'generation_timeout_seconds', 'received_text_bytes', 'received_events', 'last_event_type', 'completion_received', 'capture_overflow', 'failure_code', 'deadline_source', 'artwork_available', 'render_duration_ms', 'render_failure_code'] as const
+    for (const field of fields) {
+      if (result.diagnostics[field] !== undefined) lines.push(label(field, result.diagnostics[field]))
+    }
+  }
+  for (const attempt of result.attempts ?? []) {
+    lines.push('', t('channelMonitorV3.quality.diagnosticAttempt', { number: attempt.number }))
+    for (const field of ['http_status', 'error_type', 'message', 'failure_code', 'duration_ms'] as const) {
+      lines.push(label(field, attempt[field]))
+    }
+  }
+  if (result.route) {
+    lines.push('', t('channelMonitorV3.quality.diagnosticRoute'))
+    for (const field of ['account_id', 'platform', 'endpoint', 'model', 'proxy_enabled'] as const) {
+      lines.push(label(field, result.route[field]))
+    }
+  }
+  return lines.join('\n')
+})
+
+function clearDiagnostics() {
+  diagnosticsVersion += 1
+  diagnosticsRequest?.abort()
+  diagnosticsRequest = undefined
+  diagnosticsResult.value = null
+  diagnosticsLoading.value = false
+  diagnosticsError.value = false
+}
+async function loadDiagnostics() {
+  const groupId = props.groupId
+  const item = activeItem.value
+  if (!alive || !props.adminDiagnostics || !open.value || !item || typeof groupId !== 'number' || diagnosticsLoading.value) return
+  pinned.value = true
+  cancelClose()
+  clearDiagnostics()
+  const version = diagnosticsVersion
+  const request = new AbortController()
+  diagnosticsRequest = request
+  diagnosticsLoading.value = true
+  try {
+    const result = await getQualityDiagnostics(groupId, item.result_id, request.signal)
+    if (!alive || request.signal.aborted || version !== diagnosticsVersion) return
+    diagnosticsResult.value = result
+  } catch {
+    if (!alive || request.signal.aborted || version !== diagnosticsVersion) return
+    diagnosticsError.value = true
+  } finally {
+    if (diagnosticsRequest === request) diagnosticsRequest = undefined
+    if (version === diagnosticsVersion) diagnosticsLoading.value = false
+  }
+}
+
 function modelLabel(item: MonitorLatestQuality) {
   const model = item.model_id?.trim()
   return model || t('channelMonitorV3.quality.defaultModel')
@@ -211,6 +293,7 @@ function close() {
   activeId.value = ''
   clearArtwork()
   clearRawOutput()
+  clearDiagnostics()
   placement = undefined
 }
 function reposition() {
@@ -433,6 +516,7 @@ watch(visible, shown => { if (!shown) close() })
 watch(displayItems, items => {
   if (activeId.value && !items.some(item => item.result_id === activeId.value)) close()
 })
+watch(() => [props.groupId, props.adminDiagnostics, open.value, activeId.value] as const, clearDiagnostics, { flush: 'sync' })
 watch(() => [open.value, activeItem.value?.result_id, activeItem.value?.has_artwork, activeItem.value?.has_raw_output, props.groupId] as const, () => {
   if (open.value && activeItem.value) {
     void loadArtwork(activeItem.value)
@@ -447,7 +531,7 @@ watch(panel, element => {
   }
   reposition()
 }, { flush: 'post' })
-watch([activeItem, artworkLoading, artworkError, artworkDocument, rawOutput, rawOutputLoading, rawOutputError], reposition, { flush: 'post' })
+watch([activeItem, artworkLoading, artworkError, artworkDocument, rawOutput, rawOutputLoading, rawOutputError, diagnosticsResult, diagnosticsLoading, diagnosticsError], reposition, { flush: 'post' })
 onMounted(() => {
   document.addEventListener('pointerdown', outside)
   document.addEventListener('keydown', onDocumentKeydown)

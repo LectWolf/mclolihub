@@ -137,7 +137,8 @@ export default {
       qualityRunSubmitFailed: 'Submission could not be confirmed. Check status before retrying.',
       qualityRunBusy: 'A check is running for this group. Check status for progress.',
       qualityRunBusyUnavailable: 'Checking is temporarily unavailable for this group. Please try again later.',
-      qualityRunUnavailable: 'Cannot start: checking is disabled for this group or no accounts are available.',
+      qualityRunUnavailable: 'Cannot start this check. Please refresh the group settings and try again.',
+      qualityRunNoEligibleAccounts: 'Cannot start: this group has no eligible accounts supporting both text and vision.',
       qualityRunRefreshFailed: 'The check has ended, but group quality status could not be refreshed. Retry checking status.',
       qualityStatus: {
         unknown: 'No result yet',

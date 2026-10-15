@@ -39,7 +39,8 @@ func (r *accountRepository) ReconcileGroupQualityScheduling(ctx context.Context,
             JOIN group_quality_check_settings s ON s.group_id = q.group_id AND s.enabled
             JOIN account_groups ag ON ag.group_id = q.group_id AND ag.account_id = q.account_id
             JOIN groups g ON g.id = q.group_id AND g.deleted_at IS NULL
-            WHERE q.account_id = $1 AND q.paused)`, id).Scan(&owned, &held)
+            JOIN accounts a ON a.id = q.account_id
+            WHERE q.account_id = $1 AND q.paused AND (`+service.QualityAccountEligibilitySQL+`))`, id).Scan(&owned, &held)
 	if err != nil {
 		return err
 	}

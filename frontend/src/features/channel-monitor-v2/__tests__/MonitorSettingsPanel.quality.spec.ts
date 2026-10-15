@@ -15,7 +15,7 @@ vi.mock('@/api/admin', () => ({ adminAPI: { groups: { getAllIncludingInactive: v
 ]) } } }))
 vi.mock('@/api/channelMonitorV2', async importOriginal => ({
   ...await importOriginal<typeof import('@/api/channelMonitorV2')>(),
-  getConfig: vi.fn(), updateConfig: vi.fn(),
+  getConfig: vi.fn(), updateConfig: vi.fn(), getQualityHistory: vi.fn(async () => []),
 }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: vi.fn(), showSuccess: vi.fn(), cachedPublicSettings: {} }) }))
 vi.mock('@/utils/featureFlags', () => ({ getChannelMonitorMode: () => 'v2', isChannelMonitorV2Mode: () => true }))
@@ -204,7 +204,7 @@ describe('MonitorSettingsPanel manual group quality check', () => {
     expect(group.find('[data-quality-run-result]').text()).toContain('Completed')
     expect(group.find('[data-quality-run-result]').text()).toContain('3 / 3')
     expect(group.text()).toContain(en.channelMonitorV2.settings.qualityStatus.suspect)
-    expect(group.findComponent({ name: 'ChannelMonitorV3QualityPreview' }).props()).toMatchObject({ groupId: 7, enabled: true, latest })
+    expect(group.findComponent({ name: 'ChannelMonitorV3QualityPreview' }).props()).toMatchObject({ groupId: 7, enabled: true, latest, adminDiagnostics: true })
     expect((wrapper.find('[data-quality-group="8"] [data-quality-model]').element as HTMLInputElement).value).toBe('keep-other-draft')
     expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
     await vi.advanceTimersByTimeAsync(10000)
@@ -276,6 +276,20 @@ describe('MonitorSettingsPanel manual group quality check', () => {
       await flushPromises()
       expect(group.find('[data-quality-run]').attributes('disabled')).toBeDefined()
       expect(getQualityRun).toHaveBeenCalledTimes(4)
+    }
+  })
+
+  it.each([
+    ['save and enable quality checks before running manually', 'qualityRunDisabled'],
+    ['no eligible text and vision accounts in this group', 'qualityRunNoEligibleAccounts'],
+  ] as const)('distinguishes HTTP 400 reason %s in both error shapes', async (message, key) => {
+    const group = await render()
+    for (const error of [{ status: 400, message }, { message: 'Request failed with status code 400', response: { status: 400, data: { message } } }]) {
+      vi.mocked(runQualityCheck).mockRejectedValueOnce(error)
+      await group.find('[data-quality-run]').trigger('click')
+      await flushPromises()
+      expect(group.find('[data-quality-run-error]').text()).toContain(en.channelMonitorV2.settings[key])
+      expect(group.find('[data-quality-run]').attributes('disabled')).toBeUndefined()
     }
   })
 

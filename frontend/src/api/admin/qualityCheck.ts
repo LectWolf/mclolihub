@@ -58,3 +58,52 @@ export async function getQualityRun(groupId: number, signal?: AbortSignal): Prom
   const { data } = await apiClient.get<GroupQualityRun | null>(`/admin/groups/${groupId}/quality-check/run`, { signal })
   return data ?? null
 }
+
+export interface GroupQualityDiagnostics {
+  stage: string
+  configured_protocol: string
+  total_duration_ms: number
+  generation_duration_ms: number
+  generation_timeout_seconds: number
+  received_text_bytes: number
+  received_events: number
+  completion_received: boolean
+  attempt_count?: number
+  last_event_type?: string
+  capture_overflow?: boolean
+  failure_code?: string
+  deadline_source?: string
+  artwork_available?: boolean
+  render_duration_ms?: number
+  render_failure_code?: string
+}
+
+export interface QualityAttemptDiagnostic {
+  number: number
+  http_status?: number
+  error_type?: string
+  message?: string
+  failure_code?: string
+  duration_ms: number
+}
+
+export interface GroupQualityDiagnosticResult {
+  result_id: string
+  reason: string
+  diagnostics: GroupQualityDiagnostics | null
+  attempts?: QualityAttemptDiagnostic[] | null
+  details_truncated?: boolean
+  route?: {
+    account_id: number
+    platform: string
+    endpoint: string
+    model: string
+    proxy_enabled: boolean
+  } | null
+}
+
+export async function getQualityDiagnostics(groupId: number, resultId: string, signal?: AbortSignal): Promise<GroupQualityDiagnosticResult> {
+  const { data } = await apiClient.get<GroupQualityDiagnosticResult>(`/admin/groups/${groupId}/quality-check/diagnostics/${encodeURIComponent(resultId)}`, { signal })
+  if (!data || data.result_id !== resultId) throw new Error('Invalid quality diagnostics')
+  return data
+}

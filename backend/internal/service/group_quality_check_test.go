@@ -46,8 +46,8 @@ func TestAssessScheduledTestQualitySkipsCustomPrompt(t *testing.T) {
 }
 
 func TestAccountAcceptsQualityPrompt(t *testing.T) {
-	require.True(t, accountAcceptsQualityPrompt(&Account{Platform: PlatformOpenAI}))
-	require.True(t, accountAcceptsQualityPrompt(&Account{Platform: PlatformGemini}))
+	require.True(t, accountAcceptsQualityPrompt(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}))
+	require.True(t, accountAcceptsQualityPrompt(&Account{Platform: PlatformGemini, Type: AccountTypeAPIKey}))
 	require.False(t, accountAcceptsQualityPrompt(&Account{Platform: PlatformAnthropic}))
 	require.False(t, accountAcceptsQualityPrompt(nil))
 }

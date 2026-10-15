@@ -5,6 +5,8 @@ import ChannelStatusV3View from '../ChannelStatusV3View.vue'
 import * as api from '@/api/channelMonitorV2'
 import type { MonitorMatrixResponse, MonitorMatrixRow, MonitorMetric, MonitorSnapshot } from '@/api/channelMonitorV2'
 
+const authState = vi.hoisted(() => ({ isAdmin: false }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => authState }))
 vi.mock('@/api/channelMonitorV2', () => ({ getSnapshot: vi.fn(), getMatrix: vi.fn() }))
 vi.mock('@/api/groups', () => ({ default: { getAvailable: vi.fn(async () => []), getUserGroupRates: vi.fn(async () => ({})) } }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: vi.fn() }) }))
@@ -61,12 +63,21 @@ const render = async () => {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  authState.isAdmin = false
   vi.mocked(api.getSnapshot).mockReset().mockResolvedValue(snapshot())
   vi.mocked(api.getMatrix).mockReset().mockResolvedValue(matrix())
 })
 afterEach(() => { wrapper?.unmount() })
 
 describe('channel status V3 filters and range cache rate', () => {
+  it.each([false, true])('passes admin diagnostics permission to public cards for admin=%s', async isAdmin => {
+    authState.isAdmin = isAdmin
+    await render()
+    const previews = wrapper.findAllComponents({ name: 'ChannelMonitorV3QualityPreview' })
+    expect(previews).toHaveLength(3)
+    expect(previews.every(preview => preview.props('adminDiagnostics') === isAdmin)).toBe(true)
+  })
+
   it('uses selected-window metrics even when public counts are hidden and the latest bucket differs', async () => {
     await render()
     expect(wrapper.findAll('article').map(card => card.get('.mt-5.grid .font-mono').text())).toEqual(['90.0%', '60.0%', '40.0%'])

@@ -111,13 +111,11 @@ func qualityShouldPause(previous, current string) bool {
 func qualityShouldResume(paused bool, current string) bool { return paused && current == "success" }
 
 func accountAcceptsQualityPrompt(account *Account) bool {
-	if account == nil {
+	if account == nil || account.Type != AccountTypeAPIKey || account.IsSyntheticUITest() {
 		return false
 	}
-	if account.IsCNProvider() {
-		return account.GetAPIProtocol() != APIProtocolAnthropic
-	}
-	return account.IsQoder() || account.IsOpenAI() || account.IsGemini() || account.IsGrok() || account.IsCodeBuddy() || account.Platform == PlatformAntigravity || account.IsOpenCodeGo()
+	return account.IsOpenAI() || account.IsGemini() ||
+		(account.IsCNProvider() && account.GetAPIProtocol() != APIProtocolAnthropic)
 }
 
 func validateQualityConfig(cfg GroupQualityConfig) error {
@@ -252,7 +250,8 @@ const qualityCandidatesSQL = `
     JOIN group_quality_check_settings s ON s.group_id = q.group_id AND s.enabled
     JOIN accounts a ON a.id = q.account_id AND a.deleted_at IS NULL AND a.status = 'active'
     LEFT JOIN account_quality_checks ownership ON ownership.account_id = a.id
-    WHERE (a.schedulable OR COALESCE(ownership.paused, FALSE))
+    WHERE (` + QualityAccountEligibilitySQL + `)
+      AND (a.schedulable OR COALESCE(ownership.paused, FALSE))
       AND (a.expires_at IS NULL OR a.expires_at > $1 OR NOT a.auto_pause_on_expired)
       AND (q.retry_after IS NULL OR q.retry_after <= $1)
       AND (
@@ -271,7 +270,8 @@ func (c *GroupQualityChecker) initializeWindows(ctx context.Context, now time.Ti
         FROM group_quality_check_settings s
         JOIN account_groups ag ON ag.group_id = s.group_id
         JOIN accounts a ON a.id = ag.account_id AND a.deleted_at IS NULL AND a.status = 'active'
-        WHERE s.enabled AND (a.schedulable OR EXISTS (SELECT 1 FROM account_quality_checks p WHERE p.account_id = a.id AND p.paused))
+        WHERE s.enabled AND (`+QualityAccountEligibilitySQL+`)
+          AND (a.schedulable OR EXISTS (SELECT 1 FROM account_quality_checks p WHERE p.account_id = a.id AND p.paused))
         ON CONFLICT (group_id, account_id) DO NOTHING`, now)
 	return err
 }
@@ -348,7 +348,7 @@ func (c *GroupQualityChecker) runAutomaticGroup(ctx context.Context, groupID int
 		if err != nil || account == nil {
 			continue
 		}
-		if !accountAcceptsQualityPrompt(account) {
+		if !accountAcceptsQualityPrompt(account) || !pelicanTextModel(account.GetMappedModel(candidate.modelID)) {
 			// A skip is not a completed check and does not move the spend window.
 			if _, err := c.db.ExecContext(ctx, `UPDATE group_account_quality_checks SET retry_after = $3, degraded_streak = 0 WHERE group_id = $1 AND account_id = $2`, candidate.groupID, candidate.id, c.now().Add(time.Hour)); err != nil {
 				slog.Warn("group_quality: save skip failed", "group_id", groupID)
